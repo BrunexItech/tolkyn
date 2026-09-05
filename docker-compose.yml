@@ -119,11 +119,12 @@ services:
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports:
-      - "80:80"
-      # - "443:443"   # uncomment once you've added the TLS server block in nginx/nginx.conf
+      # Bound to localhost only — the host's own nginx (which owns :80/:443 and
+      # terminates TLS) reverse-proxies tolkyn.co.ke to this port. Not exposed
+      # to the internet directly. See DEPLOYMENT.md → "Behind a host nginx".
+      - "127.0.0.1:8090:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      # - ./nginx/certs:/etc/letsencrypt:ro   # mount your certs here once you have them
     depends_on:
       - backend
       - frontend

@@ -55,6 +55,29 @@ value in production. `backend/.env.example` has every one of them.
   front of this stack) and uncomment the HTTPS server block in
   `nginx/nginx.conf`.
 
+## Behind a host nginx (server already runs nginx for other apps)
+
+The compose stack's nginx is published on **`127.0.0.1:8090`**, not `:80` — so
+it never fights a host nginx that already owns `:80`/`:443`. The host nginx
+reverse-proxies the public domain to that port:
+
+```bash
+sudo cp nginx/host-tolkyn.co.ke.conf /etc/nginx/sites-available/tolkyn.co.ke
+sudo ln -s /etc/nginx/sites-available/tolkyn.co.ke /etc/nginx/sites-enabled/
+sudo nginx -t && sudo systemctl reload nginx
+
+# TLS — certbot edits that vhost in place to add :443 + the http→https redirect
+sudo certbot --nginx -d tolkyn.co.ke -d www.tolkyn.co.ke
+```
+
+The container's own nginx still does the `/api` → backend, `/media` → backend,
+`/` → frontend routing; the host nginx just forwards everything to it. Leave
+the container's `:443` block alone — TLS terminates at the host.
+
+**No host nginx?** Then change the compose `nginx` port back to `"80:80"`
+(and `"443:443"`), and use the container's own `nginx/nginx.conf` TLS block
+per the checklist above.
+
 ## Capacity — running ~100 client workspaces
 
 100 tenant workspaces is a *data* number, not a load number — most are idle at
