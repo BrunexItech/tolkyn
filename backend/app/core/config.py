@@ -55,6 +55,10 @@ class Settings(BaseSettings):
     SUPER_ADMIN_TOKEN_EXPIRE_MINUTES: int = 60 * 12  # 12 hours — shorter-lived than tenant sessions
     
     # CORS
+    # NOTE: pydantic-settings JSON-decodes list fields at the source level
+    # before any validator runs, so in .env these MUST be a JSON array, e.g.
+    #   ALLOWED_ORIGINS=["https://tolkyn.co.ke","https://www.tolkyn.co.ke"]
+    # A bare comma-separated string raises SettingsError on boot.
     ALLOWED_ORIGINS: list[str] = Field(
         default=["http://localhost:3000", "http://127.0.0.1:3000"],
         description="Allowed CORS origins"
