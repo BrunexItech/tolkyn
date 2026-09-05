@@ -1,0 +1,139 @@
+# Compose file format "2.4" is the newest that classic `docker-compose` (v1,
+# Python) still accepts — and it's the last format that honours
+# `depends_on: { condition: service_healthy }`, which this stack relies on for
+# startup ordering. Compose v2 (`docker compose`) also reads it fine (with a
+# deprecation notice). Project name comes from COMPOSE_PROJECT_NAME in .env
+# (or the directory name) since the top-level `name:` key is v2-only.
+version: "2.4"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # max_connections raised from the default 100 so the backend can run
+    # several gunicorn workers (each holds its own pool of
+    # DB_POOL_SIZE + DB_MAX_OVERFLOW) with headroom for ~100 tenant
+    # workspaces. See DEPLOYMENT.md → Scaling.
+    command:
+      - "postgres"
+      - "-c"
+      - "max_connections=200"
+    environment:
+      POSTGRES_DB: ${DB_NAME:-tolkyn}
+      POSTGRES_USER: ${DB_USER:-tolkyn}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-tolkyn} -d ${DB_NAME:-tolkyn}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # No persistence needed — only holds rate-limit counters and the
+    # scheduler's leader lock, both fine to lose on restart.
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks: [internal]
+
+  # Self-hosted WhatsApp (Baileys) — the unofficial, at-your-own-risk channel
+  # while waiting on real Cloud API access. One session per workspace; auth
+  # state persists in whatsapp_sessions so a container restart doesn't force
+  # everyone to re-scan their QR code.
+  whatsapp-worker:
+    build:
+      context: ./whatsapp-worker
+    restart: unless-stopped
+    environment:
+      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:?set INTERNAL_SHARED_SECRET in .env}
+      BACKEND_INTERNAL_URL: http://backend:8000
+    volumes:
+      - whatsapp_sessions:/app/sessions
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4001/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks: [internal]
+    # No published port — only the backend ever talks to this, over the
+    # internal network. Never expose this publicly.
+
+  backend:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      # Override host settings to the in-network service names regardless of
+      # what backend/.env says — this is what actually makes Docker networking
+      # work without hand-editing backend/.env per environment.
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-tolkyn}
+      DB_USER: ${DB_USER:-tolkyn}
+      DB_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      WHATSAPP_WORKER_URL: http://whatsapp-worker:4001
+      INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:?set INTERNAL_SHARED_SECRET in .env}
+    volumes:
+      - backend_media:/app/media
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      whatsapp-worker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks: [internal]
+    # No published ports — nginx is the only public entry point.
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://tolkyn.co.ke/api/v1}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks: [internal]
+
+  nginx:
+    image: nginx:1.27-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      # - "443:443"   # uncomment once you've added the TLS server block in nginx/nginx.conf
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # - ./nginx/certs:/etc/letsencrypt:ro   # mount your certs here once you have them
+    depends_on:
+      - backend
+      - frontend
+    networks: [internal]
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  backend_media:
+  whatsapp_sessions:

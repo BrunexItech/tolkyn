@@ -1,0 +1,39 @@
+# ── Secrets / environment ─────────────────────────────────────────────
+# The compose-level .env (DB_PASSWORD, INTERNAL_SHARED_SECRET). Templates
+# (.env.example) ARE committed.
+.env
+.env.local
+.env.*.local
+!.env.example
+# belt-and-suspenders — these are also covered by each service's own
+# .gitignore, listed here so a stray `git add -f` still can't sweep them in.
+backend/.env
+frontend/.env
+frontend/.env.local
+whatsapp-worker/.env
+
+# ── Dependencies / build output ───────────────────────────────────────
+node_modules/
+**/node_modules/
+backend/venv/
+venv/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+frontend/.next/
+frontend/out/
+*.tsbuildinfo
+
+# ── Runtime data (never commit) ───────────────────────────────────────
+backend/media/
+whatsapp-worker/sessions/*
+!whatsapp-worker/sessions/.gitkeep
+*.log
+
+# ── Local tooling / editor ────────────────────────────────────────────
+.claude/
+.vscode/
+.idea/
+.DS_Store
+*.pem

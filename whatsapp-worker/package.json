@@ -1,0 +1,17 @@
+{
+  "name": "tolkyn-whatsapp-worker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted WhatsApp connections (Baileys) for Tolkyn — one session per workspace, internal-only service called by the FastAPI backend.",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "baileys": "6.7.22",
+    "express": "^4.19.2",
+    "pino": "^9.6.0",
+    "qrcode": "^1.5.4"
+  }
+}

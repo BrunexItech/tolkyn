@@ -1,0 +1,565 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================
+   Tolkyn — design tokens
+   Dark, dense "control room" theme. shadcn semantic tokens are
+   repointed at the Tolkyn palette so components/ui/* keep working.
+   ============================================================ */
+
+@theme inline {
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-heading: var(--font-sans);
+
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  /* marketing (pre-login) bright theme — text-mkt-ink, bg-mkt-canvas … */
+  --color-mkt-canvas: var(--mkt-canvas);
+  --color-mkt-veil: var(--mkt-veil);
+  --color-mkt-card: var(--mkt-card);
+  --color-mkt-ink: var(--mkt-ink);
+  --color-mkt-ink-soft: var(--mkt-ink-soft);
+  --color-mkt-ink-faint: var(--mkt-ink-faint);
+  --color-mkt-line: var(--mkt-line);
+  --color-mkt-line-soft: var(--mkt-line-soft);
+  --color-mkt-indigo: var(--mkt-indigo);
+  --color-mkt-blue: var(--mkt-blue);
+  --color-mkt-cyan: var(--mkt-cyan);
+  --color-mkt-violet: var(--mkt-violet);
+  --color-mkt-mint: var(--mkt-mint);
+
+  /* raw Tolkyn palette — bg-om-card, text-om-blue, border-om-border … */
+  --color-om-bg: var(--om-bg);
+  --color-om-bg1: var(--om-bg1);
+  --color-om-bg2: var(--om-bg2);
+  --color-om-bg3: var(--om-bg3);
+  --color-om-card: var(--om-card);
+  --color-om-card2: var(--om-card2);
+  --color-om-border: var(--om-border);
+  --color-om-border-strong: var(--om-border-strong);
+  --color-om-text: var(--om-text);
+  --color-om-dim: var(--om-dim);
+  --color-om-muted: var(--om-muted);
+  --color-om-faint: var(--om-faint);
+  --color-om-blue: var(--om-blue);
+  --color-om-cyan: var(--om-cyan);
+  --color-om-green: var(--om-green);
+  --color-om-amber: var(--om-amber);
+  --color-om-orange: var(--om-orange);
+  --color-om-pink: var(--om-pink);
+  --color-om-red: var(--om-red);
+  --color-om-purple: var(--om-purple);
+  --color-om-violet: var(--om-violet);
+}
+
+:root {
+  color-scheme: dark;
+
+  --om-bg: #04070d;
+  --om-bg1: #070c17;
+  --om-bg2: #0a1020;
+  --om-bg3: #0d1526;
+  --om-card: #0b1120;
+  --om-card2: #0e162a;
+  --om-border: rgba(86, 118, 214, 0.14);
+  --om-border-strong: rgba(86, 118, 214, 0.28);
+  --om-text: #e6ecfb;
+  --om-dim: #a9b6d6;
+  --om-muted: #6b7aa3;
+  --om-faint: #35406a;
+  --om-blue: #4f7aff;
+  --om-cyan: #22d3ee;
+  --om-green: #22c55e;
+  --om-amber: #f5b642;
+  --om-orange: #fb7c3a;
+  --om-pink: #f472b6;
+  --om-red: #f0524b;
+  --om-purple: #a855f7;
+  --om-violet: #8b7bf0;
+
+  --radius: 0.75rem;
+
+  /* shadcn semantic → Tolkyn */
+  --background: var(--om-bg);
+  --foreground: var(--om-text);
+  --card: var(--om-card);
+  --card-foreground: var(--om-text);
+  --popover: var(--om-bg2);
+  --popover-foreground: var(--om-text);
+  --primary: var(--om-blue);
+  --primary-foreground: #ffffff;
+  --secondary: #101a33;
+  --secondary-foreground: var(--om-text);
+  --muted: #101a33;
+  --muted-foreground: var(--om-muted);
+  --accent: #16233f;
+  --accent-foreground: var(--om-text);
+  --destructive: var(--om-red);
+  --border: var(--om-border);
+  --input: var(--om-border);
+  --ring: var(--om-blue);
+  --chart-1: var(--om-blue);
+  --chart-2: var(--om-cyan);
+  --chart-3: var(--om-green);
+  --chart-4: var(--om-amber);
+  --chart-5: var(--om-violet);
+
+  --sidebar: #05080f;
+  --sidebar-foreground: var(--om-text);
+  --sidebar-primary: var(--om-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(79, 122, 255, 0.12);
+  --sidebar-accent-foreground: var(--om-blue);
+  --sidebar-border: var(--om-border);
+  --sidebar-ring: var(--om-blue);
+}
+
+/* dark-only; keep .dark identical so shadcn dark: styles resolve */
+.dark {
+  --background: var(--om-bg);
+  --foreground: var(--om-text);
+  --card: var(--om-card);
+  --card-foreground: var(--om-text);
+  --popover: var(--om-bg2);
+  --popover-foreground: var(--om-text);
+  --primary: var(--om-blue);
+  --primary-foreground: #ffffff;
+  --secondary: #101a33;
+  --secondary-foreground: var(--om-text);
+  --muted: #101a33;
+  --muted-foreground: var(--om-muted);
+  --accent: #16233f;
+  --accent-foreground: var(--om-text);
+  --destructive: var(--om-red);
+  --border: var(--om-border);
+  --input: var(--om-border);
+  --ring: var(--om-blue);
+  --sidebar: #05080f;
+  --sidebar-foreground: var(--om-text);
+  --sidebar-primary: var(--om-blue);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: rgba(79, 122, 255, 0.12);
+  --sidebar-accent-foreground: var(--om-blue);
+  --sidebar-border: var(--om-border);
+  --sidebar-ring: var(--om-blue);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+    min-width: 0;
+  }
+
+  html {
+    @apply font-sans;
+    color-scheme: dark;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-size: 13.5px;
+    position: relative;
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 78% 52% at 10% -4%, rgba(79, 122, 255, 0.07) 0%, transparent 58%),
+      radial-gradient(ellipse 60% 70% at 92% 104%, rgba(34, 211, 238, 0.04) 0%, transparent 56%);
+  }
+
+  body::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(86, 118, 214, 0.014) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(86, 118, 214, 0.014) 1px, transparent 1px);
+    background-size: 52px 52px;
+    mask-image: radial-gradient(ellipse 100% 100% at 50% 0%, #000 30%, transparent 90%);
+  }
+
+  input,
+  select,
+  textarea {
+    font-family: inherit;
+  }
+
+  select option {
+    background: var(--om-bg2);
+    color: var(--om-text);
+  }
+
+  ::-webkit-scrollbar {
+    width: 3px;
+    height: 3px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--om-border-strong);
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
+@layer components {
+  .om-edge {
+    position: relative;
+  }
+  .om-edge::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(
+      90deg,
+      transparent,
+      var(--om-edge-color, rgba(79, 122, 255, 0.22)),
+      transparent
+    );
+  }
+
+  .om-scroll {
+    scrollbar-width: thin;
+    scrollbar-color: var(--om-border-strong) transparent;
+  }
+  .om-scroll-none {
+    scrollbar-width: none;
+  }
+  .om-scroll-none::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@keyframes om-ping-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(1.6);
+  }
+}
+@keyframes om-rise {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes om-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+@keyframes om-blink {
+  0%,
+  80%,
+  100% {
+    opacity: 0.3;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+@keyframes om-wave {
+  from {
+    transform: scaleY(0.22);
+  }
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.om-anim-rise {
+  animation: om-rise 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.om-anim-slide {
+  animation: om-slide-in 0.18s ease;
+}
+.om-live-dot {
+  animation: om-ping-dot 1.6s infinite;
+}
+
+/* Skeleton placeholder — used by the route-level loading fallback so page
+   navigation shows a stable content silhouette instead of a full-screen
+   takeover. */
+@keyframes om-skel {
+  0% {
+    background-position: -220px 0;
+  }
+  100% {
+    background-position: calc(220px + 100%) 0;
+  }
+}
+.om-skel {
+  background-color: rgba(255, 255, 255, 0.035);
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.055) 50%,
+    transparent 100%
+  );
+  background-size: 220px 100%;
+  background-repeat: no-repeat;
+  border-radius: 10px;
+  animation: om-skel 1.25s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .om-anim-rise,
+  .om-anim-slide,
+  .om-skel {
+    animation: none;
+  }
+}
+
+/* Branded loading screen (app/loading.tsx, components/om/shell/BrandLoader.tsx):
+   rings rippling outward from the mark, echoing the "Tolkyn = wave" concept,
+   plus a slow breathing glow so the mark itself never looks static. */
+@keyframes tk-ripple {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.9);
+    opacity: 0;
+  }
+}
+@keyframes tk-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    filter: drop-shadow(0 0 14px rgba(79, 122, 255, 0.35));
+  }
+  50% {
+    transform: scale(1.045);
+    filter: drop-shadow(0 0 26px rgba(34, 211, 238, 0.45));
+  }
+}
+@keyframes tk-shimmer {
+  0% {
+    background-position: -160px 0;
+  }
+  100% {
+    background-position: 160px 0;
+  }
+}
+.tk-ring {
+  animation: tk-ripple 2.4s cubic-bezier(0.2, 0.6, 0.4, 1) infinite;
+}
+.tk-mark {
+  animation: tk-breathe 2.8s ease-in-out infinite;
+}
+.tk-shimmer-bar {
+  background-image: linear-gradient(
+    90deg,
+    rgba(79, 122, 255, 0) 0%,
+    rgba(79, 122, 255, 0.9) 45%,
+    rgba(34, 211, 238, 0.9) 55%,
+    rgba(34, 211, 238, 0) 100%
+  );
+  background-size: 160px 100%;
+  background-repeat: no-repeat;
+  animation: tk-shimmer 1.4s ease-in-out infinite;
+}
+
+/* ============================================================
+   Marketing (pre-login) — bright, clean, premium. Scoped to .mkt
+   so the dark app is untouched.
+   ============================================================ */
+.mkt {
+  /* background = the exact card colour used on the Dashboard / Call Center
+     (--om-card #0b1120). Cards sit a touch above it. The 3 state colours
+     (green #22c55e · blue #4f7aff · amber #f5b642) live only in card structure
+     and background — never in running text. */
+  --mkt-canvas: #0b1120;       /* dashboard / call-center card colour */
+  --mkt-veil: #0e162a;         /* alternating section band */
+  --mkt-card: #111b31;         /* cards, one step above the ground */
+  --mkt-ink: #eef1f7;
+  --mkt-ink-soft: #9aa5ba;
+  --mkt-ink-faint: #6b7688;
+  --mkt-line: rgba(255, 255, 255, 0.09);
+  --mkt-line-soft: rgba(255, 255, 255, 0.05);
+  --mkt-indigo: #4f7aff; /* the blue */
+  --mkt-blue: #22c55e;   /* the green */
+  --mkt-cyan: #22c55e;   /* green */
+  --mkt-violet: #f5b642; /* the amber */
+  --mkt-mint: #22c55e;   /* green */
+
+  color-scheme: dark;
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  min-height: 100vh;
+  overflow-x: clip;
+  background: var(--mkt-canvas);
+  color: var(--mkt-ink);
+  font-feature-settings: "ss01", "cv01";
+}
+.mkt ::selection {
+  background: rgba(79, 122, 255, 0.30);
+}
+.mkt ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* layered background: aurora blooms + a whisper-fine dot grid + grain */
+.mkt-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: var(--mkt-canvas);
+}
+.mkt-bg::before,
+.mkt-bg::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(88px);
+  opacity: 1;
+}
+.mkt-bg::before {
+  width: 50rem;
+  height: 50rem;
+  top: -22rem;
+  left: -15rem;
+  background: radial-gradient(circle at 36% 36%, rgba(34, 197, 94, 0.16), transparent 66%);
+  animation: mkt-drift-a 26s ease-in-out infinite alternate;
+}
+.mkt-bg::after {
+  width: 44rem;
+  height: 44rem;
+  top: -8rem;
+  right: -18rem;
+  background: radial-gradient(circle at 60% 40%, rgba(79, 122, 255, 0.16), transparent 68%);
+  animation: mkt-drift-b 30s ease-in-out infinite alternate;
+}
+/* subtle dark depth, matching the app: bg3 at the top → card colour → deepest at the fold */
+.mkt-bg {
+  background:
+    linear-gradient(180deg, #0d1526 0%, #0b1120 55%, #06090f 100%);
+}
+.mkt-grid {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
+  background-size: 26px 26px;
+  mask-image: radial-gradient(ellipse 92% 58% at 50% -2%, #000 18%, transparent 78%);
+}
+
+@keyframes mkt-drift-a {
+  to {
+    transform: translate3d(6rem, 4rem, 0) scale(1.12);
+  }
+}
+@keyframes mkt-drift-b {
+  to {
+    transform: translate3d(-5rem, 3rem, 0) scale(1.08);
+  }
+}
+@keyframes mkt-float {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+@keyframes mkt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes mkt-shine {
+  from {
+    background-position: 0% 50%;
+  }
+  to {
+    background-position: 200% 50%;
+  }
+}
+
+/* kept for backwards compat — now a single solid colour, no gradient in text */
+.mkt-headline-grad {
+  color: var(--mkt-ink);
+}
+.mkt-rise {
+  animation: mkt-rise 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.mkt-float {
+  animation: mkt-float 6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .mkt-bg::before,
+  .mkt-bg::after,
+  .mkt-headline-grad,
+  .mkt-rise,
+  .mkt-float {
+    animation: none;
+  }
+}
