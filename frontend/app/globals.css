@@ -498,6 +498,26 @@
 .mkt ::-webkit-scrollbar-thumb {
   background: rgba(79, 122, 255, 0.22);
 }
+/* Same native-app feel on the landing page: clicking a headline, label or
+   stat never drops a caret or highlights the text. Inputs, links and
+   anything tagged .mkt-selectable stay selectable. */
+.mkt,
+.mkt * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.mkt input,
+.mkt textarea,
+.mkt select,
+.mkt a[href],
+.mkt code,
+.mkt pre,
+.mkt pre *,
+.mkt .mkt-selectable,
+.mkt .mkt-selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+}
 
 /* a card with the reference's hairline blue top-glow */
 .mkt-panel {
