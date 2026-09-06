@@ -122,7 +122,7 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
                 {m.via === "ai" && <span className="rounded bg-om-violet/15 px-1 text-om-violet">AI</span>}
                 <span>{m.at ? relativeTime(m.at) : ""}</span>
               </div>
-              {m.body}
+              <span className="om-selectable">{m.body}</span>
               {m.like_count != null && m.like_count > 0 && (
                 <div className="mt-1 flex items-center gap-1 text-[9.5px] text-om-faint">
                   <Heart className="size-2.5" /> {m.like_count}

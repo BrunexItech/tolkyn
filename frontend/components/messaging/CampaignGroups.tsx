@@ -191,7 +191,7 @@ function GroupDetail({ id, onBack }: { id: string; onBack: () => void }) {
                   </span>
                   <span className="ml-auto font-normal normal-case">{relativeTime(m.created_at)}</span>
                 </div>
-                {m.body}
+                <span className="om-selectable">{m.body}</span>
               </div>
             );
           })

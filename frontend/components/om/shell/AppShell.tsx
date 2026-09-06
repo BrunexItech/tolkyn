@@ -50,7 +50,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <MobileNav.Provider value={{ open, toggle, close }}>
       <NavProgress>
-        <div className="relative z-10 flex h-screen overflow-hidden">
+        <div className="om-app relative z-10 flex h-screen overflow-hidden">
           {/* backdrop — mobile only, when the drawer is open */}
           {open && (
             <button

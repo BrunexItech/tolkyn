@@ -276,6 +276,34 @@
   }
 }
 
+/* ============================================================
+   App chrome behaves like a native app: clicking a label, heading,
+   table cell, nav item or stat number never drops a text caret or
+   highlights the interface. Real content opts back in below —
+   every field, code block, and anything tagged .om-selectable.
+   ============================================================ */
+.om-app,
+.om-app * {
+  -webkit-user-select: none;
+  user-select: none;
+}
+.om-app input,
+.om-app textarea,
+.om-app select,
+.om-app [contenteditable="true"],
+.om-app [contenteditable="true"] *,
+.om-app code,
+.om-app pre,
+.om-app pre *,
+.om-app a[href^="tel:"],
+.om-app a[href^="mailto:"],
+.om-app a[href^="http"],
+.om-app .om-selectable,
+.om-app .om-selectable * {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
 @keyframes om-ping-dot {
   0%,
   100% {

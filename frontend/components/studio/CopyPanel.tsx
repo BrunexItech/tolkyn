@@ -247,7 +247,7 @@ function VariantCard({
           </button>
         </div>
       </div>
-      <p className={cn("whitespace-pre-wrap text-[12px] leading-relaxed text-om-dim")}>{text}</p>
+      <p className={cn("om-selectable whitespace-pre-wrap text-[12px] leading-relaxed text-om-dim")}>{text}</p>
       {hashtags.length > 0 && (
         <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] text-om-blue">
           <Hash className="size-3" />

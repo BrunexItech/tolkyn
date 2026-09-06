@@ -129,7 +129,7 @@ export function SocialLeadDrawer({
             <div className="rounded-lg border border-om-border bg-white/[0.02] p-2.5 text-[12px] leading-relaxed text-om-dim">
               <div className="flex gap-1.5">
                 <MessageCircle className="mt-0.5 size-3.5 shrink-0 text-om-muted" />
-                <span>&ldquo;{lead.message}&rdquo;</span>
+                <span className="om-selectable">&ldquo;{lead.message}&rdquo;</span>
               </div>
               {lead.post_context && (
                 <div className="mt-2 border-t border-om-border/60 pt-2 text-[10.5px] text-om-faint">

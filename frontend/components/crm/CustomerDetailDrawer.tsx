@@ -215,7 +215,7 @@ export function CustomerDetailDrawer({
           {c.notes && (
             <div>
               <SectionLabel>Notes</SectionLabel>
-              <p className="text-[11.5px] leading-relaxed text-om-dim">{c.notes}</p>
+              <p className="om-selectable text-[11.5px] leading-relaxed text-om-dim">{c.notes}</p>
             </div>
           )}
 
