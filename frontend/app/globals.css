@@ -519,6 +519,43 @@
   user-select: text;
 }
 
+/* ---- auth forms ----------------------------------------------------------
+   Brand-blue fields and a premium primary button, scoped to .auth-form so the
+   shared OmInput used across the dashboard is left untouched. Unlayered, so it
+   wins over the utility classes on <OmInput> / the submit button. */
+.mkt .auth-form input:not([type="checkbox"]):not([type="radio"]),
+.mkt .auth-form select {
+  border-color: rgba(79, 122, 255, 0.24);
+  background: rgba(255, 255, 255, 0.045);
+  color: var(--mkt-ink);
+}
+.mkt .auth-form input::placeholder {
+  color: var(--mkt-ink-faint);
+}
+.mkt .auth-form input:not([type="checkbox"]):not([type="radio"]):focus,
+.mkt .auth-form select:focus {
+  border-color: var(--mkt-blue);
+  background: rgba(79, 122, 255, 0.07);
+  box-shadow: 0 0 0 3px rgba(79, 122, 255, 0.16);
+}
+.mkt .auth-form input:disabled {
+  opacity: 0.55;
+}
+.mkt .auth-form button[type="submit"] {
+  color: #fff;
+  border: 1px solid rgba(79, 122, 255, 0.55);
+  background: linear-gradient(180deg, #5c85ff 0%, #3f68e6 55%, #2f56d8 100%);
+  box-shadow:
+    0 12px 32px -12px rgba(79, 122, 255, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+}
+.mkt .auth-form button[type="submit"]:hover:not(:disabled) {
+  filter: brightness(1.07);
+}
+.mkt .auth-form button[type="submit"]:active:not(:disabled) {
+  filter: brightness(0.96);
+}
+
 /* a card with the reference's hairline blue top-glow */
 .mkt-panel {
   position: relative;

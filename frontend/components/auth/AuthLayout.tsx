@@ -1,14 +1,15 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { ShieldCheck, Zap, Headset } from "lucide-react";
 import { BrandLockup } from "@/components/om/shell/Brand";
+import { AuthShowcase } from "./AuthShowcase";
 
-const POINTS = [
-  { icon: Zap, text: "Schedule across 7 networks from one composer" },
-  { icon: Headset, text: "Inbound & outbound calls without a separate phone system" },
-  { icon: ShieldCheck, text: "SSO, audit logs and role-based access" },
-];
-
+/** Shell for every logged-out page (login, signup, reset, invite…). Lives in
+ * the marketing `.mkt` dark-blue world — a user who lands here just came from,
+ * or is about to enter, the product, so it should feel like one surface. The
+ * form sits in a lifted panel, vertically centred; the right column shows a
+ * static product snapshot (`AuthShowcase`). Form controls and the primary
+ * button are restyled via the `.auth-form` scope in globals.css, so the
+ * individual pages don't each hand-roll brand styling. */
 export function AuthLayout({
   title,
   subtitle,
@@ -16,49 +17,59 @@ export function AuthLayout({
   footer,
 }: {
   title: string;
-  subtitle: string;
+  subtitle?: ReactNode;
   children: ReactNode;
-  footer: ReactNode;
+  footer?: ReactNode;
 }) {
+  const hasSubtitle = typeof subtitle === "string" ? subtitle.trim().length > 0 : subtitle != null;
+
   return (
-    <div className="relative z-10 grid min-h-screen lg:grid-cols-2">
-      {/* form side */}
-      <div className="flex flex-col px-5 py-8">
-        <Link href="/" className="mb-auto">
-          <BrandLockup />
-        </Link>
+    <div className="mkt font-sans">
+      <style>{`html,body{background:#0a1120}`}</style>
+      <div className="mkt-bg" aria-hidden />
+      <div className="mkt-grid" aria-hidden />
 
-        <div className="mx-auto w-full max-w-sm py-10">
-          <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
-          <p className="mt-1 text-[13px] text-om-muted">{subtitle}</p>
-          <div className="mt-6">{children}</div>
-          <p className="mt-6 text-center text-[12.5px] text-om-muted">{footer}</p>
-        </div>
+      <div className="relative z-10 grid min-h-screen lg:grid-cols-[1fr_1.04fr]">
+        {/* form side */}
+        <div className="flex min-h-screen flex-col px-5 py-6 sm:px-8">
+          <Link
+            href="/"
+            className="inline-flex w-fit items-center rounded-lg transition-opacity hover:opacity-80"
+          >
+            <BrandLockup />
+          </Link>
 
-        <div className="mb-0 mt-auto text-[11px] text-om-faint">
-          © {new Date().getFullYear()} Tolkyn
-        </div>
-      </div>
-
-      {/* brand side */}
-      <div className="relative hidden overflow-hidden border-l border-om-border bg-gradient-to-br from-om-card to-[#0b1730] lg:flex lg:flex-col lg:justify-center lg:px-14">
-        <div className="pointer-events-none absolute -right-24 -top-24 size-80 rounded-full bg-om-blue/15 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-24 -left-16 size-80 rounded-full bg-om-cyan/10 blur-3xl" />
-        <div className="relative max-w-md">
-          <div className="text-[24px] font-semibold leading-tight tracking-tight">
-            One workspace for publishing, engagement and voice.
+          <div className="flex flex-1 items-center justify-center py-8">
+            <div className="auth-form w-full max-w-[380px]">
+              <div className="mkt-panel mkt-rise p-6 sm:p-7">
+                <h1 className="text-[20px] font-semibold tracking-tight text-mkt-ink">{title}</h1>
+                {hasSubtitle && (
+                  <p className="mt-1 text-[12.5px] leading-relaxed text-mkt-ink-soft">{subtitle}</p>
+                )}
+                <div className="mt-5">{children}</div>
+              </div>
+              {footer != null && (
+                <p className="mt-4 text-center text-[12px] leading-relaxed text-mkt-ink-soft">
+                  {footer}
+                </p>
+              )}
+            </div>
           </div>
-          <ul className="mt-8 space-y-4">
-            {POINTS.map((p) => (
-              <li key={p.text} className="flex items-start gap-3">
-                <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-om-blue/12 text-om-blue">
-                  <p.icon className="size-4" />
-                </span>
-                <span className="pt-1 text-[13px] text-om-dim">{p.text}</span>
-              </li>
-            ))}
-          </ul>
+
+          <div className="text-[11px] text-mkt-ink-faint">
+            © {new Date().getFullYear()} Tolkyn ·{" "}
+            <Link href="/terms" className="hover:text-mkt-ink-soft">
+              Terms
+            </Link>{" "}
+            ·{" "}
+            <Link href="/privacy" className="hover:text-mkt-ink-soft">
+              Privacy
+            </Link>
+          </div>
         </div>
+
+        {/* product snapshot side */}
+        <AuthShowcase />
       </div>
     </div>
   );
