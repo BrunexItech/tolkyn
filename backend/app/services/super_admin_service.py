@@ -253,6 +253,17 @@ class SuperAdminService:
             user.allowed_video_models = patch["allowed_video_models"] or []
         if "video_budget_usd" in patch:
             user.video_budget_usd = patch["video_budget_usd"]
+        if "daily_image_limit" in patch:
+            v = patch["daily_image_limit"]
+            user.daily_image_limit = None if v is None else max(0, int(v))
+        if "daily_video_limit" in patch:
+            v = patch["daily_video_limit"]
+            user.daily_video_limit = None if v is None else max(0, int(v))
+        if "module_overrides" in patch:
+            raw = patch["module_overrides"] or {}
+            user.module_overrides = {
+                m: bool(on) for m, on in raw.items() if m in MODULES
+            }
         if "package_id" in patch:
             pid = patch["package_id"] or None
             if pid:

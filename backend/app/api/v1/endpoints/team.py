@@ -46,7 +46,7 @@ async def my_role(
 ):
     """Lets the frontend hide actions a team member's role doesn't grant,
     proactively rather than only reacting to a 403 after the fact."""
-    return MeResponse(**TeamService(db, actor).me())
+    return MeResponse(**await TeamService(db, actor).me())
 
 
 @router.post("", response_model=InviteResponse, status_code=status.HTTP_201_CREATED)

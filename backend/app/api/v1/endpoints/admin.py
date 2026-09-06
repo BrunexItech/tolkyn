@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin_security import get_current_super_admin_id
 from app.core.config import settings
+from app.core.limits import count_today, effective_daily_limit
 from app.core.rate_limit import limiter
 from app.core.video_models import catalog_payload
 from app.db import get_db
@@ -161,6 +162,9 @@ async def delete_subsidiary(
 def _user_resp(u) -> PlatformUserResponse:
     d = PlatformUserResponse.model_validate(u).model_dump()
     d["package_name"] = u.package.name if getattr(u, "package", None) else None
+    d["module_overrides"] = u.module_overrides or {}
+    d["effective_image_limit"] = effective_daily_limit(u, "image")
+    d["effective_video_limit"] = effective_daily_limit(u, "video")
     return PlatformUserResponse(**d)
 
 
@@ -288,7 +292,12 @@ async def get_user(
     admin_id: str = Depends(get_current_super_admin_id),
     db: AsyncSession = Depends(get_db),
 ):
-    return _user_resp(await SuperAdminService(db).get_user(user_id))
+    u = await SuperAdminService(db).get_user(user_id)
+    resp = _user_resp(u)
+    ws = u.workspace_id or u.id
+    resp.images_today = await count_today(db, ws, "image")
+    resp.videos_today = await count_today(db, ws, "video")
+    return resp
 
 
 @router.patch("/users/{user_id}", response_model=PlatformUserResponse)

@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.core.limits import enforce_daily_limit
 from app.core.video_models import (
     ALLOWED_ASPECT_RATIOS,
     ALLOWED_DURATIONS,
@@ -78,6 +79,8 @@ class VideoService:
                 status.HTTP_503_SERVICE_UNAVAILABLE,
                 "Video generation isn't set up yet — ask the platform admin to add a Gemini API key.",
             )
+
+        await enforce_daily_limit(self.db, self.user, "video")
 
         allowed = self.user.allowed_video_models or []
         if allowed and data.model_key not in allowed:

@@ -41,7 +41,7 @@ DEFAULT_PACKAGES = [
         "description": "Publishing, inbox and CRM for a single brand.",
         "price_amount": 4900, "price_currency": "KES", "price_interval": "month",
         "modules": ["publishing", "engage", "crm", "content_studio", "analytics"],
-        "limits": {"seats": 2, "video_budget_usd": 0, "sms_monthly": 0, "call_minutes_monthly": 0},
+        "limits": {"seats": 2, "video_budget_usd": 0, "images_daily": 20, "videos_daily": 0, "sms_monthly": 0, "call_minutes_monthly": 0},
         "is_default": True, "sort_order": 1,
     },
     {
@@ -52,7 +52,7 @@ DEFAULT_PACKAGES = [
             "publishing", "engage", "crm", "content_studio", "analytics", "leads",
             "campaigns", "automations", "sms", "whatsapp", "email", "call_center", "audience",
         ],
-        "limits": {"seats": 8, "video_budget_usd": 25, "sms_monthly": 5000, "call_minutes_monthly": 2000},
+        "limits": {"seats": 8, "video_budget_usd": 25, "images_daily": 100, "videos_daily": 10, "sms_monthly": 5000, "call_minutes_monthly": 2000},
         "is_default": False, "sort_order": 2,
     },
     {

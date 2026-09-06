@@ -1,12 +1,19 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Clapperboard } from "lucide-react";
+import { Check, Clapperboard, ImageIcon, LayoutGrid } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { compact, relativeTime, shortDateTime } from "@/lib/om/format";
-import { useUserUsage, useUpdateUser, useApproveUser, useVideoModelCatalog, usePackages } from "./hooks";
+import {
+  useUserUsage,
+  useUpdateUser,
+  useApproveUser,
+  useVideoModelCatalog,
+  usePackages,
+  useAdminUser,
+} from "./hooks";
 import type { PlatformUser } from "@/lib/api/admin";
 
 const ROLES = ["owner", "admin", "manager", "editor", "viewer", "contributor"];
@@ -24,7 +31,10 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function UserDetailDrawer({ user, onOpenChange }: { user: PlatformUser | null; onOpenChange: (v: boolean) => void }) {
+export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: PlatformUser | null; onOpenChange: (v: boolean) => void }) {
+  const { data: fresh } = useAdminUser(listUser?.id ?? null);
+  // list row shows instantly; the fresh detail carries today's usage counts
+  const user = fresh ?? listUser;
   const { data: usage } = useUserUsage(user?.id ?? null);
   const { data: videoModels } = useVideoModelCatalog();
   const { data: pkgData } = usePackages();
@@ -32,9 +42,31 @@ export function UserDetailDrawer({ user, onOpenChange }: { user: PlatformUser | 
   const approve = useApproveUser();
 
   const [budgetInput, setBudgetInput] = useState("");
+  const [imgLimit, setImgLimit] = useState("");
+  const [vidLimit, setVidLimit] = useState("");
   useEffect(() => {
     setBudgetInput(user?.video_budget_usd != null ? String(user.video_budget_usd) : "");
-  }, [user?.id, user?.video_budget_usd]);
+    setImgLimit(user?.daily_image_limit != null ? String(user.daily_image_limit) : "");
+    setVidLimit(user?.daily_video_limit != null ? String(user.daily_video_limit) : "");
+  }, [user?.id, user?.video_budget_usd, user?.daily_image_limit, user?.daily_video_limit]);
+
+  const commitLimit = (kind: "image" | "video", raw: string) => {
+    if (!user) return;
+    const trimmed = raw.trim();
+    const value = trimmed === "" ? null : Math.max(0, Math.floor(Number(trimmed)));
+    if (trimmed !== "" && Number.isNaN(value)) return;
+    const key = kind === "image" ? "daily_image_limit" : "daily_video_limit";
+    if (value === (user[key] ?? null)) return;
+    update.mutate({ id: user.id, [key]: value });
+  };
+
+  const setModule = (key: string, mode: "default" | "on" | "off") => {
+    if (!user) return;
+    const next: Record<string, boolean> = { ...(user.module_overrides ?? {}) };
+    if (mode === "default") delete next[key];
+    else next[key] = mode === "on";
+    update.mutate({ id: user.id, module_overrides: next });
+  };
 
   const toggleModel = (key: string) => {
     if (!user) return;
@@ -131,7 +163,88 @@ export function UserDetailDrawer({ user, onOpenChange }: { user: PlatformUser | 
               ))}
             </select>
             <p className="mt-1 text-[10px] text-om-faint">
-              Controls which sections of the platform this user&apos;s whole workspace can reach.
+              The base tier. Fine-tune individual modules below.
+            </p>
+          </div>
+
+          <div>
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1">
+                <LayoutGrid className="size-3" /> Module access
+              </span>
+            </SectionLabel>
+            <div className="space-y-1">
+              {(pkgData?.modules ?? []).map((m) => {
+                const pkg = (pkgData?.items ?? []).find((p) => p.id === user.package_id);
+                const pkgGrants = !user.package_id || (pkg?.modules.includes("*") ?? false) || (pkg?.modules.includes(m.key) ?? false);
+                const ov = user.module_overrides?.[m.key];
+                const mode = ov === undefined ? "default" : ov ? "on" : "off";
+                const effective = mode === "default" ? pkgGrants : ov;
+                return (
+                  <div
+                    key={m.key}
+                    className="flex items-center gap-2 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5"
+                  >
+                    <span
+                      className="size-1.5 shrink-0 rounded-full"
+                      style={{ background: effective ? "var(--om-green)" : "var(--om-faint)" }}
+                    />
+                    <span className="flex-1 truncate text-[11.5px] text-om-dim">{m.label}</span>
+                    <select
+                      value={mode}
+                      onChange={(e) => setModule(m.key, e.target.value as "default" | "on" | "off")}
+                      className="rounded-md border border-om-border bg-white/[0.03] px-1.5 py-1 text-[10.5px] text-om-text outline-none focus:border-om-violet/60"
+                    >
+                      <option value="default">Plan default ({pkgGrants ? "on" : "off"})</option>
+                      <option value="on">Force on</option>
+                      <option value="off">Force off</option>
+                    </select>
+                  </div>
+                );
+              })}
+              <p className="text-[10px] text-om-faint">
+                An override wins over the plan for this client only — grant a module their tier
+                doesn&apos;t include, or take one away.
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1">
+                <ImageIcon className="size-3" /> Daily AI generation limits
+              </span>
+            </SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              {(
+                [
+                  ["Images / day", imgLimit, setImgLimit, "image", user.images_today, user.effective_image_limit] as const,
+                  ["Videos / day", vidLimit, setVidLimit, "video", user.videos_today, user.effective_video_limit] as const,
+                ]
+              ).map(([label, val, setVal, kind, today, eff]) => (
+                <div key={kind}>
+                  <div className="mb-1 text-[10px] text-om-muted">{label}</div>
+                  <input
+                    type="number"
+                    min={0}
+                    step={1}
+                    value={val}
+                    onChange={(e) => setVal(e.target.value)}
+                    onBlur={() => commitLimit(kind, val)}
+                    onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+                    placeholder="Inherit"
+                    className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-violet/60"
+                  />
+                  <div className="mt-1 text-[9.5px] text-om-faint">
+                    {today ?? 0} used today
+                    {eff != null ? ` / ${eff}` : " · no cap"}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-1.5 text-[10px] text-om-faint">
+              Blank = inherit the plan&apos;s limit (or unlimited). <b>0</b> turns generation off.
+              Counts reset at midnight UTC.
             </p>
           </div>
 

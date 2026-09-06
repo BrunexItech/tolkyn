@@ -10,6 +10,7 @@ import {
   MessageCircle,
   UserPlus,
   Loader2,
+  Phone,
 } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
 import { OmButton } from "@/components/om/primitives/OmButton";
@@ -104,6 +105,23 @@ export function SocialLeadDrawer({
               Re-analyse
             </button>
           </div>
+
+          {(() => {
+            const ph =
+              lead.author_handle &&
+              lead.platform === "whatsapp" &&
+              /^\+?\d[\d\s()-]{6,}$/.test(lead.author_handle)
+                ? lead.author_handle.replace(/[\s()-]/g, "")
+                : null;
+            return ph ? (
+              <a
+                href={`tel:${ph}`}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-om-green/30 bg-om-green/10 px-2.5 py-1.5 text-[11.5px] font-medium text-om-green transition-colors hover:bg-om-green/15"
+              >
+                <Phone className="size-3.5" /> Call {lead.author_handle}
+              </a>
+            ) : null;
+          })()}
 
           {/* the message */}
           <div>

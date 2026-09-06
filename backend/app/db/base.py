@@ -157,6 +157,9 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS provider_channel_id VARCHAR(128)",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ivr_state JSONB",
     "ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS email_campaign_id VARCHAR(36)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_image_limit INTEGER",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_video_limit INTEGER",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS module_overrides JSON NOT NULL DEFAULT '{}'",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

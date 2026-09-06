@@ -14,7 +14,7 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.features import MODULES
+from app.core.features import ALL_MODULES, MODULES
 from app.core.security import get_current_user_id
 from app.db import get_db
 from app.models.package import Package
@@ -40,19 +40,43 @@ class Actor:
 
 
 async def _workspace_features(db: AsyncSession, workspace_id: str) -> List[str]:
-    """The modules the workspace owner's package grants. A workspace_id is
-    always a user id (the owner, or the inviter for a team member)."""
-    row = (
+    """The modules the workspace owner can reach. A workspace_id is always a
+    user id (the owner, or the inviter for a team member).
+
+    = the owner's package modules, then the owner's per-user `module_overrides`
+    applied on top ({"crm": true} force-grants, {"video": false} force-removes).
+    No package assigned → grandfathered to everything (then overrides still
+    apply, so a super admin can still switch a single module off).
+    """
+    res = (
         await db.execute(
-            select(Package.modules)
+            select(Package.modules, User.module_overrides)
             .select_from(User)
-            .join(Package, Package.id == User.package_id)
+            .outerjoin(Package, Package.id == User.package_id)
             .where(User.id == workspace_id)
         )
-    ).scalar_one_or_none()
-    if not row:
-        return ["*"]  # no package assigned — full access, unchanged from before packages existed
-    return ["*"] if "*" in row else list(row)
+    ).first()
+    if res is None:
+        return ["*"]
+
+    pkg_modules, overrides = res
+    overrides = overrides or {}
+
+    if pkg_modules is None or "*" in pkg_modules:
+        granted = set(ALL_MODULES)
+    else:
+        granted = {m for m in pkg_modules if m in MODULES}
+
+    for mod, on in overrides.items():
+        if mod not in MODULES:
+            continue
+        granted.add(mod) if on else granted.discard(mod)
+
+    # still report "*" when nothing was actually narrowed, so require_feature's
+    # cheap "*" short-circuit keeps working for the common untouched account
+    if not overrides and (pkg_modules is None or "*" in pkg_modules):
+        return ["*"]
+    return sorted(granted)
 
 
 async def get_actor(

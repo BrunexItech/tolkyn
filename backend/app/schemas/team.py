@@ -77,6 +77,11 @@ class MeResponse(BaseModel):
     permissions: List[str]
     features: List[str] = ["*"]
     is_owner: bool
+    # Today's AI-generation usage vs the effective daily cap (None = no cap).
+    images_today: int = 0
+    images_daily_limit: Optional[int] = None
+    videos_today: int = 0
+    videos_daily_limit: Optional[int] = None
 
 
 class InvitePreview(BaseModel):

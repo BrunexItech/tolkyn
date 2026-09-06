@@ -62,6 +62,10 @@ export interface MyRole {
   permissions: string[];
   features: string[]; // platform modules the workspace's package grants; ["*"] = all
   is_owner: boolean;
+  images_today: number;
+  images_daily_limit: number | null; // null = no cap
+  videos_today: number;
+  videos_daily_limit: number | null;
 }
 
 export interface InvitePreview {

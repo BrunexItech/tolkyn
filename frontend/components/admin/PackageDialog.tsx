@@ -13,6 +13,8 @@ import type { ModuleInfo, Package } from "@/lib/api/admin";
 const LIMIT_KEYS: { key: string; label: string }[] = [
   { key: "seats", label: "Team seats" },
   { key: "video_budget_usd", label: "AI video budget ($)" },
+  { key: "images_daily", label: "AI images / day" },
+  { key: "videos_daily", label: "AI videos / day" },
   { key: "sms_monthly", label: "SMS / month" },
   { key: "call_minutes_monthly", label: "Call minutes / month" },
 ];

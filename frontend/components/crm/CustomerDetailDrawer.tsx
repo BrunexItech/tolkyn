@@ -114,7 +114,13 @@ export function CustomerDetailDrawer({
                   </a>
                 </Row>
               )}
-              {c.phone && <Row icon={<Phone />}>{c.phone}</Row>}
+              {c.phone && (
+                <Row icon={<Phone />}>
+                  <a href={`tel:${c.phone.replace(/[\s()-]/g, "")}`} className="font-mono hover:text-om-blue">
+                    {c.phone}
+                  </a>
+                </Row>
+              )}
               {c.position && <Row icon={<Building2 />}>{c.position}</Row>}
               {c.website_url && (
                 <Row icon={<Globe />}>

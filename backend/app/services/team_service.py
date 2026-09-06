@@ -111,17 +111,30 @@ class TeamService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Member not found")
         return m
 
-    def me(self) -> Dict[str, Any]:
-        """The acting identity's own role/permissions — lets the frontend
-        hide actions a team member doesn't have, proactively rather than only
-        reacting to a 403."""
+    async def me(self) -> Dict[str, Any]:
+        """The acting identity's own role/permissions/features + today's AI-
+        generation usage — lets the frontend hide actions and show remaining
+        allowance proactively, rather than only reacting to a 403/429."""
+        from sqlalchemy import select as _select
+
+        from app.core.limits import count_today, effective_daily_limit
+        from app.models.user import User
+
+        ws = self.actor.workspace_id
+        owner = (await self.db.execute(_select(User).where(User.id == ws))).scalar_one_or_none()
+        img_used = await count_today(self.db, ws, "image")
+        vid_used = await count_today(self.db, ws, "video")
         return {
             "user_id": self.actor.user_id,
-            "workspace_id": self.actor.workspace_id,
+            "workspace_id": ws,
             "role": self.actor.role.value,
             "permissions": self.actor.permissions,
             "features": self.actor.features,
             "is_owner": self.actor.role == TeamRole.OWNER,
+            "images_today": img_used,
+            "images_daily_limit": effective_daily_limit(owner, "image") if owner else None,
+            "videos_today": vid_used,
+            "videos_daily_limit": effective_daily_limit(owner, "video") if owner else None,
         }
 
     # ------------------------------------------------------------ inviting

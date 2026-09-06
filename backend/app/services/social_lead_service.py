@@ -12,6 +12,7 @@ Flow:
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -382,10 +383,16 @@ class SocialLeadService:
         if row.buying_signals:
             note_bits.append("Signals: " + ", ".join(row.buying_signals))
 
+        # A WhatsApp lead's handle IS the customer's real phone number — carry
+        # it straight onto the CRM record so the team can call them.
+        lead_phone = None
+        if row.platform == "whatsapp" and re.match(r"^\+?\d[\d ()\-]{6,}$", row.author_handle or ""):
+            lead_phone = re.sub(r"[ ()\-]", "", row.author_handle)
+
         customer = Customer(
             name=row.author_name[:255],
             email=(opts.email or None),
-            phone=(opts.phone or None),
+            phone=(opts.phone or lead_phone),
             company=None,
             instagram_handle=row.author_handle if row.platform == "instagram" else None,
             twitter_handle=row.author_handle if row.platform in ("x", "twitter") else None,

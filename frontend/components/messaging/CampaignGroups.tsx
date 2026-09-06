@@ -139,21 +139,28 @@ function GroupDetail({ id, onBack }: { id: string; onBack: () => void }) {
           <div className="text-[10.5px] text-om-muted">{group.participants.length} participants</div>
         </div>
         <Pill tone="green" icon={<ShieldCheck className="size-3" />}>
-          Numbers masked
+          Hidden between members
         </Pill>
       </div>
 
-      {/* admin-only real identities */}
+      {/* Admin-only: real identities + numbers. Members only ever see the
+          pseudonym — this panel and the feed below are the workspace's view. */}
       <div className="flex flex-wrap gap-1.5">
         {group.participants.map((p) => (
           <span
             key={p.id}
-            title={`${p.real_name || "No name"} · ${p.phone}`}
             className="flex items-center gap-1.5 rounded-md border border-om-border bg-white/[0.03] px-2 py-1 text-[10.5px]"
           >
             <span className="font-medium text-om-dim">{p.pseudo_name}</span>
             <span className="text-om-faint">·</span>
-            <span className="truncate text-om-faint">{p.real_name || p.phone}</span>
+            {p.real_name && <span className="text-om-dim">{p.real_name}</span>}
+            <a
+              href={`tel:${p.phone}`}
+              className="font-mono text-om-blue hover:underline"
+              title="Call this participant"
+            >
+              {p.phone}
+            </a>
           </span>
         ))}
       </div>
@@ -175,7 +182,13 @@ function GroupDetail({ id, onBack }: { id: string; onBack: () => void }) {
                 )}
               >
                 <div className="mb-0.5 flex items-center gap-1.5 text-[9.5px] font-semibold uppercase tracking-wide text-om-faint">
-                  <span>{isAdmin ? "You (business)" : `${p?.pseudo_name ?? "Unknown"} · ${p?.real_name || p?.phone || ""}`}</span>
+                  <span>
+                    {isAdmin
+                      ? "You (business)"
+                      : `${p?.pseudo_name ?? "Unknown"}${p?.real_name ? ` · ${p.real_name}` : ""}${
+                          p?.phone ? ` · ${p.phone}` : ""
+                        }`}
+                  </span>
                   <span className="ml-auto font-normal normal-case">{relativeTime(m.created_at)}</span>
                 </div>
                 {m.body}

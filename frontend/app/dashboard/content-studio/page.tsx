@@ -6,6 +6,7 @@ import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { CopyPanel } from "@/components/studio/CopyPanel";
 import { ImageStudio } from "@/components/studio/ImageStudio";
 import { AssetLibrary } from "@/components/studio/AssetLibrary";
+import { DailyLimitPill } from "@/components/common/DailyLimitPill";
 import { cn } from "@/lib/utils";
 
 const TABS = [
@@ -22,6 +23,7 @@ export default function ContentStudioPage() {
         title="Content Studio"
         subtitle="Generate on-brand copy and images with AI"
         icon={<Sparkles />}
+        actions={tab === "image" ? <DailyLimitPill kind="image" /> : undefined}
       />
 
       <div className="flex items-center gap-1 rounded-lg border border-om-border bg-white/[0.02] p-0.5">

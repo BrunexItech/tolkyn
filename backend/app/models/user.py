@@ -57,6 +57,18 @@ class User(BaseModel):
     allowed_video_models = Column(JSON, default=list, nullable=False)
     video_budget_usd = Column(Float, nullable=True)
 
+    # Per-day generation caps (super admin controlled). NULL = fall back to the
+    # workspace package's limits ({"images_daily", "videos_daily"}); if the
+    # package has none either, generation is unlimited. Counts reset at UTC
+    # midnight. See app.core.limits.
+    daily_image_limit = Column(Integer, nullable=True)
+    daily_video_limit = Column(Integer, nullable=True)
+
+    # Per-module access overrides on top of the package. {"crm": true} force-
+    # grants a module the package doesn't include; {"video": false} removes one
+    # it does. Everything else follows the package. See app.core.actor.
+    module_overrides = Column(JSON, default=dict, nullable=False)
+
     # Persistent brand identity for AI Video — set once, applied automatically
     # to every generation from then on (color hints in the prompt + a
     # corner watermark composited onto the finished clip).

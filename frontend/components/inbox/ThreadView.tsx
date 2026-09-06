@@ -9,6 +9,7 @@ import {
   ExternalLink,
   MessageCircle,
   Heart,
+  Phone,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
@@ -50,6 +51,14 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
 
   const p = findPlatform(t.platform);
 
+  // For phone-based channels (WhatsApp, SMS) the handle is the customer's real
+  // number — surface it so the team can call. Never masked here; the only
+  // place identities are hidden is between community members.
+  const phone =
+    t.author_handle && /^\+?\d[\d\s()-]{6,}$/.test(t.author_handle) && ["whatsapp", "sms"].includes(t.platform)
+      ? t.author_handle.replace(/[\s()-]/g, "")
+      : null;
+
   const send = () => {
     if (!text.trim()) return;
     reply.mutate({ id: t.id, body: text.trim() }, { onSuccess: () => setText("") });
@@ -67,8 +76,24 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
             {t.author_name}
             {p && <p.Icon className="size-3" style={{ color: p.color }} />}
           </div>
-          <div className="truncate text-[10.5px] text-om-muted">{t.context}</div>
+          <div className="truncate text-[10.5px] text-om-muted">
+            {phone ? (
+              <a href={`tel:${phone}`} className="font-mono text-om-blue hover:underline">
+                {t.author_handle}
+              </a>
+            ) : (
+              t.author_handle || t.context
+            )}
+          </div>
         </div>
+        {phone && (
+          <a
+            href={`tel:${phone}`}
+            className="inline-flex h-7 items-center gap-1 rounded-lg border border-om-green/30 bg-om-green/10 px-2.5 text-[11.5px] font-medium text-om-green transition-colors hover:bg-om-green/15"
+          >
+            <Phone className="size-3.5" /> Call
+          </a>
+        )}
         {t.status === "done" ? (
           <OmButton variant="ghost" size="sm" onClick={() => setStatus.mutate({ id: t.id, status: "open" })}>
             <RotateCcw /> Reopen

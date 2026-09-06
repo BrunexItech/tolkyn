@@ -118,6 +118,16 @@ export function useUserUsage(id: string | null) {
   });
 }
 
+/** Fresh single-user detail — carries today's generation counts + effective
+ * limits, which the list response doesn't compute. */
+export function useAdminUser(id: string | null) {
+  return useQuery({
+    queryKey: [...KEY, "user", id],
+    queryFn: () => adminApi.getUser(id as string),
+    enabled: !!id,
+  });
+}
+
 export function useVideoModelCatalog() {
   return useQuery({ queryKey: [...KEY, "video-models"], queryFn: adminApi.videoModels, staleTime: 5 * 60_000 });
 }
@@ -137,12 +147,16 @@ export function useUpdateUser() {
         is_approved?: boolean;
         allowed_video_models?: string[];
         video_budget_usd?: number | null;
+        daily_image_limit?: number | null;
+        daily_video_limit?: number | null;
+        module_overrides?: Record<string, boolean>;
         package_id?: string | null;
       },
     ) => adminApi.updateUser(id, body),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       invalidate(qc, "users");
       invalidate(qc, "video-usage");
+      qc.invalidateQueries({ queryKey: ["admin", "user", vars.id] });
       toast.ok("Updated");
     },
     onError: (e: Error) => toast.err(e.message),

@@ -98,8 +98,16 @@ class PlatformUserResponse(BaseModel):
     is_approved: bool
     allowed_video_models: List[str] = []
     video_budget_usd: Optional[float] = None
+    daily_image_limit: Optional[int] = None
+    daily_video_limit: Optional[int] = None
+    module_overrides: Dict[str, bool] = {}
     package_id: Optional[str] = None
     package_name: Optional[str] = None
+    # effective daily caps after package + override merge (None = unlimited)
+    effective_image_limit: Optional[int] = None
+    effective_video_limit: Optional[int] = None
+    images_today: int = 0
+    videos_today: int = 0
     last_login_at: Optional[datetime] = None
     created_at: datetime
 
@@ -119,6 +127,9 @@ class PlatformUserUpdate(BaseModel):
     is_approved: Optional[bool] = None
     allowed_video_models: Optional[List[str]] = None
     video_budget_usd: Optional[float] = None
+    daily_image_limit: Optional[int] = None  # null = inherit package; 0 = blocked
+    daily_video_limit: Optional[int] = None
+    module_overrides: Optional[Dict[str, bool]] = None  # {module: grant?}
     package_id: Optional[str] = None  # "" or null to clear (grandfathered to full access)
 
 

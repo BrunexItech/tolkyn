@@ -118,6 +118,13 @@ export interface PlatformUser {
   is_approved: boolean;
   allowed_video_models: string[];
   video_budget_usd: number | null;
+  daily_image_limit: number | null;
+  daily_video_limit: number | null;
+  module_overrides: Record<string, boolean>;
+  effective_image_limit: number | null;
+  effective_video_limit: number | null;
+  images_today: number;
+  videos_today: number;
   package_id: string | null;
   package_name: string | null;
   last_login_at: string | null;
@@ -329,6 +336,9 @@ export const adminApi = {
       is_approved: boolean;
       allowed_video_models: string[];
       video_budget_usd: number | null;
+      daily_image_limit: number | null;
+      daily_video_limit: number | null;
+      module_overrides: Record<string, boolean>;
       package_id: string | null;
     }>,
   ) => request<PlatformUser>("PATCH", `/admin/users/${id}`, body),

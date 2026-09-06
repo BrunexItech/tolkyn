@@ -1,11 +1,14 @@
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
+from app.core.limits import enforce_daily_limit
 from app.db import get_db
 from app.models.generated_asset import AssetKind
+from app.models.user import User
 from app.schemas.studio import (
     AssetList,
     AssetResponse,
@@ -35,6 +38,14 @@ def _resolve_media(url: str | None) -> str | None:
     if _MEDIA_ROOT.resolve() in p.parents and p.is_file():
         return str(p)
     return None
+
+
+async def _owner(db: AsyncSession, workspace_id: str) -> User:
+    """The workspace owner's User row — carries the daily-limit fields + package."""
+    u = (await db.execute(select(User).where(User.id == workspace_id))).scalar_one_or_none()
+    if not u:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace not found")
+    return u
 
 
 @router.post("/prompt", response_model=PromptResponse)
@@ -87,6 +98,7 @@ async def studio_image(
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_daily_limit(db, await _owner(db, user_id), "image")
     try:
         result = await generate_image(
             body.prompt,
@@ -115,6 +127,7 @@ async def studio_image_chat(
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
+    await enforce_daily_limit(db, await _owner(db, user_id), "image")
     attachment = _resolve_media(body.attachment_url)
     previous = _resolve_media(body.previous_image_url)
     try:
