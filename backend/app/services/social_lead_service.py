@@ -300,8 +300,17 @@ class SocialLeadService:
             .where(SocialLead.workspace_id == self.workspace_id)
         )
 
+        _HANDLED = [SocialLeadStatus.CONVERTED, SocialLeadStatus.DISMISSED]
+
         def apply(q):
-            if status_filter:
+            # "open" / "handled" are virtual views, not real statuses: a lead
+            # you've already added to the CRM or dismissed drops off the active
+            # worklist but stays one filter away.
+            if status_filter == "open":
+                q = q.where(SocialLead.status.notin_(_HANDLED))
+            elif status_filter == "handled":
+                q = q.where(SocialLead.status.in_(_HANDLED))
+            elif status_filter:
                 q = q.where(SocialLead.status == status_filter)
             if intent:
                 q = q.where(SocialLead.intent == intent)
@@ -382,6 +391,11 @@ class SocialLeadService:
             "cold": sum(1 for r in rows if r.is_lead and r.intent == SocialLeadIntent.COLD),
             "converted": sum(1 for r in rows if r.status == SocialLeadStatus.CONVERTED),
             "dismissed": sum(1 for r in rows if r.status == SocialLeadStatus.DISMISSED),
+            "open": sum(
+                1
+                for r in rows
+                if r.status not in (SocialLeadStatus.CONVERTED, SocialLeadStatus.DISMISSED)
+            ),
             "by_platform": by_platform,
             "by_product": by_product,
             "live": upload_post.enabled,

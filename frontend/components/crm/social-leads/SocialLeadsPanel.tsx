@@ -36,16 +36,22 @@ const INTENTS = [
   { id: "cold", label: "Cold" },
 ] as const;
 
-const STATUSES = [
-  { id: "new", label: "New" },
-  { id: "contacted", label: "Contacted" },
-  { id: "qualified", label: "Qualified" },
-  { id: "converted", label: "Converted" },
-  { id: "dismissed", label: "Dismissed" },
+// "open" is the default working view — a lead that's been added to the CRM or
+// dismissed has done its job here and drops off, but stays one pick away.
+const STATUS_OPTIONS = [
+  { id: "open", label: "Open — needs action" },
+  { id: "handled", label: "Handled (converted / dismissed)" },
+  { id: "", label: "All statuses" },
+  { id: "new", label: "· New" },
+  { id: "contacted", label: "· Contacted" },
+  { id: "qualified", label: "· Qualified" },
+  { id: "converted", label: "· Converted" },
+  { id: "dismissed", label: "· Dismissed" },
 ] as const;
 
 export function SocialLeadsPanel() {
   const [filters, setFilters] = useState<SocialLeadFilters>({
+    status: "open",
     leads_only: true,
     limit: 20,
     offset: 0,
@@ -232,8 +238,7 @@ export function SocialLeadsPanel() {
           }
           className="rounded-lg border border-om-border bg-white/[0.03] px-2 py-1.5 text-[11.5px] text-om-dim outline-none focus:border-om-blue/60"
         >
-          <option value="">All statuses</option>
-          {STATUSES.map((s) => (
+          {STATUS_OPTIONS.map((s) => (
             <option key={s.id} value={s.id}>
               {s.label}
             </option>
@@ -269,6 +274,33 @@ export function SocialLeadsPanel() {
           Leads only
         </label>
       </div>
+
+      {summary && (
+        <div className="flex items-center gap-2 px-1 text-[11px] text-om-muted">
+          <span className="font-semibold text-om-dim">{summary.open}</span> open
+          <span className="text-om-faint">·</span>
+          <span className="font-semibold text-om-dim">
+            {summary.converted + summary.dismissed}
+          </span>{" "}
+          handled
+          {filters.status === "open" && (summary.converted + summary.dismissed > 0) && (
+            <button
+              onClick={() => patch({ status: "handled", offset: 0 })}
+              className="text-om-blue hover:underline"
+            >
+              show handled
+            </button>
+          )}
+          {filters.status && filters.status !== "open" && (
+            <button
+              onClick={() => patch({ status: "open", offset: 0 })}
+              className="text-om-blue hover:underline"
+            >
+              back to open
+            </button>
+          )}
+        </div>
+      )}
 
       {/* list */}
       {isLoading ? (

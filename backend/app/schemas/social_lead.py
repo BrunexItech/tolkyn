@@ -71,6 +71,7 @@ class SocialLeadSummary(BaseModel):
     cold: int
     converted: int
     dismissed: int
+    open: int = 0
     by_platform: Dict[str, int]
     by_product: List[Dict[str, object]]  # [{name, count}]
     live: bool = False

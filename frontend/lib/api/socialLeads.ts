@@ -8,6 +8,11 @@ export type SocialLeadStatus =
   | "converted"
   | "dismissed";
 
+/** Real statuses plus the two virtual worklist views the list endpoint
+ * understands: "open" = everything not yet converted or dismissed,
+ * "handled" = the opposite. */
+export type SocialLeadStatusFilter = SocialLeadStatus | "open" | "handled";
+
 export interface SocialLead {
   id: string;
   platform: string;
@@ -57,6 +62,7 @@ export interface SocialLeadSummary {
   cold: number;
   converted: number;
   dismissed: number;
+  open: number;
   by_platform: Record<string, number>;
   by_product: { name: string; count: number }[];
   live: boolean;
@@ -75,7 +81,7 @@ export interface ScanResult {
 }
 
 export interface SocialLeadFilters {
-  status?: SocialLeadStatus;
+  status?: SocialLeadStatusFilter;
   intent?: SocialLeadIntent;
   platform?: string;
   leads_only?: boolean;
