@@ -78,8 +78,6 @@ export interface BroadcastInput {
   scheduled_at?: string | null;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-
 export const messagingApi = {
   summary: () => http.get<MessagingSummary>("/messaging/summary"),
   contacts: (f: ContactFilters = {}) => {
@@ -89,19 +87,10 @@ export const messagingApi = {
     const query = [base.slice(1), ...areaParams].filter(Boolean).join("&");
     return http.get<{ items: MessagingContact[] }>(`/messaging/contacts${query ? `?${query}` : ""}`);
   },
-  importCsv: async (file: File): Promise<CsvImportResult> => {
+  importCsv: (file: File): Promise<CsvImportResult> => {
     const fd = new FormData();
     fd.append("file", file);
-    const tok =
-      typeof window === "undefined" ? null : localStorage.getItem("access_token");
-    const res = await fetch(`${API_URL}/messaging/contacts/import`, {
-      method: "POST",
-      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
-      body: fd,
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(data?.detail || `Import failed (${res.status})`);
-    return data as CsvImportResult;
+    return http.upload<CsvImportResult>("/messaging/contacts/import", fd);
   },
   list: (channel?: BroadcastChannel) =>
     http.get<{ items: Broadcast[] }>(`/messaging/broadcasts${qs({ channel })}`),

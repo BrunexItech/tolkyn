@@ -22,11 +22,34 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   const t = adminToken();
   if (t) headers["Authorization"] = `Bearer ${t}`;
 
-  const res = await fetch(`${API_URL}${path}`, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+  } catch {
+    throw new AdminApiError(
+      "Can't reach the server. Check your connection and try again.",
+      0,
+    );
+  }
+
+  // Expired / invalid admin session — end it cleanly instead of letting every
+  // panel fail with a raw error. The admin login has no refresh token.
+  if (res.status === 401 && typeof window !== "undefined") {
+    try {
+      localStorage.removeItem("admin_access_token");
+    } catch {
+      /* ignore */
+    }
+    document.cookie = "admin_access_token=; path=/; max-age=0";
+    if (!window.location.pathname.startsWith("/admin/login")) {
+      window.location.assign("/admin/login?expired=1");
+    }
+    throw new AdminApiError("Your session has expired. Please sign in again.", 401);
+  }
 
   if (res.status === 204) return undefined as T;
 

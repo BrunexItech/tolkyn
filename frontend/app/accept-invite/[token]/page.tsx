@@ -7,6 +7,7 @@ import { Eye, EyeOff, ArrowRight, Loader2, CircleAlert } from "lucide-react";
 import toast from "react-hot-toast";
 import { teamApi, type InvitePreview } from "@/lib/api/team";
 import { ApiError } from "@/lib/api/http";
+import { setSession } from "@/lib/session";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 
@@ -49,11 +50,7 @@ export default function AcceptInvitePage({ params }: { params: Promise<{ token: 
         password,
         password_confirm: passwordConfirm,
       });
-      localStorage.setItem("access_token", res.token.access_token);
-      localStorage.setItem("refresh_token", res.token.refresh_token);
-      localStorage.setItem("user", JSON.stringify(res.user));
-      document.cookie = `access_token=${res.token.access_token}; path=/; max-age=604800`;
-      document.cookie = `refresh_token=${res.token.refresh_token}; path=/; max-age=2592000`;
+      setSession(res.token.access_token, res.token.refresh_token, res.user);
       toast.success(`Welcome to ${preview?.workspace_name ?? "the workspace"}`);
       router.push("/dashboard");
     } catch (err) {

@@ -1,6 +1,5 @@
+import { http } from "./http";
 import { mediaUrl } from "./studio";
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export interface Upload {
   id: string;
@@ -13,21 +12,10 @@ export interface Upload {
   created_at: string;
 }
 
-function token(): string | null {
-  return typeof window === "undefined" ? null : localStorage.getItem("access_token");
-}
-
 export async function uploadFile(file: File): Promise<Upload> {
   const fd = new FormData();
   fd.append("file", file);
-  const res = await fetch(`${API_URL}/uploads`, {
-    method: "POST",
-    headers: token() ? { Authorization: `Bearer ${token()}` } : {},
-    body: fd,
-  });
-  const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(data?.detail || `Upload failed (${res.status})`);
-  return data as Upload;
+  return http.upload<Upload>("/uploads", fd);
 }
 
 export { mediaUrl };

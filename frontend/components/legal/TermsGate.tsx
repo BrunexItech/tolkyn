@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, ScrollText, ExternalLink } from "lucide-react";
 import { accountApi, type Me } from "@/lib/api/account";
+import { auth } from "@/lib/api/auth";
+import { clearSession } from "@/lib/session";
 import { BrandLoader } from "@/components/om/shell/BrandLoader";
 import { LEGAL_EFFECTIVE } from "./version";
 import { toast } from "@/lib/om/toast";
@@ -40,9 +42,8 @@ export function TermsGate({ children }: { children: ReactNode }) {
   if (data?.terms_accepted) return <>{children}</>;
 
   const logout = () => {
-    ["access_token", "refresh_token", "user"].forEach((k) => localStorage.removeItem(k));
-    document.cookie = "access_token=; path=/; max-age=0";
-    document.cookie = "refresh_token=; path=/; max-age=0";
+    auth.logout().catch(() => {});
+    clearSession();
     router.push("/");
   };
 

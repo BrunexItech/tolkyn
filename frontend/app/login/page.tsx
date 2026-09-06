@@ -6,22 +6,27 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Eye, EyeOff, ArrowRight, Loader2, CircleAlert, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 import { auth } from "@/lib/api/auth";
+import { setSession } from "@/lib/session";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 
 const PENDING_MSG =
   "Your account is awaiting approval from the platform administrator.";
+const EXPIRED_MSG = "Your session expired. Please sign in again to continue.";
 
 function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const justSignedUp = params.get("pending") === "1";
+  const sessionExpired = params.get("expired") === "1";
   // Only honour same-app destinations — never an open redirect.
   const nextRaw = params.get("next") ?? "";
   const next = nextRaw.startsWith("/dashboard") ? nextRaw : "/dashboard";
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState(justSignedUp ? PENDING_MSG : "");
+  const [error, setError] = useState(
+    justSignedUp ? PENDING_MSG : sessionExpired ? EXPIRED_MSG : "",
+  );
   const [form, setForm] = useState({ email: "", password: "", remember_me: false });
 
   const submit = async (e: React.FormEvent) => {
@@ -30,11 +35,7 @@ function LoginInner() {
     setLoading(true);
     try {
       const res = await auth.login(form);
-      localStorage.setItem("access_token", res.token.access_token);
-      localStorage.setItem("refresh_token", res.token.refresh_token);
-      localStorage.setItem("user", JSON.stringify(res.user));
-      document.cookie = `access_token=${res.token.access_token}; path=/; max-age=604800`;
-      document.cookie = `refresh_token=${res.token.refresh_token}; path=/; max-age=2592000`;
+      setSession(res.token.access_token, res.token.refresh_token, res.user);
       toast.success("Welcome back");
       router.push(next);
     } catch (err) {
@@ -46,6 +47,8 @@ function LoginInner() {
   // A correct password on an unapproved / suspended account isn't a login
   // failure — show it as a calm status message, not a red error.
   const isPending = /awaiting approval|suspended/i.test(error);
+  // An expired session is informational, not an error the user caused.
+  const isInfo = error === EXPIRED_MSG;
 
   return (
     <AuthLayout
@@ -80,6 +83,11 @@ function LoginInner() {
                 <p className="font-semibold">Almost there</p>
                 <p className="mt-0.5 text-om-amber/90">{error} We&apos;ll email you as soon as it&apos;s active.</p>
               </div>
+            </div>
+          ) : isInfo ? (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-om-blue/25 bg-om-blue/10 px-3 py-2 text-[12px] text-om-blue">
+              <Clock className="size-4 shrink-0" />
+              {error}
             </div>
           ) : (
             <div className="mb-3 flex items-center gap-2 rounded-lg border border-om-red/25 bg-om-red/10 px-3 py-2 text-[12px] text-om-red">

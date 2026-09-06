@@ -38,8 +38,6 @@ export interface DuplicateAcrossBooks {
   books: string[];
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
-
 export const phoneBookApi = {
   list: () => http.get<{ items: PhoneBook[] }>("/phone-books"),
   get: (id: string) => http.get<PhoneBookDetail>(`/phone-books/${id}`),
@@ -53,17 +51,9 @@ export const phoneBookApi = {
   removeContact: (id: string, contactId: string) =>
     http.del<void>(`/phone-books/${id}/contacts/${contactId}`),
   duplicates: () => http.get<{ items: DuplicateAcrossBooks[] }>("/phone-books/duplicates"),
-  parseCsv: async (file: File): Promise<CsvImportResult> => {
+  parseCsv: (file: File): Promise<CsvImportResult> => {
     const fd = new FormData();
     fd.append("file", file);
-    const tok = typeof window === "undefined" ? null : localStorage.getItem("access_token");
-    const res = await fetch(`${API_URL}/phone-books/parse-csv`, {
-      method: "POST",
-      headers: tok ? { Authorization: `Bearer ${tok}` } : {},
-      body: fd,
-    });
-    const data = await res.json().catch(() => null);
-    if (!res.ok) throw new Error(data?.detail || `Import failed (${res.status})`);
-    return data as CsvImportResult;
+    return http.upload<CsvImportResult>("/phone-books/parse-csv", fd);
   },
 };

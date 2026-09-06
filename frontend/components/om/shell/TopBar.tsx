@@ -17,6 +17,8 @@ import { OmButton } from "@/components/om/primitives/OmButton";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
 import { relativeTime, truncate } from "@/lib/om/format";
 import { toast } from "@/lib/om/toast";
+import { auth } from "@/lib/api/auth";
+import { clearSession } from "@/lib/session";
 import { cn } from "@/lib/utils";
 
 const MAX_NOTIFICATIONS = 8;
@@ -101,9 +103,9 @@ export function TopBar() {
   };
 
   const logout = () => {
-    ["access_token", "refresh_token", "user"].forEach((k) => localStorage.removeItem(k));
-    document.cookie = "access_token=; path=/; max-age=0";
-    document.cookie = "refresh_token=; path=/; max-age=0";
+    // best-effort server-side logout; the session is cleared locally either way
+    auth.logout().catch(() => {});
+    clearSession();
     toast.ok("Signed out");
     router.push("/");
     router.refresh();

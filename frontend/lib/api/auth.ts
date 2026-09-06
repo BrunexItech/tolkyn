@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { http, resetSessionGuards } from "./http";
 
 export interface RegisterData {
   name: string;
@@ -30,69 +30,40 @@ export interface AuthResponse {
   };
 }
 
+/** Auth calls go through the shared `http` client, so a failed request always
+ * throws `ApiError` with the server's `detail` — no response is ever read as
+ * if it had succeeded. */
 export const auth = {
   register: async (data: RegisterData): Promise<AuthResponse> => {
-    const response = await apiClient.post("/auth/register", data);
-    if (response?.detail) throw new Error(pickDetail(response.detail));
-    if (response?.error) throw new Error(response.error);
-    return response;
+    const res = await http.post<AuthResponse>("/auth/register", data);
+    resetSessionGuards();
+    return res;
   },
 
   login: async (data: LoginData): Promise<AuthResponse> => {
-    const response = await apiClient.post("/auth/login", data);
-    if (response?.detail) throw new Error(pickDetail(response.detail));
-    if (response?.error) throw new Error(response.error);
-    return response;
-  },
-
-  getMe: async (token: string): Promise<any> => {
-    const response = await apiClient.get("/auth/me", token);
-    if (response?.detail) throw new Error(pickDetail(response.detail));
-    if (response?.error) throw new Error(response.error);
-    return response;
-  },
-
-  logout: async (token: string): Promise<void> => {
-    await apiClient.post("/auth/logout", {}, token);
-  },
-
-  forgotPassword: async (email: string): Promise<{ message: string }> => {
-    const res = await apiClient.post("/auth/forgot-password", { email });
-    if (res.detail) throw new Error(pickDetail(res.detail));
+    const res = await http.post<AuthResponse>("/auth/login", data);
+    resetSessionGuards();
     return res;
   },
 
-  resetPassword: async (
+  logout: (): Promise<void> => http.post<void>("/auth/logout", {}),
+
+  forgotPassword: (email: string): Promise<{ message: string }> =>
+    http.post("/auth/forgot-password", { email }),
+
+  resetPassword: (
     token: string,
     new_password: string,
-  ): Promise<{ message: string }> => {
-    const res = await apiClient.post("/auth/reset-password", {
+  ): Promise<{ message: string }> =>
+    http.post("/auth/reset-password", {
       token,
       new_password,
       new_password_confirm: new_password,
-    });
-    if (res.detail) throw new Error(pickDetail(res.detail));
-    return res;
-  },
+    }),
 
-  verifyEmail: async (token: string): Promise<{ message: string }> => {
-    const res = await apiClient.post("/auth/verify-email", { token });
-    if (res.detail) throw new Error(pickDetail(res.detail));
-    return res;
-  },
+  verifyEmail: (token: string): Promise<{ message: string }> =>
+    http.post("/auth/verify-email", { token }),
 
-  resendVerification: async (token: string): Promise<{ message: string }> => {
-    const res = await apiClient.post("/auth/resend-verification", {}, token);
-    if (res.detail) throw new Error(pickDetail(res.detail));
-    return res;
-  },
+  resendVerification: (): Promise<{ message: string }> =>
+    http.post("/auth/resend-verification", {}),
 };
-
-function pickDetail(detail: unknown): string {
-  if (typeof detail === "string") return detail;
-  if (Array.isArray(detail)) {
-    const first = detail[0] as { msg?: string } | undefined;
-    return first?.msg || "Request failed";
-  }
-  return "Request failed";
-}

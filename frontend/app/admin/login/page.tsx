@@ -1,18 +1,21 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ShieldAlert, Loader2, ArrowRight } from "lucide-react";
 import { adminApi, AdminApiError } from "@/lib/api/admin";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 
-export default function AdminLoginPage() {
+function AdminLoginInner() {
   const router = useRouter();
+  const expired = useSearchParams().get("expired") === "1";
+  const EXPIRED_MSG = "Your session expired. Please sign in again.";
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState("");
+  const [error, setError] = useState(expired ? EXPIRED_MSG : "");
   const [busy, setBusy] = useState(false);
+  const isInfo = error === EXPIRED_MSG;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +73,13 @@ export default function AdminLoginPage() {
         </div>
 
         {error && (
-          <p className="mt-3 rounded-lg border border-om-red/25 bg-om-red/10 px-3 py-2 text-[11.5px] text-om-red">
+          <p
+            className={
+              isInfo
+                ? "mt-3 rounded-lg border border-om-blue/25 bg-om-blue/10 px-3 py-2 text-[11.5px] text-om-blue"
+                : "mt-3 rounded-lg border border-om-red/25 bg-om-red/10 px-3 py-2 text-[11.5px] text-om-red"
+            }
+          >
             {error}
           </p>
         )}
@@ -87,5 +96,13 @@ export default function AdminLoginPage() {
         </OmButton>
       </form>
     </div>
+  );
+}
+
+export default function AdminLoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <AdminLoginInner />
+    </Suspense>
   );
 }
