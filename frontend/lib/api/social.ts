@@ -2,7 +2,7 @@ import { http } from "./http";
 
 export type ConnectionStatus = "connected" | "disconnected" | "error";
 
-/** Platforms Tolkyn can connect + publish to via Upload-Post. */
+/** Platforms Tolkyn can connect + publish to. */
 export const SUPPORTED_PLATFORMS = [
   "facebook",
   "instagram",

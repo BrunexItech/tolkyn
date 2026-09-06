@@ -18,6 +18,10 @@ export function useConnect() {
       const { authorize_url } = await socialApi.connect(platform);
       if (!authorize_url) throw new Error("Could not start the connection");
       window.location.assign(authorize_url);
+      // Stay "pending" until the browser actually leaves the page — otherwise
+      // the button flips back from its spinner for a beat before navigation,
+      // which reads as a hang. This promise never resolves; the page unloads.
+      await new Promise(() => {});
       return authorize_url;
     },
     onError: (e: Error) => toast.err(e.message),
@@ -43,9 +47,13 @@ export function useDisconnect() {
 /** Opens the branded hosted page to connect / manage every channel at once. */
 export function useConnectPage() {
   return useMutation({
-    mutationFn: () => socialApi.connectPage(),
-    onSuccess: ({ url }) => {
-      if (url) window.location.assign(url);
+    mutationFn: async () => {
+      const { url } = await socialApi.connectPage();
+      if (!url) throw new Error("Could not open the connect page");
+      window.location.assign(url);
+      // Hold the pending state through navigation (see useConnect).
+      await new Promise(() => {});
+      return url;
     },
     onError: (e: Error) => toast.err(e.message),
   });

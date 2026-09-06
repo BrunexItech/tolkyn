@@ -36,22 +36,25 @@ export function ConnectDialog({
             disabled={connect.isPending}
           >
             {connect.isPending ? <Loader2 className="animate-spin" /> : <ExternalLink />}
-            Continue
+            {connect.isPending ? "Opening…" : "Continue"}
           </OmButton>
         </>
       }
     >
       <div className="flex flex-col items-center py-1">
         {p && <PlatformGlyph platform={p} size={44} />}
-        <div className="mt-2 text-[13px] font-semibold">{p?.name}</div>
-        <div className="text-[11px] text-om-muted">Publish, listen and report</div>
+        <div className="mt-2 text-[13px] font-semibold">
+          {connect.isPending ? `Taking you to ${p?.name}…` : p?.name}
+        </div>
+        <div className="text-[11px] text-om-muted">
+          {connect.isPending ? "Hold on a moment" : "Publish, listen and report"}
+        </div>
       </div>
 
       <div className="mt-3 flex items-start gap-1.5 rounded-md border border-om-border bg-white/[0.02] px-2.5 py-2 text-[10.5px] text-om-muted">
         <ShieldCheck className="mt-px size-3.5 shrink-0 text-om-green" />
-        On {p?.name}&apos;s screen you&apos;ll see our publishing partner (Upload-Post) named as the
-        app — that&apos;s what lets you connect instantly without a developer review. Your password
-        is never seen and access can be revoked any time.
+        You&apos;ll sign in on {p?.name}&apos;s own page. Tolkyn never sees your password, and you
+        can revoke access any time from {p?.name}&apos;s settings.
       </div>
     </Modal>
   );

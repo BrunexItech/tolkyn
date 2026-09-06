@@ -41,8 +41,8 @@ export default function AccountsPage() {
   const sync = useSyncConnections();
   const [connecting, setConnecting] = useState<string | null>(null);
 
-  // Always pull fresh state from Upload-Post when landing here (covers returning
-  // from a connect flow, where the passive list may be within its sync throttle).
+  // Always pull fresh connection state when landing here (covers returning from
+  // a connect flow, where the passive list may be within its sync throttle).
   useEffect(() => {
     const returned = new URLSearchParams(window.location.search).has("connected");
     sync.mutate(undefined, {
@@ -105,9 +105,9 @@ export default function AccountsPage() {
         <Card accent="amber" className="flex items-start gap-2.5">
           <TriangleAlert className="mt-0.5 size-4 shrink-0 text-om-amber" />
           <div className="text-[11.5px] text-om-dim">
-            <div className="font-semibold text-om-text">Social publishing isn&apos;t configured</div>
-            Add <code className="rounded bg-white/[0.06] px-1">UPLOAD_POST_API_KEY</code> to{" "}
-            <code className="rounded bg-white/[0.06] px-1">backend/.env</code> and restart the API.
+            <div className="font-semibold text-om-text">Social publishing isn&apos;t set up yet</div>
+            Your platform administrator needs to finish configuring social publishing before you can
+            connect channels.
           </div>
         </Card>
       )}
