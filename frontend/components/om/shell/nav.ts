@@ -100,6 +100,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> =
   "/dashboard": { title: "Dashboard", subtitle: "Workspace overview" },
   "/dashboard/inbox": { title: "Social Media Inbox", subtitle: "Comments, mentions and DMs in one queue" },
   "/dashboard/calls": { title: "Call Center", subtitle: "Inbound & outbound voice" },
+  "/dashboard/calls/flow": { title: "Call flow / IVR", subtitle: "What callers hear and where each key sends them" },
   "/dashboard/whatsapp": { title: "WhatsApp", subtitle: "Automated number, conversations & communities" },
   "/dashboard/sms": { title: "Bulk SMS", subtitle: "Send SMS campaigns to your phone books and contacts" },
   "/dashboard/email": { title: "Bulk Email", subtitle: "Email your leads and customers from your own address" },
