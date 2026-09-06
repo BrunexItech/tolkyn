@@ -174,11 +174,13 @@ class SocialService:
     # ---- connect / disconnect -----------------------------------
     async def _connect_page(self, platforms: List[str]) -> str:
         username = await self.ensure_profile()
-        redirect = f"{settings.FRONTEND_URL.rstrip('/')}/dashboard/accounts?connected=1"
+        base = settings.FRONTEND_URL.rstrip("/")
+        redirect = f"{base}/dashboard/accounts?connected=1"
         try:
             return await upload_post.generate_connect_url(
                 username,
                 redirect_url=redirect,
+                logo_image=f"{base}/tolkyn_logo.png",
                 connect_title="Tolkyn",
                 connect_description="Link an account so Tolkyn can publish, listen and report on it.",
                 platforms=platforms,
