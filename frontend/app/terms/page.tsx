@@ -14,7 +14,7 @@ export default function TermsPage() {
       intro={
         <>
           These Terms of Service (&ldquo;Terms&rdquo;) are a binding agreement between you (and the
-          organisation you represent, together &ldquo;you&rdquo;) and <strong>[LEGAL ENTITY NAME]</strong>,
+          organisation you represent, together &ldquo;you&rdquo;) and <strong>Tolkyn</strong>,
           operator of the Tolkyn platform (&ldquo;Tolkyn&rdquo;, &ldquo;we&rdquo;, &ldquo;us&rdquo;). By creating an account,
           ticking the acceptance box, or using the platform, you agree to these Terms and to our{" "}
           <Link href="/privacy">Privacy Policy</Link>. If you do not agree, do not use the platform.
@@ -164,7 +164,7 @@ export default function TermsPage() {
 
       <LegalSection n={12} title="Indemnity">
         <p>
-          You will indemnify and hold harmless [LEGAL ENTITY NAME] and its personnel from any claim,
+          You will indemnify and hold harmless Tolkyn and its personnel from any claim,
           loss or expense (including reasonable legal fees) arising from your content or messages,
           your use of the platform, or your breach of these Terms or of any law or third-party right.
         </p>
@@ -198,7 +198,7 @@ export default function TermsPage() {
 
       <LegalSection n={16} title="Contact">
         <p>
-          Questions about these Terms: <strong>[CONTACT EMAIL]</strong>, [LEGAL ENTITY NAME],
+          Questions about these Terms: <strong>[CONTACT EMAIL]</strong>, Tolkyn,
           [REGISTERED ADDRESS].
         </p>
       </LegalSection>

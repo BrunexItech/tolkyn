@@ -13,7 +13,7 @@ export default function PrivacyPage() {
       title="Privacy Policy"
       intro={
         <>
-          This Privacy Policy explains how <strong>[LEGAL ENTITY NAME]</strong> (&ldquo;Tolkyn&rdquo;,
+          This Privacy Policy explains how <strong>Tolkyn</strong> (&ldquo;Tolkyn&rdquo;,
           &ldquo;we&rdquo;, &ldquo;us&rdquo;) collects, uses, shares and protects personal data when you use the
           Tolkyn platform. It should be read together with our <Link href="/terms">Terms of Service</Link>.
         </>
@@ -167,7 +167,7 @@ export default function PrivacyPage() {
 
       <LegalSection n={12} title="Contact">
         <p>
-          Privacy questions or requests: <strong>[CONTACT EMAIL]</strong>, [LEGAL ENTITY NAME],
+          Privacy questions or requests: <strong>[CONTACT EMAIL]</strong>, Tolkyn,
           [REGISTERED ADDRESS].
         </p>
       </LegalSection>
