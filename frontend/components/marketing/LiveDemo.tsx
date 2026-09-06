@@ -322,9 +322,6 @@ function PublishView({ reduced }: { reduced: boolean }) {
       <Field label="Caption">
         <div className="min-h-[54px] rounded-lg border border-mkt-line bg-white/[0.02] p-2 text-[11px] leading-relaxed text-mkt-ink-soft">
           {typed}
-          {stage === "compose" && !reduced && (
-            <span className="ml-0.5 inline-block h-3 w-px animate-pulse bg-mkt-blue align-middle" />
-          )}
         </div>
       </Field>
 

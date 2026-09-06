@@ -240,14 +240,22 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
         </p>
         <Field label="Webhook URL">
           <div className="flex gap-2">
-            <OmInput readOnly value={data.webhook_url ?? ""} className="font-mono text-[11px]" />
+            <OmInput
+              readOnly
+              value={data.webhook_url ?? ""}
+              className="cursor-default select-all font-mono text-[11px] caret-transparent"
+            />
             <OmButton variant="ghost" size="sm" onClick={copyWebhook}>
               {copied ? <Check /> : <Copy />}
             </OmButton>
           </div>
         </Field>
         <Field label="Webhook secret">
-          <OmInput readOnly value={data.webhook_secret ?? "—"} className="font-mono text-[11px]" />
+          <OmInput
+            readOnly
+            value={data.webhook_secret ?? "—"}
+            className="cursor-default select-all font-mono text-[11px] caret-transparent"
+          />
         </Field>
       </Card>
 
