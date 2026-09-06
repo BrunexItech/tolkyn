@@ -6,13 +6,13 @@ import { usePathname, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Search, Bell, ChevronDown, LogOut, User, Settings as SettingsIcon, PlugZap, Inbox as InboxIcon, Menu } from "lucide-react";
 import { PAGE_TITLES } from "./nav";
+import { SearchPalette } from "./SearchPalette";
 import { useMobileNav } from "./AppShell";
 import { useSession } from "@/components/om/session";
 import { socialApi, SUPPORTED_PLATFORMS } from "@/lib/api/social";
 import { inboxApi, type ThreadSummary } from "@/lib/api/inbox";
 import { platform as findPlatform } from "@/lib/om/platforms";
 import { PlatformGlyph } from "@/components/om/primitives/PlatformChip";
-import { Pill } from "@/components/om/primitives/Pill";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
 import { relativeTime, truncate } from "@/lib/om/format";
@@ -27,6 +27,7 @@ export function TopBar() {
   const { user, connectedPlatforms } = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -63,6 +64,27 @@ export function TopBar() {
     if (menuOpen || notifOpen) document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
   }, [menuOpen, notifOpen]);
+
+  // ⌘K / Ctrl+K anywhere, or "/" when not typing in a field, opens search.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const k = e.key.toLowerCase();
+      const typing =
+        e.target instanceof HTMLElement &&
+        (e.target.tagName === "INPUT" ||
+          e.target.tagName === "TEXTAREA" ||
+          e.target.isContentEditable);
+      if ((e.metaKey || e.ctrlKey) && k === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      } else if (k === "/" && !typing && !searchOpen) {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [searchOpen]);
 
   const openThread = (id: string) => {
     setNotifOpen(false);
@@ -104,23 +126,31 @@ export function TopBar() {
         )}
       </div>
 
-      <div className="relative ml-auto hidden md:block">
-        <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-om-muted" />
-        <input
-          placeholder="Search"
-          className="w-52 rounded-lg border border-om-border bg-white/[0.03] py-1.5 pl-8 pr-3 text-[12px] text-om-text outline-none transition-colors placeholder:text-om-muted focus:border-om-blue/60 focus:ring-2 focus:ring-om-blue/15"
-        />
-      </div>
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="ml-auto grid size-8 place-items-center rounded-lg text-om-muted transition-colors hover:bg-white/[0.05] hover:text-om-text md:hidden"
+        aria-label="Search"
+      >
+        <Search className="size-4" />
+      </button>
+
+      <button
+        onClick={() => setSearchOpen(true)}
+        className="group hidden items-center gap-2 rounded-lg border border-om-border bg-white/[0.03] py-1.5 pl-2.5 pr-2 text-[12px] text-om-muted transition-colors hover:border-om-blue/50 hover:text-om-dim md:ml-auto md:flex"
+        aria-label="Search"
+      >
+        <Search className="size-3.5" />
+        <span className="w-32 text-left">Search…</span>
+        <kbd className="rounded border border-om-border px-1.5 py-px text-[10px] text-om-faint">
+          ⌘K
+        </kbd>
+      </button>
 
       {!allConnected && (
         <OmButton variant="subtle" size="sm" onClick={connectAll} className="hidden sm:inline-flex">
           <PlugZap /> Connect accounts
         </OmButton>
       )}
-
-      <Pill tone="green" dot className="hidden lg:inline-flex">
-        Live
-      </Pill>
 
       <div className="relative" ref={notifRef}>
         <button
@@ -222,6 +252,8 @@ export function TopBar() {
           </div>
         )}
       </div>
+
+      <SearchPalette open={searchOpen} onClose={() => setSearchOpen(false)} />
     </header>
   );
 }

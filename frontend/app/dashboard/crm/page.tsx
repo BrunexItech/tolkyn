@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Contact, Users, Radar } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { CrmStats } from "@/components/crm/CrmStats";
@@ -17,10 +18,27 @@ import { cn } from "@/lib/utils";
 type Tab = "customers" | "social";
 
 export default function CrmPage() {
+  return (
+    <Suspense fallback={null}>
+      <CrmPageInner />
+    </Suspense>
+  );
+}
+
+function CrmPageInner() {
+  const deepLinkId = useSearchParams().get("customer");
   const [tab, setTab] = useState<Tab>("customers");
   const [filters, setFilters] = useState<CustomerFilters>({ limit: 25, offset: 0 });
   const [addOpen, setAddOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
+
+  // Open the drawer when arrived at via ?customer=<id> (e.g. from global search).
+  useEffect(() => {
+    if (deepLinkId) {
+      setTab("customers");
+      setSelectedId(deepLinkId);
+    }
+  }, [deepLinkId]);
 
   const { data: sl } = useSocialLeadSummary();
   const patch = (p: Partial<CustomerFilters>) => setFilters((f) => ({ ...f, ...p }));

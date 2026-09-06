@@ -122,5 +122,5 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> =
   "/dashboard/automations": { title: "Automations", subtitle: "Rules, triggers and workflows" },
   "/dashboard/accounts": { title: "Connected Accounts", subtitle: "Social profiles & channels" },
   "/dashboard/team": { title: "Team", subtitle: "Members, roles and permissions" },
-  "/dashboard/settings": { title: "Settings", subtitle: "Workspace & billing" },
+  "/dashboard/settings": { title: "Settings", subtitle: "Your profile, password and sending accounts" },
 };

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useEffect, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Target } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { LeadStats } from "@/components/leads/LeadStats";
@@ -14,10 +15,25 @@ import { ConvertLeadModal } from "@/components/leads/ConvertLeadModal";
 import type { Lead, LeadFilters } from "@/lib/api/leads";
 
 export default function LeadsPage() {
+  return (
+    <Suspense fallback={null}>
+      <LeadsPageInner />
+    </Suspense>
+  );
+}
+
+function LeadsPageInner() {
+  const deepLinkId = useSearchParams().get("lead");
   const [filters, setFilters] = useState<LeadFilters>({ limit: 25, offset: 0 });
   const [genOpen, setGenOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(deepLinkId);
+
+  // Open the drawer when arrived at via ?lead=<id> (e.g. from global search),
+  // including when already on this page.
+  useEffect(() => {
+    if (deepLinkId) setSelectedId(deepLinkId);
+  }, [deepLinkId]);
   const [converting, setConverting] = useState<Lead | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
