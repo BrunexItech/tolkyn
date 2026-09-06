@@ -78,13 +78,20 @@ app.add_middleware(ActivityLoggingMiddleware)
 # Trusted Host Middleware — rejects requests with a forged Host header.
 # ALLOWED_HOSTS defaults to "*" (off) for local dev; set it to your real
 # domain(s) in production .env or this is a no-op.
-# Loopback is always allowed: the container's own healthcheck curls
-# localhost:8000/health, and the backend publishes no ports so a
-# "Host: localhost" request can only originate from inside the container.
+#
+# Internal callers are always allowed on top of ALLOWED_HOSTS — the backend
+# publishes no ports, so these Host values can only come from inside the
+# compose network:
+#   - localhost / 127.0.0.1  → the container's own healthcheck
+#   - backend                → the whatsapp-worker posting inbound-message and
+#     status webhooks to http://backend:8000 (BACKEND_INTERNAL_URL). Without
+#     this, every WhatsApp webhook is 400'd and messages never reach the app.
+# Override the internal list with INTERNAL_ALLOWED_HOSTS if the service is
+# named something else in your compose file.
 if settings.is_production:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=[*settings.ALLOWED_HOSTS, "localhost", "127.0.0.1"],
+        allowed_hosts=[*settings.ALLOWED_HOSTS, *settings.INTERNAL_ALLOWED_HOSTS],
     )
 
 

@@ -71,6 +71,15 @@ class Settings(BaseSettings):
     # e.g. "tolkyn.co.ke,www.tolkyn.co.ke". Defaults permissive for local dev.
     ALLOWED_HOSTS: list[str] = Field(default=["*"], description="Allowed Host header values in production")
 
+    # Internal Host values always accepted on top of ALLOWED_HOSTS (see
+    # main.py). "backend" is the whatsapp-worker → backend webhook target;
+    # loopback is the container's own healthcheck. Set as a JSON array in .env
+    # only if your compose service name differs.
+    INTERNAL_ALLOWED_HOSTS: list[str] = Field(
+        default=["localhost", "127.0.0.1", "backend"],
+        description="Internal Host header values always trusted (compose network)",
+    )
+
     # Rate limiting (slowapi). Backed by Redis when available so limits are
     # shared across every API replica/worker, not just the process that
     # happened to handle the request — falls back to in-memory (per-process
