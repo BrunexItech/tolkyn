@@ -56,7 +56,7 @@ export default function OrganizationsPage() {
       />
 
       {isLoading ? (
-        <Card><EmptyState title="Loading…" /></Card>
+        <Card><EmptyState loading title="Loading…" /></Card>
       ) : !orgs || orgs.length === 0 ? (
         <Card><EmptyState icon={<Building2 />} title="No organizations yet">Create the first one to start assigning subdomains.</EmptyState></Card>
       ) : (

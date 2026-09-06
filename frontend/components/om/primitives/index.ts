@@ -12,5 +12,6 @@ export { TableWrap } from "./Table";
 export { PlatformChip, PlatformGlyph } from "./PlatformChip";
 export { Grid } from "./Grid";
 export { EmptyState } from "./EmptyState";
+export { Spinner, LoadingState } from "./Spinner";
 export { Modal } from "./Modal";
 export { Drawer } from "./Drawer";

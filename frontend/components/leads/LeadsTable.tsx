@@ -53,7 +53,7 @@ export function LeadsTable({
   return (
     <Card noEdge className="p-0">
       {isLoading ? (
-        <EmptyState title="Loading leads…" />
+        <EmptyState loading title="Loading leads…" />
       ) : isError ? (
         <EmptyState icon={<Globe />} title="Couldn’t load leads">
           Check that the API is running and you’re signed in.

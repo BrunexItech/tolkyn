@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
+import { Spinner } from "@/components/om/primitives/Spinner";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { platform as findPlatform } from "@/lib/om/platforms";
 import { useThread, useReply, useSetStatus } from "./hooks";
@@ -43,8 +44,8 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
   }
   if (isLoading || !t) {
     return (
-      <div className="grid h-full place-items-center rounded-xl border border-om-border bg-om-card text-[12px] text-om-muted">
-        Loading…
+      <div className="grid h-full place-items-center rounded-xl border border-om-border bg-om-card">
+        <Spinner size="lg" />
       </div>
     );
   }

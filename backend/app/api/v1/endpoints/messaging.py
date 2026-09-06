@@ -1,4 +1,13 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import (
+    APIRouter,
+    BackgroundTasks,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
@@ -26,7 +35,11 @@ from app.schemas.messaging import (
 from app.services import whatsapp_web_service
 from app.services.campaign_group_service import CampaignGroupService
 from app.services.messaging_service import MessagingService
-from app.services.whatsapp_web_ingest import ingest_history_batch, ingest_message
+from app.services.whatsapp_web_ingest import (
+    classify_thread_now,
+    ingest_history_batch,
+    ingest_message,
+)
 from app.services.whatsapp_web_service import WhatsAppWebError
 
 router = APIRouter()
@@ -162,13 +175,14 @@ async def disconnect_whatsapp_web(user_id: str = Depends(get_workspace_id)):
 @webhook_router.post("/whatsapp-web/webhook/message", status_code=status.HTTP_204_NO_CONTENT)
 async def whatsapp_web_message_webhook(
     body: WhatsAppWebMessageWebhook,
+    background: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_internal_secret),
 ):
     # Always lands in the real Inbox/CRM for the admin, regardless of
     # whether it's also a campaign-group reply — full visibility is exactly
     # what the admin gets that other participants don't.
-    await ingest_message(
+    result = await ingest_message(
         db,
         body.workspace_id,
         external_id=body.external_id,
@@ -179,6 +193,12 @@ async def whatsapp_web_message_webhook(
         from_jid=body.from_jid,
         from_pn=body.from_pn,
     )
+    # A genuinely new inbound message → classify it for the CRM lead pipeline
+    # right now, off the response path so the worker isn't held up.
+    if result.get("is_new") and result.get("thread_id"):
+        background.add_task(
+            classify_thread_now, body.workspace_id, result["thread_id"]
+        )
     # A campaign participant is keyed by the real phone the admin typed, so try
     # that first; fall back to the raw addressing key for good measure.
     await CampaignGroupService(db, body.workspace_id).relay_reply(

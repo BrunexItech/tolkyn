@@ -96,7 +96,7 @@ export function AssetLibrary({ kind }: { kind: AssetKind }) {
     <Card>
       <CardTitle icon={<Library />}>{HEADING[kind]}</CardTitle>
       {isLoading ? (
-        <EmptyState title="Loading…" />
+        <EmptyState loading title="Loading…" />
       ) : assets.length === 0 ? (
         <EmptyState title={EMPTY_TITLE[kind]} />
       ) : isCopy ? (

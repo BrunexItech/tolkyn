@@ -80,7 +80,7 @@ async def ingest_message(
     at_ms: int,
     from_jid: Optional[str] = None,
     from_pn: Optional[str] = None,
-) -> None:
+) -> Dict[str, Any]:
     at = datetime.fromtimestamp(at_ms / 1000, tz=timezone.utc)
     display_name = from_name or from_pn or from_phone
 
@@ -97,7 +97,8 @@ async def ingest_message(
     if thread.status == ThreadStatus.DONE:
         thread.status = ThreadStatus.OPEN
 
-    if not await _already_recorded(db, thread.id, external_id):
+    is_new = not await _already_recorded(db, thread.id, external_id)
+    if is_new:
         db.add(
             InboxMessage(
                 thread_id=thread.id, direction="in", author_name=display_name,
@@ -105,6 +106,10 @@ async def ingest_message(
             )
         )
     await db.commit()
+
+    # Return the thread id + whether this was genuinely new, so the caller can
+    # kick off immediate lead classification without another lookup.
+    return {"thread_id": thread.id, "is_new": is_new}
 
 
 async def ingest_history_batch(db: AsyncSession, workspace_id: str, messages: List[Dict[str, Any]]) -> None:
@@ -152,3 +157,18 @@ async def _already_recorded(db: AsyncSession, thread_id: str, external_id: str) 
         )
     )
     return res.scalar_one_or_none() is not None
+
+
+async def classify_thread_now(workspace_id: str, thread_id: str) -> None:
+    """Fire-and-forget: the instant a real message lands, run it through the
+    lead classifier so a fresh SocialLead shows up in the CRM pipeline right
+    away instead of on the next 4-minute sweep. Opens its own session because
+    the request that triggered it has already returned. Never raises."""
+    from app.db.base import AsyncSessionLocal
+    from app.services.social_lead_service import SocialLeadService
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await SocialLeadService(db, workspace_id).classify_thread_now(thread_id)
+    except Exception as exc:  # noqa: BLE001 — background best-effort
+        print(f"[whatsapp-web] immediate lead classify failed: {exc}")

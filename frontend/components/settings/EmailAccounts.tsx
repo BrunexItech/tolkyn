@@ -56,7 +56,7 @@ export function EmailAccounts() {
       </CardTitle>
 
       {isLoading ? (
-        <EmptyState title="Loading…" />
+        <EmptyState loading title="Loading…" />
       ) : accounts.length === 0 ? (
         <EmptyState icon={<Mail />} title="No sending accounts">
           Connect a business email to send outreach from your own address.

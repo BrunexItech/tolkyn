@@ -3,8 +3,7 @@
 import { useState } from "react";
 import { MessagesSquare } from "lucide-react";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
-import { ThreadList } from "@/components/inbox/ThreadList";
-import { ThreadView } from "@/components/inbox/ThreadView";
+import { InboxSplit } from "@/components/inbox/InboxSplit";
 import type { InboxFilters } from "@/lib/api/inbox";
 
 /** The actual WhatsApp conversations — reuses the exact same Inbox
@@ -16,23 +15,19 @@ export function WhatsAppConversations() {
   const [selected, setSelected] = useState<string | null>(null);
 
   return (
-    <Card className="flex h-[560px] flex-col overflow-hidden p-0">
-      <div className="border-b border-om-border px-3.5 py-2.5">
+    <Card className="flex h-[70vh] min-h-[460px] flex-col overflow-hidden p-3 lg:h-[560px]">
+      <div className="mb-3 border-b border-om-border pb-2.5">
         <CardTitle icon={<MessagesSquare />} className="mb-0">
           WhatsApp conversations
         </CardTitle>
       </div>
-      <div className="grid min-h-0 flex-1 grid-cols-[260px_1fr]">
-        <div className="min-h-0 overflow-y-auto border-r border-om-border">
-          <ThreadList
-            filters={filters}
-            onChange={(p) => setFilters((f) => ({ ...f, ...p, platform: "whatsapp" }))}
-            selectedId={selected}
-            onSelect={(t) => setSelected(t.id)}
-          />
-        </div>
-        <ThreadView threadId={selected} />
-      </div>
+      <InboxSplit
+        filters={filters}
+        onChange={(p) => setFilters((f) => ({ ...f, ...p, platform: "whatsapp" }))}
+        selected={selected}
+        onSelect={setSelected}
+        gridClassName="lg:grid-cols-[260px_1fr]"
+      />
     </Card>
   );
 }

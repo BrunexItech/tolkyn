@@ -142,7 +142,7 @@ export default function PublishedPage() {
 
       {isLoading ? (
         <Card noEdge>
-          <EmptyState title="Loading…" />
+          <EmptyState loading title="Loading…" />
         </Card>
       ) : shown.length === 0 ? (
         <Card noEdge>

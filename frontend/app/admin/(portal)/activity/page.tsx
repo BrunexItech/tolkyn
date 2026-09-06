@@ -23,7 +23,7 @@ function statusColor(code: number | null) {
 
 export default function AdminActivityPage() {
   return (
-    <Suspense fallback={<EmptyState title="Loading…" />}>
+    <Suspense fallback={<EmptyState loading title="Loading…" />}>
       <AdminActivityContent />
     </Suspense>
   );
@@ -82,7 +82,7 @@ function AdminActivityContent() {
 
       <Card noEdge className="p-0">
         {isLoading ? (
-          <EmptyState title="Loading…" />
+          <EmptyState loading title="Loading…" />
         ) : !data || data.items.length === 0 ? (
           <EmptyState icon={<Activity />} title="No activity recorded yet">
             Requests from tenant users will show up here as they use the app.

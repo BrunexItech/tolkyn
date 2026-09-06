@@ -38,7 +38,7 @@ export default function AdminVideoPage() {
 
       <Card noEdge className="p-0">
         {isLoading ? (
-          <EmptyState title="Loading…" />
+          <EmptyState loading title="Loading…" />
         ) : items.length === 0 ? (
           <EmptyState icon={<Clapperboard />} title="No video generation yet">
             Spend and usage per user will show up here once someone generates a video.

@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Bookmark, X, Search } from "lucide-react";
 import { useAssets } from "@/components/studio/hooks";
 import { platform as findPlatform } from "@/lib/om/platforms";
+import { Spinner } from "@/components/om/primitives/Spinner";
 import { relativeTime, truncate } from "@/lib/om/format";
 import type { CopyGroup } from "@/lib/api/studio";
 
@@ -103,7 +104,9 @@ export function SavedCaptionsPicker({ onPick }: { onPick: (body: string, hashtag
             </div>
             <div className="om-scroll flex-1 overflow-y-auto p-2">
               {isLoading ? (
-                <p className="p-4 text-center text-[11.5px] text-om-muted">Loading…</p>
+                <div className="flex justify-center p-4">
+                  <Spinner size="sm" />
+                </div>
               ) : filtered.length === 0 ? (
                 <p className="p-4 text-center text-[11.5px] text-om-muted">
                   {captions.length === 0

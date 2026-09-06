@@ -72,7 +72,7 @@ export function ThreadList({
 
       <div className="om-scroll flex-1 overflow-y-auto">
         {isLoading ? (
-          <EmptyState title="Loading…" />
+          <EmptyState loading title="Loading…" />
         ) : threads.length === 0 ? (
           <EmptyState icon={<MessageCircle />} title="Inbox zero">
             No conversations match this filter.

@@ -125,6 +125,118 @@ class SocialLeadService:
                 "ai": ai().available, "live": upload_post.enabled,
             }
 
+        return await self._run_pending(threads, pending)
+
+    def _apply_classification(
+        self,
+        t: InboxThread,
+        row: Optional[SocialLead],
+        message: str,
+        last_at: Optional[datetime],
+        r: Dict[str, Any],
+    ) -> tuple[SocialLead, bool]:
+        """Upsert the SocialLead for one classified inbound message.
+        Returns (row, created?)."""
+        created = row is None
+        if row is None:
+            row = SocialLead(
+                platform=t.platform,
+                kind=t.kind.value,
+                author_name=t.author_name,
+                author_handle=t.author_handle,
+                author_avatar=t.author_avatar,
+                message=message[:6000],
+                post_context=(t.context or None),
+                permalink=t.permalink,
+                thread_external_id=t.external_id,
+                inbox_thread_id=t.id,
+                detected_at=_now(),
+                owner_id=self.user_id,
+                workspace_id=self.workspace_id,
+                status=SocialLeadStatus.NEW,
+            )
+            self.db.add(row)
+        else:
+            row.message = message[:6000]
+            row.author_avatar = t.author_avatar or row.author_avatar
+            row.permalink = t.permalink or row.permalink
+            row.inbox_thread_id = row.inbox_thread_id or t.id
+
+        row.is_lead = bool(r["is_lead"])
+        row.product_interest = r["product_interest"]
+        row.intent = SocialLeadIntent(r["intent"])
+        row.buying_signals = r["buying_signals"]
+        row.sentiment = r["sentiment"]
+        row.confidence = float(r["confidence"])
+        row.ai_summary = r["summary"]
+        row.suggested_reply = r["suggested_reply"]
+        row.classifier = r.get("classifier")
+        row.classified_at = _now()
+        row.last_message_at = last_at
+        if row.status not in _LOCKED_STATUSES:
+            row.status = SocialLeadStatus.NEW
+        return row, created
+
+    async def classify_thread_now(self, thread_id: str) -> Optional[SocialLead]:
+        """Classify the latest inbound message on one thread and upsert its
+        SocialLead immediately — called the moment a message is ingested so a
+        fresh lead shows in the pipeline without waiting for the periodic
+        sweep. Safe to call repeatedly: it no-ops if this exact message was
+        already classified."""
+        thread = (
+            await self.db.execute(
+                select(InboxThread)
+                .options(selectinload(InboxThread.messages))
+                .where(
+                    InboxThread.id == thread_id,
+                    InboxThread.workspace_id == self.workspace_id,
+                )
+            )
+        ).scalar_one_or_none()
+        if thread is None or thread.kind not in _LEAD_KINDS:
+            return None
+
+        inbound = [
+            m for m in thread.messages if m.direction == "in" and (m.body or "").strip()
+        ]
+        if not inbound:
+            return None
+        last_in = inbound[-1]
+        last_at = last_in.at or last_in.created_at
+
+        row = (
+            await self.db.execute(
+                select(SocialLead).where(
+                    SocialLead.workspace_id == self.workspace_id,
+                    or_(
+                        SocialLead.thread_external_id == thread.external_id,
+                        SocialLead.inbox_thread_id == thread.id,
+                    ),
+                )
+            )
+        ).scalars().first()
+        if row is not None and row.last_message_at and last_at and last_at <= row.last_message_at:
+            return row  # this message already classified
+
+        history = [
+            {"author": m.author_name, "body": m.body}
+            for m in thread.messages
+            if (m.body or "").strip()
+        ]
+        result = await classify_message(
+            last_in.body,
+            post_context=thread.context or "",
+            platform=thread.platform,
+            author=thread.author_name,
+            history=history,
+        )
+        row, _ = self._apply_classification(thread, row, last_in.body, last_at, result)
+        await self.db.commit()
+        return row
+
+    async def _run_pending(
+        self, threads: List[InboxThread], pending: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
         sem = asyncio.Semaphore(_CLASSIFY_CONCURRENCY)
 
         async def run_one(item: Dict[str, Any]) -> Dict[str, Any]:
@@ -144,50 +256,13 @@ class SocialLeadService:
         new_leads = 0
         updated = 0
         for item in classified:
-            t: InboxThread = item["thread"]
-            r: Dict[str, Any] = item["ai"]
-            row: Optional[SocialLead] = item["row"]
-            intent = SocialLeadIntent(r["intent"])
-
-            if row is None:
-                row = SocialLead(
-                    platform=t.platform,
-                    kind=t.kind.value,
-                    author_name=t.author_name,
-                    author_handle=t.author_handle,
-                    author_avatar=t.author_avatar,
-                    message=item["message"][:6000],
-                    post_context=(t.context or None),
-                    permalink=t.permalink,
-                    thread_external_id=t.external_id,
-                    inbox_thread_id=t.id,
-                    detected_at=_now(),
-                    owner_id=self.user_id,
-                    workspace_id=self.workspace_id,
-                    status=SocialLeadStatus.NEW,
-                )
-                self.db.add(row)
+            _, created = self._apply_classification(
+                item["thread"], item["row"], item["message"], item["last_at"], item["ai"]
+            )
+            if created:
                 new_leads += 1
             else:
                 updated += 1
-                row.message = item["message"][:6000]
-                row.author_avatar = t.author_avatar or row.author_avatar
-                row.permalink = t.permalink or row.permalink
-                row.inbox_thread_id = row.inbox_thread_id or t.id
-
-            row.is_lead = bool(r["is_lead"])
-            row.product_interest = r["product_interest"]
-            row.intent = intent
-            row.buying_signals = r["buying_signals"]
-            row.sentiment = r["sentiment"]
-            row.confidence = float(r["confidence"])
-            row.ai_summary = r["summary"]
-            row.suggested_reply = r["suggested_reply"]
-            row.classifier = r.get("classifier")
-            row.classified_at = _now()
-            row.last_message_at = item["last_at"]
-            if row.status not in _LOCKED_STATUSES:
-                row.status = SocialLeadStatus.NEW
 
         await self.db.commit()
         _LAST_SCAN[self.workspace_id] = time.time()

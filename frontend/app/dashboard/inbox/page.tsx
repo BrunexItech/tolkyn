@@ -10,8 +10,7 @@ import { Pill } from "@/components/om/primitives/Pill";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { PlatformChip } from "@/components/om/primitives/PlatformChip";
 import { platform as findPlatform } from "@/lib/om/platforms";
-import { ThreadList } from "@/components/inbox/ThreadList";
-import { ThreadView } from "@/components/inbox/ThreadView";
+import { InboxSplit } from "@/components/inbox/InboxSplit";
 import { useInboxSummary, useRefreshInbox } from "@/components/inbox/hooks";
 import type { InboxFilters } from "@/lib/api/inbox";
 import { cn } from "@/lib/utils";
@@ -92,15 +91,13 @@ function InboxPageContent() {
         </div>
       )}
 
-      <div className="grid min-h-0 flex-1 gap-3 lg:grid-cols-[340px_1fr]">
-        <ThreadList
-          filters={filters}
-          onChange={patch}
-          selectedId={selected}
-          onSelect={(t) => setSelected(t.id)}
-        />
-        <ThreadView threadId={selected} />
-      </div>
+      <InboxSplit
+        filters={filters}
+        onChange={patch}
+        selected={selected}
+        onSelect={setSelected}
+        gridClassName="lg:grid-cols-[340px_1fr]"
+      />
     </div>
   );
 }

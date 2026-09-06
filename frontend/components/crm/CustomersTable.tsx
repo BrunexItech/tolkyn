@@ -72,7 +72,7 @@ export function CustomersTable({
   return (
     <Card noEdge className="p-0">
       {isLoading ? (
-        <EmptyState title="Loading customers…" />
+        <EmptyState loading title="Loading customers…" />
       ) : isError ? (
         <EmptyState icon={<Users />} title="Couldn’t load customers" />
       ) : !data || data.items.length === 0 ? (

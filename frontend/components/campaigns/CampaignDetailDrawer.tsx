@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Target, Trash2, Link2, Eye, Heart, MousePointerClick, Users, Plus, Check, MapPin } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
+import { LoadingState } from "@/components/om/primitives/Spinner";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
@@ -73,7 +74,7 @@ export function CampaignDetailDrawer({
       }
     >
       {!c ? (
-        <div className="py-10 text-center text-[12px] text-om-muted">Loading…</div>
+        <LoadingState />
       ) : (
         <>
           <div className="flex items-center gap-2">

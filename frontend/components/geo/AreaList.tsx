@@ -20,7 +20,7 @@ export function AreaList({ onFocus }: { onFocus?: (a: TargetArea) => void }) {
       </CardTitle>
 
       {isLoading ? (
-        <EmptyState title="Loading…" />
+        <EmptyState loading title="Loading…" />
       ) : areas.length === 0 ? (
         <EmptyState icon={<MapPin />} title="No areas yet">
           Search a place above to add your first target area.

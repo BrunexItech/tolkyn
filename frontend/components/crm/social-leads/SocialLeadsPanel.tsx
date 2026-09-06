@@ -273,7 +273,7 @@ export function SocialLeadsPanel() {
       {/* list */}
       {isLoading ? (
         <Card noEdge>
-          <EmptyState title="Loading…" />
+          <EmptyState loading title="Loading…" />
         </Card>
       ) : !data || data.items.length === 0 ? (
         <Card noEdge>

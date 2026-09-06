@@ -71,7 +71,7 @@ export default function AdminUsersPage() {
 
       <Card noEdge className="p-0">
         {isLoading ? (
-          <EmptyState title="Loading…" />
+          <EmptyState loading title="Loading…" />
         ) : !data || data.items.length === 0 ? (
           <EmptyState icon={<Users />} title="No users match" />
         ) : (

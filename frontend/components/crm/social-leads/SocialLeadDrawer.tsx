@@ -13,6 +13,7 @@ import {
   Phone,
 } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
+import { LoadingState } from "@/components/om/primitives/Spinner";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 import { platform as findPlatform } from "@/lib/om/platforms";
@@ -79,7 +80,7 @@ export function SocialLeadDrawer({
       width={460}
     >
       {!lead ? (
-        <div className="py-10 text-center text-[12px] text-om-muted">Loading…</div>
+        <LoadingState />
       ) : (
         <>
           <div className="flex flex-wrap items-center gap-2">

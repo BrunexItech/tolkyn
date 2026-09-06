@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Check, Clapperboard, ImageIcon, LayoutGrid } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
+import { LoadingState, Spinner } from "@/components/om/primitives/Spinner";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { compact, relativeTime, shortDateTime } from "@/lib/om/format";
@@ -93,7 +94,7 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
       width={420}
     >
       {!user ? (
-        <div className="py-10 text-center text-[12px] text-om-muted">Loading…</div>
+        <LoadingState />
       ) : (
         <>
           <div className="flex items-center gap-2">
@@ -251,7 +252,9 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
           <div>
             <SectionLabel>Usage on the platform</SectionLabel>
             {!usage ? (
-              <p className="text-[11.5px] text-om-muted">Loading…</p>
+              <div className="flex justify-center py-3">
+                <Spinner size="sm" />
+              </div>
             ) : (
               <div className="grid grid-cols-3 gap-2">
                 {[

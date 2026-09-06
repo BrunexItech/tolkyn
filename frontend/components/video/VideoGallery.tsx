@@ -88,7 +88,7 @@ export function VideoGallery() {
   const { data, isLoading } = useVideoJobs();
   const items = data?.items ?? [];
 
-  if (isLoading) return <Card><EmptyState title="Loading…" /></Card>;
+  if (isLoading) return <Card><EmptyState loading title="Loading…" /></Card>;
   if (items.length === 0) {
     return (
       <Card>

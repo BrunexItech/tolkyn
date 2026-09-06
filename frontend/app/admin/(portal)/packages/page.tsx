@@ -47,7 +47,7 @@ export default function AdminPackagesPage() {
       />
 
       {isLoading ? (
-        <EmptyState title="Loading…" />
+        <EmptyState loading title="Loading…" />
       ) : packages.length === 0 ? (
         <EmptyState icon={<PackageIcon />} title="No packages yet">
           Create tiers like Starter, Growth and Enterprise, then assign them to users.

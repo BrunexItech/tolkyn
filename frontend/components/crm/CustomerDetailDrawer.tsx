@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { FaLinkedinIn } from "react-icons/fa6";
 import { Drawer } from "@/components/om/primitives/Drawer";
+import { LoadingState } from "@/components/om/primitives/Spinner";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { OmInput } from "@/components/om/primitives/Field";
 import { StageBadge } from "./StageBadge";
@@ -92,7 +93,7 @@ export function CustomerDetailDrawer({
       }
     >
       {!c ? (
-        <div className="py-10 text-center text-[12px] text-om-muted">Loading…</div>
+        <LoadingState />
       ) : (
         <>
           <div className="flex items-center gap-2">
