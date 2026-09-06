@@ -33,25 +33,22 @@ export interface AuthResponse {
 export const auth = {
   register: async (data: RegisterData): Promise<AuthResponse> => {
     const response = await apiClient.post("/auth/register", data);
-    if (response.error) {
-      throw new Error(response.error || "Registration failed");
-    }
+    if (response?.detail) throw new Error(pickDetail(response.detail));
+    if (response?.error) throw new Error(response.error);
     return response;
   },
 
   login: async (data: LoginData): Promise<AuthResponse> => {
     const response = await apiClient.post("/auth/login", data);
-    if (response.error) {
-      throw new Error(response.error || "Login failed");
-    }
+    if (response?.detail) throw new Error(pickDetail(response.detail));
+    if (response?.error) throw new Error(response.error);
     return response;
   },
 
   getMe: async (token: string): Promise<any> => {
     const response = await apiClient.get("/auth/me", token);
-    if (response.error) {
-      throw new Error(response.error || "Failed to get user");
-    }
+    if (response?.detail) throw new Error(pickDetail(response.detail));
+    if (response?.error) throw new Error(response.error);
     return response;
   },
 

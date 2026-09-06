@@ -1,19 +1,23 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Eye, EyeOff, ArrowRight, Loader2, CircleAlert } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Eye, EyeOff, ArrowRight, Loader2, CircleAlert, Clock } from "lucide-react";
 import toast from "react-hot-toast";
 import { auth } from "@/lib/api/auth";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 
-export default function LoginPage() {
+const PENDING_MSG =
+  "Your account is awaiting approval from the platform administrator.";
+
+function LoginInner() {
   const router = useRouter();
+  const justSignedUp = useSearchParams().get("pending") === "1";
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState(justSignedUp ? PENDING_MSG : "");
   const [form, setForm] = useState({ email: "", password: "", remember_me: false });
 
   const submit = async (e: React.FormEvent) => {
@@ -34,6 +38,10 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
+
+  // A correct password on an unapproved / suspended account isn't a login
+  // failure — show it as a calm status message, not a red error.
+  const isPending = /awaiting approval|suspended/i.test(error);
 
   return (
     <AuthLayout
@@ -61,10 +69,20 @@ export default function LoginPage() {
     >
       <form onSubmit={submit} className="space-y-1">
         {error && (
-          <div className="mb-3 flex items-center gap-2 rounded-lg border border-om-red/25 bg-om-red/10 px-3 py-2 text-[12px] text-om-red">
-            <CircleAlert className="size-4 shrink-0" />
-            {error}
-          </div>
+          isPending ? (
+            <div className="mb-3 flex items-start gap-2 rounded-lg border border-om-amber/25 bg-om-amber/10 px-3 py-2.5 text-[12px] text-om-amber">
+              <Clock className="mt-px size-4 shrink-0" />
+              <div>
+                <p className="font-semibold">Almost there</p>
+                <p className="mt-0.5 text-om-amber/90">{error} We&apos;ll email you as soon as it&apos;s active.</p>
+              </div>
+            </div>
+          ) : (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-om-red/25 bg-om-red/10 px-3 py-2 text-[12px] text-om-red">
+              <CircleAlert className="size-4 shrink-0" />
+              {error}
+            </div>
+          )
         )}
 
         <Field label="Work email">
@@ -132,5 +150,13 @@ export default function LoginPage() {
         </button>
       </form>
     </AuthLayout>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginInner />
+    </Suspense>
   );
 }

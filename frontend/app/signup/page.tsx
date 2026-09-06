@@ -37,8 +37,8 @@ export default function SignupPage() {
     setLoading(true);
     try {
       await auth.register(form);
-      toast.success("Account created — sign in to continue");
-      router.push("/login");
+      toast.success("Account created — a platform admin will review it shortly");
+      router.push("/login?pending=1");
     } catch (err) {
       setError((err as Error).message || "Registration failed. Please try again.");
       setLoading(false);
