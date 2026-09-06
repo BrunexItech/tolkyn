@@ -43,7 +43,7 @@ export function TermsGate({ children }: { children: ReactNode }) {
     ["access_token", "refresh_token", "user"].forEach((k) => localStorage.removeItem(k));
     document.cookie = "access_token=; path=/; max-age=0";
     document.cookie = "refresh_token=; path=/; max-age=0";
-    router.push("/login");
+    router.push("/");
   };
 
   return (

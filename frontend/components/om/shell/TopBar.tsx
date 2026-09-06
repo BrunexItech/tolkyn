@@ -105,7 +105,7 @@ export function TopBar() {
     document.cookie = "access_token=; path=/; max-age=0";
     document.cookie = "refresh_token=; path=/; max-age=0";
     toast.ok("Signed out");
-    router.push("/login");
+    router.push("/");
     router.refresh();
   };
 

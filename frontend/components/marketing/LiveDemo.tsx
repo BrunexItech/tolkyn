@@ -191,7 +191,9 @@ export function LiveDemo() {
           </span>
         </div>
 
-        <div className="flex min-h-[352px]">
+        {/* fixed height so switching views only swaps the inner content —
+            the card, the surrounding page and the header never reflow */}
+        <div className="flex h-[420px]">
           {/* sidebar */}
           <div className="hidden w-[132px] shrink-0 flex-col gap-0.5 border-r border-mkt-line-soft bg-white/[0.015] p-2.5 sm:flex">
             <SideItem label="Dashboard" Icon={LayoutDashboard} active={false} onClick={() => pick("analyze")} />
@@ -225,7 +227,7 @@ export function LiveDemo() {
 
           {/* main + feed */}
           <div className="flex min-w-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 p-3.5">
+            <div className="om-scroll-none min-h-0 flex-1 overflow-y-auto p-3.5">
               {view === "publish" && <PublishView reduced={reduced} key="p" />}
               {view === "engage" && <EngageView reduced={reduced} key="e" />}
               {view === "analyze" && <AnalyzeView reduced={reduced} key="a" />}
