@@ -160,6 +160,14 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_image_limit INTEGER",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_video_limit INTEGER",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS module_overrides JSON NOT NULL DEFAULT '{}'",
+    # De-dupe team_members: a check-then-insert race in TeamService.ensure_owner()
+    # (fixed with ON CONFLICT) could leave two identical rows for the same
+    # (workspace, user). Keep the oldest, then make it impossible going forward.
+    "DELETE FROM team_members t USING team_members d "
+    "WHERE t.workspace_id = d.workspace_id AND t.user_id = d.user_id "
+    "AND t.user_id IS NOT NULL AND t.ctid > d.ctid",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_workspace_user "
+    "ON team_members (workspace_id, user_id) WHERE user_id IS NOT NULL",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

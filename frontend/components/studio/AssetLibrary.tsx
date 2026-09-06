@@ -62,7 +62,7 @@ export function AssetLibrary({ kind }: { kind: AssetKind }) {
     if (ok) del.mutate(id);
   };
 
-  const useImageInComposer = (url: string) => {
+  const sendImageToComposer = (url: string) => {
     try {
       sessionStorage.setItem(
         "om:composer:prefill",
@@ -74,7 +74,7 @@ export function AssetLibrary({ kind }: { kind: AssetKind }) {
     router.push("/dashboard/publishing");
   };
 
-  const useCaptionInComposer = (c: CaptionView) => {
+  const sendCaptionToComposer = (c: CaptionView) => {
     try {
       sessionStorage.setItem(
         "om:composer:prefill",
@@ -199,7 +199,7 @@ export function AssetLibrary({ kind }: { kind: AssetKind }) {
           onUse={() => {
             const s = lightbox.src;
             setLightbox(null);
-            useImageInComposer(s);
+            sendImageToComposer(s);
           }}
         />
       )}
@@ -209,7 +209,7 @@ export function AssetLibrary({ kind }: { kind: AssetKind }) {
           caption={openCaption}
           onClose={() => setOpenCaption(null)}
           onUse={() => {
-            useCaptionInComposer(openCaption);
+            sendCaptionToComposer(openCaption);
           }}
           onDelete={() => {
             const id = openCaption.id;

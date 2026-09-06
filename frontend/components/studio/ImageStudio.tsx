@@ -139,7 +139,7 @@ export function ImageStudio() {
     );
   };
 
-  const useInComposer = (url: string) => {
+  const sendImageToComposer = (url: string) => {
     try {
       sessionStorage.setItem(
         "om:composer:prefill",
@@ -236,7 +236,7 @@ export function ImageStudio() {
                       <Download className="size-3" /> Save
                     </a>
                     <button
-                      onClick={() => useInComposer(m.imageUrl)}
+                      onClick={() => sendImageToComposer(m.imageUrl)}
                       className="inline-flex items-center gap-1 rounded-md bg-black/70 px-2 py-1 text-[10.5px] text-white backdrop-blur hover:bg-black/85"
                     >
                       <PenSquare className="size-3" /> Use in post
@@ -330,7 +330,7 @@ export function ImageStudio() {
           onUse={() => {
             const s = lightbox.src;
             setLightbox(null);
-            useInComposer(s);
+            sendImageToComposer(s);
           }}
         />
       )}

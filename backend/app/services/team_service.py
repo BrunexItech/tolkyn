@@ -4,6 +4,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.activity_context import note_activity
@@ -64,14 +65,16 @@ class TeamService:
         return u
 
     async def ensure_owner(self) -> None:
-        """The workspace owner is always member #1."""
+        """The workspace owner is always member #1. Concurrent first-load
+        requests can all reach here at once, so the insert is guarded by the
+        (workspace_id, user_id) unique index — a loser just rolls back."""
         res = await self.db.execute(
-            select(TeamMember).where(
+            select(TeamMember.id).where(
                 TeamMember.workspace_id == self.workspace_id,
                 TeamMember.role == TeamRole.OWNER,
             )
         )
-        if res.scalar_one_or_none():
+        if res.first():
             return
         u = await self._owner_user()
         m = TeamMember(
@@ -89,7 +92,11 @@ class TeamService:
             workspace_id=self.workspace_id,
         )
         self.db.add(m)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            # Another concurrent request already inserted the owner row.
+            await self.db.rollback()
 
     async def list(self) -> List[TeamMember]:
         await self.ensure_owner()
@@ -98,7 +105,18 @@ class TeamService:
             .where(TeamMember.workspace_id == self.workspace_id)
             .order_by(TeamMember.created_at.asc())
         )
-        return list(res.scalars().all())
+        rows = list(res.scalars().all())
+        # Defensive: collapse any legacy duplicate rows (same user_id) that
+        # predate the unique index — keep the first (oldest) of each.
+        seen: set[str] = set()
+        out: List[TeamMember] = []
+        for m in rows:
+            key = m.user_id or m.id
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(m)
+        return out
 
     async def get(self, mid: str) -> TeamMember:
         res = await self.db.execute(
