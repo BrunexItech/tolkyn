@@ -89,7 +89,7 @@ export function useWhatsAppWebStatus(enabled = true) {
     // same "poll while pending" idea as the call-center badge elsewhere.
     refetchInterval: (q) => {
       const s = q.state.data?.status;
-      return s === "qr" || s === "connecting" ? 2500 : 15000;
+      return s === "qr" || s === "connecting" || s === "linking" ? 2500 : 15000;
     },
   });
 }

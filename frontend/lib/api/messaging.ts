@@ -113,7 +113,7 @@ export const messagingApi = {
 };
 
 export interface WhatsAppWebStatus {
-  status: "disconnected" | "connecting" | "qr" | "connected" | "logged_out";
+  status: "disconnected" | "connecting" | "qr" | "linking" | "connected" | "logged_out";
   qr: string | null;
   phone: string | null;
 }

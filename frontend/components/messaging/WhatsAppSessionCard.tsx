@@ -22,7 +22,13 @@ const WA_GREEN = "#25D366";
 function Spinner({ label, sub }: { label: string; sub?: string }) {
   return (
     <div className="flex flex-col items-center gap-2.5 py-8 text-center">
-      <Loader2 className="size-7 animate-spin" style={{ color: WA_GREEN }} />
+      <div className="relative flex size-12 items-center justify-center">
+        <span
+          className="absolute inline-flex size-9 animate-ping rounded-full opacity-20"
+          style={{ background: WA_GREEN }}
+        />
+        <Loader2 className="size-7 animate-spin" style={{ color: WA_GREEN }} />
+      </div>
       <div className="text-[12.5px] font-medium text-om-dim">{label}</div>
       {sub && <div className="max-w-[15rem] text-[10.5px] leading-relaxed text-om-faint">{sub}</div>}
     </div>
@@ -47,6 +53,11 @@ export function WhatsAppSessionCard() {
     status === "connecting" ||
     (status === "qr" && !data?.qr);
 
+  // The QR has been scanned and WhatsApp is pairing the device + pushing
+  // history. Can take up to a minute — never show a stale QR or the connect
+  // screen here, always the "linking" spinner.
+  const isLinking = status === "linking";
+
   return (
     <Card accent="green" className="space-y-3">
       <CardTitle icon={<FaWhatsapp style={{ color: WA_GREEN }} />} color={WA_GREEN}>
@@ -55,6 +66,11 @@ export function WhatsAppSessionCard() {
 
       {isLoading ? (
         <Spinner label="Checking WhatsApp status…" />
+      ) : isLinking ? (
+        <Spinner
+          label="Linking your account…"
+          sub="QR scanned. Pairing the device and syncing your recent chats — this can take up to a minute, no need to touch your phone."
+        />
       ) : status === "connected" ? (
         <>
           <div className="flex items-center gap-2 rounded-lg border border-om-green/25 bg-om-green/[0.06] px-3 py-2.5">

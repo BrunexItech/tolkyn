@@ -28,6 +28,7 @@ const TABS: { id: Tab; label: string; icon: typeof MessagesSquare }[] = [
 export default function WhatsAppPage() {
   const { data: session } = useWhatsAppWebStatus();
   const connected = session?.status === "connected";
+  const linking = session?.status === "linking" || session?.status === "connecting";
   const [tab, setTab] = useState<Tab>("conversations");
 
   return (
@@ -38,7 +39,7 @@ export default function WhatsAppPage() {
         icon={<FaWhatsapp />}
         actions={
           <Pill tone={connected ? "green" : "amber"} dot>
-            {connected ? "Connected" : "Not connected"}
+            {connected ? "Connected" : linking ? "Linking…" : "Not connected"}
           </Pill>
         }
       />

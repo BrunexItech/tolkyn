@@ -97,7 +97,7 @@ class MessagingSummary(BaseModel):
 
 # ---- self-hosted WhatsApp Web sessions (Baileys worker) -------------------
 class WhatsAppWebStatus(BaseModel):
-    status: str  # disconnected | connecting | qr | connected | logged_out
+    status: str  # disconnected | connecting | qr | linking | connected | logged_out
     qr: Optional[str] = None  # data: URL PNG, present only while status == "qr"
     phone: Optional[str] = None  # E.164, present only once connected
 

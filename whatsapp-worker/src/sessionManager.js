@@ -81,8 +81,10 @@ async function connect(workspaceId) {
   const { version } = await fetchLatestBaileysVersion();
 
   entry = sessions.get(workspaceId) || {};
-  entry.status = "connecting";
-  entry.qrDataUrl = null;
+  // Don't clobber "linking" — this can be a reconnect mid-pairing (the 515
+  // "restart required" that WhatsApp sends right after a QR scan).
+  entry.status = entry.status === "linking" ? "linking" : "connecting";
+  if (entry.status !== "linking") entry.qrDataUrl = null;
   entry.phone = entry.phone || null;
   entry.connectedAt = entry.connectedAt || null;
   entry.guard = entry.guard || new AntibanGuard(entry.connectedAt || Date.now());
@@ -111,6 +113,16 @@ async function connect(workspaceId) {
       await webhook.notifyStatus(workspaceId, "qr");
     }
 
+    // "connecting" after a QR was on screen == the user just scanned it.
+    // WhatsApp now pairs the device and pushes history; surface that as a
+    // distinct "linking" state so the UI shows a spinner instead of a stale
+    // QR or a flash of the connect screen.
+    if (connection === "connecting" && entry.status === "qr") {
+      entry.status = "linking";
+      entry.qrDataUrl = null;
+      await webhook.notifyStatus(workspaceId, "linking");
+    }
+
     if (connection === "open") {
       entry.status = "connected";
       entry.qrDataUrl = null;
@@ -123,12 +135,19 @@ async function connect(workspaceId) {
     if (connection === "close") {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const loggedOut = statusCode === DisconnectReason.loggedOut;
-      entry.status = loggedOut ? "logged_out" : "disconnected";
+      // A close during pairing (515 "restart required" straight after the
+      // scan) is a normal step, not a failure — hold "linking" and reconnect
+      // fast so the spinner never drops back to the connect screen.
+      const pairing = !loggedOut && (entry.status === "linking" || entry.status === "qr");
+      entry.status = loggedOut ? "logged_out" : pairing ? "linking" : "disconnected";
       await webhook.notifyStatus(workspaceId, entry.status);
       if (!loggedOut) {
         // Transient drop (network blip, server restart) — auto-reconnect.
         // A real logout must NOT auto-reconnect; the user has to re-scan.
-        setTimeout(() => connect(workspaceId).catch((e) => logger.error(e, "reconnect failed")), 3000);
+        setTimeout(
+          () => connect(workspaceId).catch((e) => logger.error(e, "reconnect failed")),
+          pairing ? 500 : 3000,
+        );
       } else {
         fs.rmSync(authDir(workspaceId), { recursive: true, force: true });
         sessions.delete(workspaceId);
