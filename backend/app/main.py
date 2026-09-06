@@ -78,10 +78,13 @@ app.add_middleware(ActivityLoggingMiddleware)
 # Trusted Host Middleware — rejects requests with a forged Host header.
 # ALLOWED_HOSTS defaults to "*" (off) for local dev; set it to your real
 # domain(s) in production .env or this is a no-op.
+# Loopback is always allowed: the container's own healthcheck curls
+# localhost:8000/health, and the backend publishes no ports so a
+# "Host: localhost" request can only originate from inside the container.
 if settings.is_production:
     app.add_middleware(
         TrustedHostMiddleware,
-        allowed_hosts=settings.ALLOWED_HOSTS,
+        allowed_hosts=[*settings.ALLOWED_HOSTS, "localhost", "127.0.0.1"],
     )
 
 
