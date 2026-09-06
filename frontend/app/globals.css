@@ -51,6 +51,7 @@
   --color-mkt-canvas: var(--mkt-canvas);
   --color-mkt-veil: var(--mkt-veil);
   --color-mkt-card: var(--mkt-card);
+  --color-mkt-card-hi: var(--mkt-card-hi);
   --color-mkt-ink: var(--mkt-ink);
   --color-mkt-ink-soft: var(--mkt-ink-soft);
   --color-mkt-ink-faint: var(--mkt-ink-faint);
@@ -61,6 +62,7 @@
   --color-mkt-cyan: var(--mkt-cyan);
   --color-mkt-violet: var(--mkt-violet);
   --color-mkt-mint: var(--mkt-mint);
+  --color-mkt-gold: var(--mkt-gold);
 
   /* raw Tolkyn palette — bg-om-card, text-om-blue, border-om-border … */
   --color-om-bg: var(--om-bg);
@@ -423,23 +425,25 @@
    so the dark app is untouched.
    ============================================================ */
 .mkt {
-  /* background = the exact card colour used on the Dashboard / Call Center
-     (--om-card #0b1120). Cards sit a touch above it. The 3 state colours
-     (green #22c55e · blue #4f7aff · amber #f5b642) live only in card structure
-     and background — never in running text. */
-  --mkt-canvas: #0b1120;       /* dashboard / call-center card colour */
-  --mkt-veil: #0e162a;         /* alternating section band */
-  --mkt-card: #111b31;         /* cards, one step above the ground */
-  --mkt-ink: #eef1f7;
-  --mkt-ink-soft: #9aa5ba;
-  --mkt-ink-faint: #6b7688;
-  --mkt-line: rgba(255, 255, 255, 0.09);
-  --mkt-line-soft: rgba(255, 255, 255, 0.05);
-  --mkt-indigo: #4f7aff; /* the blue */
-  --mkt-blue: #22c55e;   /* the green */
-  --mkt-cyan: #22c55e;   /* green */
-  --mkt-violet: #f5b642; /* the amber */
-  --mkt-mint: #22c55e;   /* green */
+  /* Rich, layered dark blue — the palette pulled from the ViralBlast reference.
+     Deep navy ground, cards a step above with a hairline blue top-glow, blue
+     #4f7aff as the primary, cyan/green/gold as the live-status accents. Text
+     is a soft blue-white, never harsh #fff. */
+  --mkt-canvas: #0a1120;       /* ground */
+  --mkt-veil: #0c1424;         /* alternating section band */
+  --mkt-card: #0c1224;         /* cards / panels */
+  --mkt-card-hi: #111b31;      /* elevated surface (demo chrome, hovered card) */
+  --mkt-ink: #e6ecfb;          /* headings / primary text */
+  --mkt-ink-soft: #93a3cd;     /* body copy */
+  --mkt-ink-faint: #5c6e9c;    /* labels, meta, timestamps */
+  --mkt-line: rgba(79, 122, 255, 0.14);
+  --mkt-line-soft: rgba(79, 122, 255, 0.08);
+  --mkt-indigo: #4f7aff; /* brand blue — the primary accent */
+  --mkt-blue: #4f7aff;
+  --mkt-cyan: #00d4ff;
+  --mkt-violet: #a855f7;
+  --mkt-mint: #00e676;
+  --mkt-gold: #ffb627;
 
   color-scheme: dark;
   position: relative;
@@ -452,58 +456,83 @@
   font-feature-settings: "ss01", "cv01";
 }
 .mkt ::selection {
-  background: rgba(79, 122, 255, 0.30);
+  background: rgba(79, 122, 255, 0.32);
+}
+/* in-page anchors land cleanly below the sticky header */
+.mkt [id] {
+  scroll-margin-top: 5.25rem;
+}
+@media (prefers-reduced-motion: no-preference) {
+  html:has(.mkt) {
+    scroll-behavior: smooth;
+  }
 }
 .mkt ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(79, 122, 255, 0.22);
 }
 
-/* layered background: aurora blooms + a whisper-fine dot grid + grain */
+/* a card with the reference's hairline blue top-glow */
+.mkt-panel {
+  position: relative;
+  overflow: hidden;
+  background: var(--mkt-card);
+  border: 1px solid var(--mkt-line);
+  border-radius: 16px;
+}
+.mkt-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(79, 122, 255, 0.35), transparent);
+}
+
+/* layered background: two aurora blooms + a fine blue grid, matching the ref */
 .mkt-bg {
   position: fixed;
   inset: 0;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  background: var(--mkt-canvas);
+  background:
+    radial-gradient(ellipse 80% 55% at 12% -6%, rgba(79, 122, 255, 0.13) 0%, transparent 55%),
+    radial-gradient(ellipse 62% 72% at 92% 108%, rgba(0, 212, 255, 0.08) 0%, transparent 55%),
+    linear-gradient(180deg, #0b1526 0%, #0a1120 55%, #070c17 100%);
 }
 .mkt-bg::before,
 .mkt-bg::after {
   content: "";
   position: absolute;
   border-radius: 9999px;
-  filter: blur(88px);
+  filter: blur(110px);
   opacity: 1;
 }
 .mkt-bg::before {
-  width: 50rem;
-  height: 50rem;
-  top: -22rem;
-  left: -15rem;
-  background: radial-gradient(circle at 36% 36%, rgba(34, 197, 94, 0.16), transparent 66%);
+  width: 46rem;
+  height: 46rem;
+  top: -24rem;
+  left: -14rem;
+  background: radial-gradient(circle at 38% 38%, rgba(79, 122, 255, 0.22), transparent 66%);
   animation: mkt-drift-a 26s ease-in-out infinite alternate;
 }
 .mkt-bg::after {
-  width: 44rem;
-  height: 44rem;
+  width: 40rem;
+  height: 40rem;
   top: -8rem;
-  right: -18rem;
-  background: radial-gradient(circle at 60% 40%, rgba(79, 122, 255, 0.16), transparent 68%);
+  right: -16rem;
+  background: radial-gradient(circle at 60% 40%, rgba(0, 212, 255, 0.16), transparent 68%);
   animation: mkt-drift-b 30s ease-in-out infinite alternate;
-}
-/* subtle dark depth, matching the app: bg3 at the top → card colour → deepest at the fold */
-.mkt-bg {
-  background:
-    linear-gradient(180deg, #0d1526 0%, #0b1120 55%, #06090f 100%);
 }
 .mkt-grid {
   position: fixed;
   inset: 0;
   z-index: -1;
   pointer-events: none;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.045) 1px, transparent 1px);
-  background-size: 26px 26px;
-  mask-image: radial-gradient(ellipse 92% 58% at 50% -2%, #000 18%, transparent 78%);
+  background-image:
+    linear-gradient(rgba(79, 122, 255, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(79, 122, 255, 0.035) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 100% 62% at 50% -4%, #000 26%, transparent 82%);
 }
 
 @keyframes mkt-drift-a {
@@ -543,8 +572,15 @@
   }
 }
 
-/* kept for backwards compat — now a single solid colour, no gradient in text */
 .mkt-headline-grad {
+  color: var(--mkt-ink);
+}
+/* accent panel — the CTA band: a lifted, blue-washed card with an aurora */
+.mkt-dark {
+  background:
+    radial-gradient(ellipse 60% 100% at 15% 0%, rgba(0, 230, 118, 0.10), transparent 60%),
+    radial-gradient(ellipse 60% 100% at 85% 100%, rgba(79, 122, 255, 0.16), transparent 60%),
+    #0b1326;
   color: var(--mkt-ink);
 }
 .mkt-rise {
@@ -554,12 +590,40 @@
   animation: mkt-float 6s ease-in-out infinite;
 }
 
+/* live-demo motion */
+@keyframes mkt-tick-in {
+  from { opacity: 0; transform: translateX(-6px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+@keyframes mkt-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.45; transform: scale(1.35); }
+}
+@keyframes mkt-sweep {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(300%); }
+}
+.mkt-tick-in { animation: mkt-tick-in 0.28s ease both; }
+.mkt-pulse   { animation: mkt-pulse 1.6s ease-in-out infinite; }
+.mkt-panel-live::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: linear-gradient(90deg, transparent, rgba(79, 122, 255, 0.06), transparent);
+  width: 33%;
+  animation: mkt-sweep 3.2s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .mkt-bg::before,
   .mkt-bg::after,
-  .mkt-headline-grad,
   .mkt-rise,
-  .mkt-float {
+  .mkt-float,
+  .mkt-tick-in,
+  .mkt-pulse,
+  .mkt-panel-live::after {
     animation: none;
   }
 }

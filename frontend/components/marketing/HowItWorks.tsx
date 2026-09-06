@@ -50,7 +50,7 @@ export function HowItWorks() {
         {STEPS.map((s) => (
           <div
             key={s.n}
-            className={`relative overflow-hidden rounded-2xl border border-mkt-line ${s.tint} p-6 transition-all duration-200 hover:-translate-y-1 hover:border-white/15`}
+            className="mkt-panel overflow-hidden p-6 transition-all duration-200 hover:-translate-y-1 hover:border-mkt-blue/40 hover:bg-mkt-card-hi"
           >
             <span className={`absolute inset-y-0 left-0 w-[3px] ${s.bar}`} />
             <div className="flex items-center justify-between">

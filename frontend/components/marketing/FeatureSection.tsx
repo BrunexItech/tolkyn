@@ -30,8 +30,8 @@ const FEATURES = [
 
 export function FeatureSection() {
   return (
-    <section id="features" className="border-t border-mkt-line-soft bg-mkt-veil/50">
-      <div className="mx-auto max-w-6xl px-5 py-20">
+    <section id="features" className="border-y border-mkt-line-soft bg-mkt-veil">
+      <div className="mx-auto max-w-6xl px-5 py-24">
         <div className="mb-12 max-w-xl">
           <span className="text-[10.5px] font-semibold uppercase tracking-[0.16em] text-mkt-ink-faint">
             Features
@@ -50,7 +50,7 @@ export function FeatureSection() {
             return (
               <div
                 key={f.title}
-                className={`relative overflow-hidden rounded-2xl border border-mkt-line ${t.tint} p-5 transition-all duration-200 hover:-translate-y-1 hover:border-white/15`}
+                className="mkt-panel overflow-hidden p-5 transition-all duration-200 hover:-translate-y-1 hover:border-mkt-blue/40 hover:bg-mkt-card-hi"
               >
                 <span className={`absolute inset-y-0 left-0 w-[3px] ${t.bar}`} />
                 <span className={`grid size-10 place-items-center rounded-xl ${t.chip} [&_svg]:size-[19px]`}>

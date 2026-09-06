@@ -1,35 +1,41 @@
 import Link from "next/link";
 import { MktBrand } from "./MktBrand";
 
-const COLS: { title: string; links: { label: string; href?: string }[] }[] = [
+// Every link resolves to a real destination. "Product" links point straight
+// at the app — a signed-in visitor lands on the feature; a signed-out one is
+// sent to /login?next=… and continues there after signing in.
+const COLS: { title: string; links: { label: string; href: string }[] }[] = [
   {
     title: "Product",
     links: [
-      { label: "Publishing" },
-      { label: "Inbox" },
-      { label: "Call Center" },
-      { label: "Analytics" },
-      { label: "Automations" },
+      { label: "Publishing", href: "/dashboard/publishing" },
+      { label: "Social Inbox", href: "/dashboard/inbox" },
+      { label: "Call Center", href: "/dashboard/calls" },
+      { label: "Analytics", href: "/dashboard/analytics" },
+      { label: "Automations", href: "/dashboard/automations" },
+    ],
+  },
+  {
+    title: "Explore",
+    links: [
+      { label: "How it works", href: "/#how" },
+      { label: "Features", href: "/#features" },
+      { label: "Customers", href: "/#customers" },
     ],
   },
   {
     title: "Company",
-    links: [{ label: "About" }, { label: "Customers" }, { label: "Careers" }, { label: "Blog" }],
-  },
-  {
-    title: "Legal",
     links: [
+      { label: "Support", href: "/support" },
       { label: "Privacy", href: "/privacy" },
       { label: "Terms", href: "/terms" },
-      { label: "Security" },
-      { label: "DPA" },
     ],
   },
 ];
 
 export function MarketingFooter() {
   return (
-    <footer className="border-t border-mkt-line-soft bg-white/[0.02]">
+    <footer className="border-t border-mkt-line bg-mkt-card">
       <div className="mx-auto max-w-6xl px-5 py-14">
         <div className="grid gap-10 sm:grid-cols-[1.5fr_repeat(3,1fr)]">
           <div>
@@ -46,18 +52,12 @@ export function MarketingFooter() {
               <ul className="mt-3.5 space-y-2.5">
                 {c.links.map((l) => (
                   <li key={l.label}>
-                    {l.href ? (
-                      <Link
-                        href={l.href}
-                        className="text-[12px] text-mkt-ink-soft transition-colors hover:text-mkt-ink"
-                      >
-                        {l.label}
-                      </Link>
-                    ) : (
-                      <span className="cursor-default text-[12px] text-mkt-ink-soft transition-colors hover:text-mkt-ink">
-                        {l.label}
-                      </span>
-                    )}
+                    <Link
+                      href={l.href}
+                      className="text-[12px] text-mkt-ink-soft transition-colors hover:text-mkt-ink"
+                    >
+                      {l.label}
+                    </Link>
                   </li>
                 ))}
               </ul>

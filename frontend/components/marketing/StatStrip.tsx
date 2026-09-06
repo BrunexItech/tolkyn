@@ -7,8 +7,8 @@ const STATS = [
 
 export function StatStrip() {
   return (
-    <section id="customers" className="mx-auto max-w-6xl px-5 py-16">
-      <div className="grid grid-cols-2 gap-8 rounded-2xl border border-mkt-line bg-mkt-card px-8 py-10 md:grid-cols-4">
+    <section id="customers" className="mx-auto max-w-6xl px-5 py-20">
+      <div className="mkt-panel grid grid-cols-2 gap-8 px-8 py-10 md:grid-cols-4">
         {STATS.map((s) => (
           <div key={s.k}>
             <div className="font-mono text-[30px] font-bold leading-none text-mkt-ink">{s.v}</div>

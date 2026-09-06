@@ -1,15 +1,14 @@
 import { ArrowRight, LogIn } from "lucide-react";
 import { MktButton } from "./MktButton";
 
-/** Glass card echoing the page's own aurora background (green + blue + amber —
- * the site's 3 state colors) instead of a flat, clashing green fill. */
+/** Closing call-to-action — a lifted, blue-washed panel with a soft aurora. */
 export function CtaBand() {
   return (
-    <section className="mx-auto max-w-6xl px-5 py-20">
-      <div className="relative isolate overflow-hidden rounded-3xl border border-mkt-line bg-mkt-card/60 p-12 text-center shadow-[0_30px_80px_-28px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-        <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-[#22c55e]/20 blur-[90px]" />
-        <div className="pointer-events-none absolute -right-16 -top-16 size-72 rounded-full bg-[#4f7aff]/22 blur-[90px]" />
-        <div className="pointer-events-none absolute -bottom-28 left-1/3 size-80 rounded-full bg-[#f5b642]/14 blur-[100px]" />
+    <section className="mx-auto max-w-6xl px-5 py-24">
+      <div className="mkt-dark relative isolate overflow-hidden rounded-3xl border border-mkt-line p-12 text-center shadow-[0_40px_120px_-40px_rgba(0,0,0,0.6)]">
+        <div className="pointer-events-none absolute -left-20 -top-24 size-72 rounded-full bg-[#00e676]/16 blur-[90px]" />
+        <div className="pointer-events-none absolute -right-16 -top-16 size-72 rounded-full bg-[#4f7aff]/26 blur-[90px]" />
+        <div className="pointer-events-none absolute -bottom-28 left-1/3 size-80 rounded-full bg-[#00d4ff]/14 blur-[100px]" />
         <div className="pointer-events-none absolute inset-0 rounded-3xl ring-1 ring-inset ring-white/[0.06]" />
 
         <h2 className="relative text-[26px] font-semibold tracking-tight text-mkt-ink sm:text-[32px]">

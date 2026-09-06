@@ -14,7 +14,11 @@ const PENDING_MSG =
 
 function LoginInner() {
   const router = useRouter();
-  const justSignedUp = useSearchParams().get("pending") === "1";
+  const params = useSearchParams();
+  const justSignedUp = params.get("pending") === "1";
+  // Only honour same-app destinations — never an open redirect.
+  const nextRaw = params.get("next") ?? "";
+  const next = nextRaw.startsWith("/dashboard") ? nextRaw : "/dashboard";
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState(justSignedUp ? PENDING_MSG : "");
@@ -32,7 +36,7 @@ function LoginInner() {
       document.cookie = `access_token=${res.token.access_token}; path=/; max-age=604800`;
       document.cookie = `refresh_token=${res.token.refresh_token}; path=/; max-age=2592000`;
       toast.success("Welcome back");
-      router.push("/dashboard");
+      router.push(next);
     } catch (err) {
       setError((err as Error).message || "Login failed. Check your credentials.");
       setLoading(false);

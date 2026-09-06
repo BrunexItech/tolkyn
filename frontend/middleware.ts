@@ -29,9 +29,12 @@ export function middleware(request: NextRequest) {
   // Protected routes
   const isProtectedRoute = pathname.startsWith("/dashboard");
 
-  // If accessing protected route without token → redirect to login
+  // If accessing protected route without token → redirect to login, keeping
+  // where they were headed so we can send them straight there after sign-in.
   if (isProtectedRoute && !token) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    const login = new URL("/login", request.url);
+    login.searchParams.set("next", pathname + request.nextUrl.search);
+    return NextResponse.redirect(login);
   }
 
   // If accessing an auth page while already signed in → go to the dashboard

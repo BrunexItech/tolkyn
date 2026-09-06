@@ -30,8 +30,8 @@ export const metadata: Metadata = {
 export default function MarketingLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="mkt font-sans">
-      {/* keep the page bright past the footer, and never scroll sideways */}
-      <style>{`html,body{background:#0b1120;overflow-x:hidden}`}</style>
+      {/* keep the page colour past the footer, and never scroll sideways */}
+      <style>{`html,body{background:#0a1120;overflow-x:hidden}`}</style>
       <div className="mkt-bg" aria-hidden />
       <div className="mkt-grid" aria-hidden />
       {children}
