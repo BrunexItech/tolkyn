@@ -97,6 +97,7 @@ class PlatformUserResponse(BaseModel):
     is_email_verified: bool
     is_approved: bool
     allowed_video_models: List[str] = []
+    allowed_video_durations: List[int] = []
     video_budget_usd: Optional[float] = None
     daily_image_limit: Optional[int] = None
     daily_video_limit: Optional[int] = None
@@ -126,6 +127,7 @@ class PlatformUserUpdate(BaseModel):
     status: Optional[str] = None
     is_approved: Optional[bool] = None
     allowed_video_models: Optional[List[str]] = None
+    allowed_video_durations: Optional[List[int]] = None  # clip lengths the user may pick; [] = platform default
     video_budget_usd: Optional[float] = None
     daily_image_limit: Optional[int] = None  # null = inherit package; 0 = blocked
     daily_video_limit: Optional[int] = None

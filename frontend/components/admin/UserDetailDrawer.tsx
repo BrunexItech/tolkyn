@@ -306,6 +306,40 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
               </p>
             </div>
 
+            <div className="mt-3">
+              <SectionLabel>Clip lengths this user can pick</SectionLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {[4, 8, 16, 30, 45, 60].map((d) => {
+                  const set = user.allowed_video_durations ?? [];
+                  const on = set.length === 0 ? d <= 8 : set.includes(d);
+                  return (
+                    <button
+                      key={d}
+                      onClick={() => {
+                        const cur = user.allowed_video_durations ?? [];
+                        const base = cur.length ? cur : [4, 8];
+                        const next = base.includes(d)
+                          ? base.filter((x) => x !== d)
+                          : [...base, d].sort((a, b) => a - b);
+                        update.mutate({ id: user.id, allowed_video_durations: next });
+                      }}
+                      className={
+                        on
+                          ? "rounded-md border border-om-violet/50 bg-om-violet/15 px-2 py-1 text-[11px] font-medium text-om-violet"
+                          : "rounded-md border border-om-border bg-white/[0.02] px-2 py-1 text-[11px] text-om-muted hover:text-om-dim"
+                      }
+                    >
+                      {d}s
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-[10px] text-om-faint">
+                The user chooses from the lengths you enable here (max 60s). Nothing enabled → they
+                get 4s and 8s. Anything over 8s is stitched from segments.
+              </p>
+            </div>
+
             <div className="mt-2">
               <SectionLabel>Video budget (USD)</SectionLabel>
               <input

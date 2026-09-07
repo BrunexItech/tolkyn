@@ -26,6 +26,8 @@ export interface VideoModelsResponse {
   configured: boolean;
   brand_logo_url: string | null;
   brand_colors: string[] | null;
+  /** clip lengths this workspace may pick from — set by the super admin */
+  allowed_durations: number[];
 }
 
 export type VideoJobStatus = "queued" | "running" | "succeeded" | "failed";

@@ -47,9 +47,33 @@ VEO_MODELS: Dict[str, VeoModel] = {
 }
 
 DEFAULT_MODEL_KEY = "veo-3.1-fast"
-ALLOWED_DURATIONS = (4, 6, 8)
+
+# Veo generates at most ~8s in one call; anything longer is produced as
+# back-to-back segments and stitched. SELECTABLE_DURATIONS is the full menu a
+# super admin may expose to a workspace; DEFAULT_DURATIONS is what a workspace
+# gets when the admin hasn't set anything.
+NATIVE_MAX_DURATION = 8
+SELECTABLE_DURATIONS = (4, 8, 16, 30, 45, 60)
+DEFAULT_DURATIONS = (4, 8)
+# kept for anything importing the old name (validation now uses the per-user set)
+ALLOWED_DURATIONS = SELECTABLE_DURATIONS
 ALLOWED_RESOLUTIONS = ("720p", "1080p", "4k")
 ALLOWED_ASPECT_RATIOS = ("16:9", "9:16")
+
+
+def duration_plan(total_seconds: int) -> list[int]:
+    """Split a target duration into Veo-native segments (<= NATIVE_MAX each,
+    each at least 4s)."""
+    total = max(4, int(total_seconds))
+    if total <= NATIVE_MAX_DURATION:
+        return [total]
+    segs: list[int] = []
+    remaining = total
+    while remaining > NATIVE_MAX_DURATION:
+        segs.append(NATIVE_MAX_DURATION)
+        remaining -= NATIVE_MAX_DURATION
+    segs.append(max(4, remaining))
+    return segs
 
 
 def get_model(key: str) -> VeoModel:

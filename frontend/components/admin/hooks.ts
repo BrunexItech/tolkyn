@@ -146,6 +146,7 @@ export function useUpdateUser() {
         status?: string;
         is_approved?: boolean;
         allowed_video_models?: string[];
+        allowed_video_durations?: number[];
         video_budget_usd?: number | null;
         daily_image_limit?: number | null;
         daily_video_limit?: number | null;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2, Sparkles, Paperclip, X, ShieldAlert, Volume2, Wand2, ChevronDown, Palette } from "lucide-react";
 import { Card } from "@/components/om/primitives/Card";
 import { Field, OmInput } from "@/components/om/primitives/Field";
@@ -11,7 +11,6 @@ import { useVideoModels, useGenerateVideo, useEnhancePrompt } from "./hooks";
 import { toast } from "@/lib/om/toast";
 import { cn } from "@/lib/utils";
 
-const DURATIONS = [4, 6, 8];
 const ASPECTS = ["16:9", "9:16"];
 
 const EXAMPLES = [
@@ -77,12 +76,17 @@ export function VideoGeneratorForm() {
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [resolution, setResolution] = useState("1080p");
   const [duration, setDuration] = useState(8);
-
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
   const [heroLogoWhere, setHeroLogoWhere] = useState("");
   const brandColors = models?.brand_colors ?? [];
   const hasBrandLogo = !!models?.brand_logo_url;
+  const durations = models?.allowed_durations?.length ? models.allowed_durations : [4, 8];
+
+  // keep the picked duration within what this workspace is allowed
+  useEffect(() => {
+    if (durations.length && !durations.includes(duration)) setDuration(durations[0]);
+  }, [durations, duration]);
 
   const activeModel = models?.models.find((m) => m.key === modelKey) ?? models?.models[0] ?? null;
   const effectiveModelKey = modelKey || activeModel?.key || "";
@@ -243,10 +247,24 @@ export function VideoGeneratorForm() {
               onChange={(e) => setDuration(Number(e.target.value))}
               className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-2 text-[12px] text-om-text outline-none focus:border-om-violet/60"
             >
-              {DURATIONS.map((d) => <option key={d} value={d}>{d}s</option>)}
+              {durations.map((d) => (
+                <option key={d} value={d}>
+                  {d}s
+                </option>
+              ))}
             </select>
           </Field>
         </div>
+
+        {duration > 8 && (
+          <div className="flex items-start gap-1.5 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5 text-[10px] text-om-faint">
+            <Volume2 className="mt-px size-3 shrink-0 text-om-muted" />
+            <span>
+              {duration}s clips are produced as {Math.ceil(duration / 8)} back-to-back segments and
+              stitched — generation takes longer and cost scales with length.
+            </span>
+          </div>
+        )}
 
         <div className={cn("flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-[11px]", activeModel?.supports_audio === false ? "border-om-border bg-white/[0.02] text-om-faint" : "border-om-violet/25 bg-om-violet/[0.06] text-om-violet")}>
           <Volume2 className="size-3.5 shrink-0" />

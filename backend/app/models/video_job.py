@@ -38,6 +38,14 @@ class VideoJob(BaseModel):
     # frame is generated and used as the image-to-video reference.
     hero_logo_where = Column(String(200), nullable=True)
 
+    # For clips longer than Veo's ~8s native limit: the job is produced as
+    # back-to-back segments and stitched. segment_plan is the list of segment
+    # durations; segment_index is the one currently generating.
+    segment_plan = Column(JSON, nullable=True)
+    segment_index = Column(Integer, nullable=False, default=0)
+    segment_paths = Column(JSON, nullable=False, default=list)  # /media/... per finished segment
+    continuation_frame_url = Column(String(500), nullable=True)  # last frame of the previous segment
+
     status = Column(Enum(VideoJobStatus), nullable=False, default=VideoJobStatus.QUEUED)
     operation_name = Column(String(300), nullable=True)  # Gemini operation, for polling
     video_url = Column(String(500), nullable=True)        # local /media/... once downloaded

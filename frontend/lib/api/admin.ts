@@ -140,6 +140,7 @@ export interface PlatformUser {
   is_email_verified: boolean;
   is_approved: boolean;
   allowed_video_models: string[];
+  allowed_video_durations: number[];
   video_budget_usd: number | null;
   daily_image_limit: number | null;
   daily_video_limit: number | null;
@@ -358,6 +359,7 @@ export const adminApi = {
       status: string;
       is_approved: boolean;
       allowed_video_models: string[];
+      allowed_video_durations: number[];
       video_budget_usd: number | null;
       daily_image_limit: number | null;
       daily_video_limit: number | null;

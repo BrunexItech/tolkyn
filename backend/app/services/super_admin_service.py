@@ -251,6 +251,13 @@ class SuperAdminService:
             user.is_approved = patch["is_approved"]
         if "allowed_video_models" in patch:
             user.allowed_video_models = patch["allowed_video_models"] or []
+        if "allowed_video_durations" in patch:
+            from app.core.video_models import SELECTABLE_DURATIONS
+
+            raw = patch["allowed_video_durations"] or []
+            user.allowed_video_durations = sorted(
+                {int(d) for d in raw if int(d) in SELECTABLE_DURATIONS}
+            )
         if "video_budget_usd" in patch:
             user.video_budget_usd = patch["video_budget_usd"]
         if "daily_image_limit" in patch:

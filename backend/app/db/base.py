@@ -170,6 +170,11 @@ _SCHEMA_PATCHES = [
     "ON team_members (workspace_id, user_id) WHERE user_id IS NOT NULL",
     "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS hero_logo_where VARCHAR(200)",
     "ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS reply_to VARCHAR(255)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS allowed_video_durations JSON NOT NULL DEFAULT '[]'",
+    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS segment_plan JSON",
+    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS segment_index INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS segment_paths JSON NOT NULL DEFAULT '[]'",
+    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS continuation_frame_url VARCHAR(500)",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

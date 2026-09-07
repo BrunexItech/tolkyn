@@ -20,6 +20,10 @@ class VideoModelsResponse(BaseModel):
     configured: bool = Field(..., description="Whether the platform has a Gemini API key set up")
     brand_logo_url: Optional[str] = None
     brand_colors: Optional[List[str]] = None
+    allowed_durations: List[int] = Field(
+        default_factory=lambda: [4, 8],
+        description="Clip lengths this workspace may pick from (set by the super admin)",
+    )
 
 
 class VideoGenerateRequest(BaseModel):

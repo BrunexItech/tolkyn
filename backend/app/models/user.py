@@ -55,6 +55,9 @@ class User(BaseModel):
     # allowed_video_models means "no restriction — every model is usable".
     # video_budget_usd of None means "no spending cap".
     allowed_video_models = Column(JSON, default=list, nullable=False)
+    # which clip lengths this workspace may pick from (subset of
+    # video_models.SELECTABLE_DURATIONS). [] means "platform default".
+    allowed_video_durations = Column(JSON, default=list, nullable=False)
     video_budget_usd = Column(Float, nullable=True)
 
     # Per-day generation caps (super admin controlled). NULL = fall back to the

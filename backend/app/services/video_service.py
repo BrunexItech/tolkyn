@@ -14,9 +14,11 @@ from app.core.config import settings
 from app.core.limits import enforce_daily_limit
 from app.core.video_models import (
     ALLOWED_ASPECT_RATIOS,
-    ALLOWED_DURATIONS,
+    DEFAULT_DURATIONS,
+    SELECTABLE_DURATIONS,
     VEO_MODELS,
     catalog_payload,
+    duration_plan,
     estimate_cost_usd,
     get_model,
     video_pixel_width,
@@ -25,6 +27,7 @@ from app.models.user import User
 from app.models.video_job import VideoJob, VideoJobStatus
 from app.schemas.video import BrandUpdateRequest, VideoGenerateRequest, VideoModelsResponse
 from app.services import gemini_video_client as gemini
+from app.services.video_ffmpeg import concat_videos, extract_last_frame
 from app.services.watermark import apply_watermark
 
 logger = logging.getLogger(__name__)
@@ -40,6 +43,13 @@ class VideoService:
         self.workspace_id = user.id
 
     # ------------------------------------------------------------- models
+    def _allowed_durations(self) -> list[int]:
+        """The clip lengths this workspace may choose from — the super admin's
+        per-user list, intersected with what's actually selectable; falls back
+        to the platform default when the admin hasn't set anything."""
+        picked = [d for d in (self.user.allowed_video_durations or []) if d in SELECTABLE_DURATIONS]
+        return sorted(picked) if picked else list(DEFAULT_DURATIONS)
+
     async def models_response(self) -> VideoModelsResponse:
         catalog = catalog_payload()
         allowed = self.user.allowed_video_models or []
@@ -53,6 +63,7 @@ class VideoService:
             configured=bool(settings.GEMINI_API_KEY),
             brand_logo_url=self.user.brand_logo_url,
             brand_colors=self.user.brand_colors,
+            allowed_durations=self._allowed_durations(),
         )
 
     # ------------------------------------------------------------- brand
@@ -90,8 +101,13 @@ class VideoService:
             )
         if data.model_key not in VEO_MODELS:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Unknown video model")
-        if data.duration_seconds not in ALLOWED_DURATIONS:
-            raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Duration must be one of {ALLOWED_DURATIONS} seconds")
+        allowed_durations = self._allowed_durations()
+        if data.duration_seconds not in allowed_durations:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                f"This workspace can generate {', '.join(f'{d}s' for d in allowed_durations)} clips. "
+                "Ask the platform administrator to enable other lengths.",
+            )
         if data.aspect_ratio not in ALLOWED_ASPECT_RATIOS:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"Aspect ratio must be one of {ALLOWED_ASPECT_RATIOS}")
 
@@ -259,8 +275,33 @@ async def _build_hero_frame(job: VideoJob) -> Optional[str]:
         return None
 
 
-async def _start_job(db: AsyncSession, job: VideoJob) -> int:
+async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
+    """Kick off the Veo generation for job.segment_index."""
     model = get_model(job.model_key)
+    has_logo = bool(_resolve_media_path(job.brand_logo_url))
+    plan = job.segment_plan or [job.duration_seconds]
+    seg_seconds = plan[job.segment_index]
+
+    # segment 0 → the user's/hero starting frame; later segments → the last
+    # frame of the previous segment, so the clips flow into each other.
+    ref_url = job.reference_image_url if job.segment_index == 0 else job.continuation_frame_url
+    ref_path = _resolve_media_path(ref_url)
+    ref_bytes = ref_path.read_bytes() if ref_path else None
+
+    job.operation_name = await gemini.start_generation(
+        model_id=model.model_id,
+        prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo),
+        aspect_ratio=job.aspect_ratio,
+        resolution=job.resolution,
+        duration_seconds=seg_seconds,
+        negative_prompt=_negative_with_brand(job.negative_prompt, has_logo),
+        reference_image_bytes=ref_bytes,
+    )
+    job.status = VideoJobStatus.RUNNING
+    await db.commit()
+
+
+async def _start_job(db: AsyncSession, job: VideoJob) -> int:
     has_logo = bool(_resolve_media_path(job.brand_logo_url))
 
     if job.hero_logo_where and not job.reference_image_url and has_logo:
@@ -269,24 +310,59 @@ async def _start_job(db: AsyncSession, job: VideoJob) -> int:
             job.reference_image_url = hero
             await db.commit()
 
-    ref_bytes = None
-    ref_path = _resolve_media_path(job.reference_image_url)
-    if ref_path:
-        ref_bytes = ref_path.read_bytes()
+    if not job.segment_plan:
+        job.segment_plan = duration_plan(job.duration_seconds)
+        job.segment_index = 0
+        job.segment_paths = []
+        await db.commit()
 
-    operation_name = await gemini.start_generation(
-        model_id=model.model_id,
-        prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo),
-        aspect_ratio=job.aspect_ratio,
-        resolution=job.resolution,
-        duration_seconds=job.duration_seconds,
-        negative_prompt=_negative_with_brand(job.negative_prompt, has_logo),
-        reference_image_bytes=ref_bytes,
-    )
-    job.operation_name = operation_name
-    job.status = VideoJobStatus.RUNNING
-    await db.commit()
+    await _start_segment(db, job)
     return 1
+
+
+async def _finish_job(db: AsyncSession, job: VideoJob) -> None:
+    """All segments done — stitch, watermark, publish."""
+    _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    seg_paths = [
+        _resolve_media_path(u) for u in (job.segment_paths or [])
+    ]
+    seg_paths = [Path(p) for p in seg_paths if p]
+    if not seg_paths:
+        job.status = VideoJobStatus.FAILED
+        job.error_message = "No video segments were produced"
+        await db.commit()
+        return
+
+    raw_path = _VIDEO_DIR / f"{job.id}.raw.mp4"
+    if not await concat_videos(seg_paths, raw_path):
+        job.status = VideoJobStatus.FAILED
+        job.error_message = "Could not stitch the video segments together"
+        await db.commit()
+        return
+
+    final_path = _VIDEO_DIR / f"{job.id}.mp4"
+    logo_path = _resolve_media_path(job.brand_logo_url)
+    watermarked = False
+    if logo_path:
+        width, height = video_pixel_width(job.resolution, job.aspect_ratio)
+        watermarked = await apply_watermark(
+            raw_path, logo_path, final_path, video_width=width, video_height=height
+        )
+    if not watermarked:
+        raw_path.replace(final_path)
+    else:
+        raw_path.unlink(missing_ok=True)
+
+    for p in seg_paths:
+        p.unlink(missing_ok=True)
+    if job.continuation_frame_url:
+        cf = _resolve_media_path(job.continuation_frame_url)
+        if cf:
+            Path(cf).unlink(missing_ok=True)
+
+    job.video_url = f"/media/videos/{job.id}.mp4"
+    job.status = VideoJobStatus.SUCCEEDED
+    await db.commit()
 
 
 async def _poll_job(db: AsyncSession, job: VideoJob) -> int:
@@ -307,25 +383,23 @@ async def _poll_job(db: AsyncSession, job: VideoJob) -> int:
         await db.commit()
         return 1
 
-    video_bytes = await gemini.download_video(result["video_uri"])
     _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    raw_path = _VIDEO_DIR / f"{job.id}.raw.mp4"
-    raw_path.write_bytes(video_bytes)
+    seg_path = _VIDEO_DIR / f"{job.id}.seg{job.segment_index}.mp4"
+    seg_path.write_bytes(await gemini.download_video(result["video_uri"]))
+    job.segment_paths = list(job.segment_paths or []) + [f"/media/videos/{seg_path.name}"]
 
-    final_path = _VIDEO_DIR / f"{job.id}.mp4"
-    logo_path = _resolve_media_path(job.brand_logo_url)
-    watermarked = False
-    if logo_path:
-        width, height = video_pixel_width(job.resolution, job.aspect_ratio)
-        watermarked = await apply_watermark(
-            raw_path, logo_path, final_path, video_width=width, video_height=height
-        )
-    if not watermarked:
-        raw_path.replace(final_path)
-    else:
-        raw_path.unlink(missing_ok=True)
+    plan = job.segment_plan or [job.duration_seconds]
+    if job.segment_index + 1 < len(plan):
+        # more to go — seed the next segment with this one's last frame
+        cont_png = _VIDEO_DIR / f"{job.id}.cont{job.segment_index}.png"
+        if await extract_last_frame(seg_path, cont_png):
+            job.continuation_frame_url = f"/media/videos/{cont_png.name}"
+        job.segment_index += 1
+        job.operation_name = None
+        await db.commit()
+        await _start_segment(db, job)
+        return 1
 
-    job.video_url = f"/media/videos/{job.id}.mp4"
-    job.status = VideoJobStatus.SUCCEEDED
-    await db.commit()
+    await _finish_job(db, job)
+    return 1
     return 1
