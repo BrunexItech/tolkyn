@@ -136,8 +136,10 @@ _PROMPT_IMAGE_SYSTEM = (
     "Cover in one or two natural sentences: the subject and what it's doing, the shot type "
     "and composition, the setting, the light and time of day, the colour and mood. Be "
     "concrete, never flowery. No lists, no '4k, ultra detailed, trending on artstation' "
-    "filler. If the user wants a non-photo style, commit to that style fully and skip the "
-    "camera talk. Never use emojis. Return ONLY JSON."
+    "filler. Start the prompt with the subject itself — never with 'Generate', 'Create', "
+    "'Make an image of', 'A sleek image of', or any instruction to the model. If the user "
+    "wants a non-photo style, commit to that style fully and skip the camera talk. Never "
+    "use emojis. Return ONLY JSON."
 )
 
 # Style words that mean the user deliberately wants a NON-photographic look —
