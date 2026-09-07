@@ -33,10 +33,19 @@ export default function BulkEmailPage() {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [accountId, setAccountId] = useState("");
+  const [replyTo, setReplyTo] = useState("");
+  const [replyToTouched, setReplyToTouched] = useState(false);
 
   useEffect(() => {
     if (!accountId && defaultAccount) setAccountId(defaultAccount.id);
   }, [defaultAccount, accountId]);
+
+  // Prefill "replies go to" from the chosen account's own reply-to, until the
+  // user types their own. Blank falls back to that same address on the server.
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+  useEffect(() => {
+    if (!replyToTouched) setReplyTo(selectedAccount?.reply_to ?? "");
+  }, [selectedAccount?.reply_to, replyToTouched]);
 
   const manualRecipients = useMemo(
     () =>
@@ -77,14 +86,18 @@ export default function BulkEmailPage() {
   const acct = accounts.find((a) => a.id === accountId);
   const remaining = acct ? Math.max(0, acct.daily_limit - acct.sent_today) : 0;
 
+  const replyDest = replyTo.trim() || acct?.reply_to || acct?.from_email || "";
+
   const doSend = async () => {
     if (!subject.trim() || !body.trim()) return toast.err("Add a subject and a message");
     if (!count) return toast.err("No recipients");
     if (!acct) return toast.err("Choose a sending account");
+    if (replyTo.trim() && !replyTo.trim().includes("@"))
+      return toast.err("The 'replies go to' address isn't a valid email");
     const ok = await confirm({
       title: `Send to ${count} recipient${count === 1 ? "" : "s"}?`,
-      message: `From ${acct.from_email}. ${
-        count > remaining ? `Only ${remaining} left in today's limit — the rest will be skipped.` : ""
+      message: `From ${acct.from_email}. Replies land with ${replyDest}.${
+        count > remaining ? ` Only ${remaining} left in today's limit — the rest will be skipped.` : ""
       }`,
       confirmLabel: "Send now",
     });
@@ -95,6 +108,7 @@ export default function BulkEmailPage() {
       email_account_id: accountId,
       source,
       manual: source === "manual" ? manualRecipients : undefined,
+      reply_to: replyTo.trim() || undefined,
     });
   };
 
@@ -157,6 +171,35 @@ export default function BulkEmailPage() {
               </OmSelect>
             </Field>
 
+            <Field
+              label="Replies go to"
+              hint="Every reply from a customer — Reply or Reply All — lands here. Leave blank to use the sending account's own address."
+            >
+              <div className="flex items-center gap-1.5">
+                <OmInput
+                  type="email"
+                  value={replyTo}
+                  onChange={(e) => {
+                    setReplyTo(e.target.value);
+                    setReplyToTouched(true);
+                  }}
+                  placeholder={selectedAccount?.from_email ?? "person@yourcompany.com"}
+                />
+                {replyToTouched && replyTo !== (selectedAccount?.reply_to ?? "") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReplyToTouched(false);
+                      setReplyTo(selectedAccount?.reply_to ?? "");
+                    }}
+                    className="shrink-0 text-[10.5px] text-om-muted hover:text-om-text"
+                  >
+                    reset
+                  </button>
+                )}
+              </div>
+            </Field>
+
             <Field label="Subject">
               <OmInput value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="A quick note" />
             </Field>
@@ -173,12 +216,19 @@ export default function BulkEmailPage() {
               />
             </Field>
 
-            <div className="flex items-center justify-between border-t border-om-border pt-2">
-              <span className="flex items-center gap-1.5 text-[11px] text-om-muted">
-                <Users className="size-3.5" />
-                {previewing ? "counting…" : `${count} recipient${count === 1 ? "" : "s"}`}
-                {acct && ` · ${remaining} left today`}
-              </span>
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-om-border pt-2">
+              <div className="flex flex-col gap-0.5 text-[11px] text-om-muted">
+                <span className="flex items-center gap-1.5">
+                  <Users className="size-3.5" />
+                  {previewing ? "counting…" : `${count} recipient${count === 1 ? "" : "s"}`}
+                  {acct && ` · ${remaining} left today`}
+                </span>
+                {replyDest && (
+                  <span className="flex items-center gap-1.5 text-om-faint">
+                    <Mail className="size-3" /> replies → {replyDest}
+                  </span>
+                )}
+              </div>
               <OmButton variant="solid" size="sm" onClick={doSend} disabled={send.isPending || !count}>
                 {send.isPending ? <Loader2 className="animate-spin" /> : <Send />} Send email
               </OmButton>
@@ -211,7 +261,14 @@ export default function BulkEmailPage() {
                 <ul className="flex flex-col divide-y divide-white/[0.05]">
                   {history.map((c) => (
                     <li key={c.id} className="flex items-center justify-between gap-2 py-1.5">
-                      <span className="min-w-0 truncate text-[11.5px]">{c.subject}</span>
+                      <span className="flex min-w-0 flex-col">
+                        <span className="truncate text-[11.5px]">{c.subject}</span>
+                        {c.reply_to && (
+                          <span className="truncate text-[9.5px] text-om-faint">
+                            replies → {c.reply_to}
+                          </span>
+                        )}
+                      </span>
                       <StatusBadge tone={c.failed ? "amber" : "green"}>
                         {c.sent}/{c.total}
                       </StatusBadge>

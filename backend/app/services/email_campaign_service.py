@@ -94,6 +94,7 @@ class EmailCampaignService:
         source: str,
         ids: Optional[List[str]] = None,
         manual: Optional[List[Dict[str, str]]] = None,
+        reply_to: Optional[str] = None,
     ) -> Dict[str, Any]:
         acc = (
             await self.accounts.get_model(email_account_id)
@@ -109,6 +110,19 @@ class EmailCampaignService:
         if not cfg.host or not cfg.password:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "That sending account is not fully configured.")
 
+        # Every reply from a customer — Reply or Reply All — goes to this
+        # address. An explicit per-campaign value wins; otherwise the sending
+        # account's own reply-to; otherwise unset (mail clients fall back to
+        # the From address).
+        reply_to = (reply_to or "").strip() or None
+        if reply_to and not _EMAIL_RE.match(reply_to.lower()):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                "The 'replies go to' address is not a valid email.",
+            )
+        effective_reply_to = reply_to or acc.reply_to or None
+        cfg.reply_to = effective_reply_to
+
         recipients = await self.resolve_recipients(source, ids=ids, manual=manual)
         if not recipients:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "No valid recipient email addresses.")
@@ -121,6 +135,7 @@ class EmailCampaignService:
             body=body,
             email_account_id=acc.id,
             source=source,
+            reply_to=effective_reply_to,
             total=len(recipients),
             status="sending",
             created_by=self.user_id,
@@ -191,6 +206,7 @@ def _campaign_dict(c: EmailCampaign) -> Dict[str, Any]:
         "id": c.id,
         "subject": c.subject,
         "source": c.source,
+        "reply_to": c.reply_to,
         "total": c.total,
         "sent": c.sent,
         "failed": c.failed,

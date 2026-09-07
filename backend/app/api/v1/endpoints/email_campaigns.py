@@ -35,12 +35,16 @@ class SendCampaignRequest(BaseModel):
     source: str = "manual"
     ids: Optional[List[str]] = None
     manual: Optional[List[ManualRecipient]] = None
+    reply_to: Optional[str] = Field(
+        None, max_length=255, description="Where customer replies to this blast land"
+    )
 
 
 class CampaignRow(BaseModel):
     id: str
     subject: str
     source: str
+    reply_to: Optional[str] = None
     total: int
     sent: int
     failed: int
@@ -84,4 +88,5 @@ async def send_campaign(
         source=body.source,
         ids=body.ids,
         manual=[m.model_dump() for m in body.manual] if body.manual else None,
+        reply_to=body.reply_to,
     )

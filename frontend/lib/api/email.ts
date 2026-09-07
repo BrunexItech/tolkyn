@@ -77,6 +77,7 @@ export interface EmailCampaignRow {
   id: string;
   subject: string;
   source: CampaignSource;
+  reply_to: string | null;
   total: number;
   sent: number;
   failed: number;
@@ -92,6 +93,8 @@ export interface SendCampaignBody {
   source: CampaignSource;
   ids?: string[];
   manual?: ManualRecipient[];
+  /** where every customer reply to this blast is routed */
+  reply_to?: string;
 }
 
 export const emailApi = {

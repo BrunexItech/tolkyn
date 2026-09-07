@@ -14,6 +14,9 @@ class EmailCampaign(BaseModel):
     body = Column(Text, nullable=False)
     email_account_id = Column(String(36), nullable=True)
     source = Column(String(20), nullable=False, default="manual")  # manual | leads | customers
+    # where customer replies to this blast are routed (Reply-To header on
+    # every message). Falls back to the sending account's reply_to.
+    reply_to = Column(String(255), nullable=True)
 
     total = Column(Integer, nullable=False, default=0)
     sent = Column(Integer, nullable=False, default=0)

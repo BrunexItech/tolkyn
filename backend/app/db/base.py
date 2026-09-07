@@ -169,6 +169,7 @@ _SCHEMA_PATCHES = [
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_team_members_workspace_user "
     "ON team_members (workspace_id, user_id) WHERE user_id IS NOT NULL",
     "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS hero_logo_where VARCHAR(200)",
+    "ALTER TABLE email_campaigns ADD COLUMN IF NOT EXISTS reply_to VARCHAR(255)",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run
