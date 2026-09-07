@@ -28,9 +28,10 @@ from app.services.content_ai import build_prompt, generate_copy, generate_image
 from app.services.image_chat import run_turn
 from app.services.logo_overlay import (
     composite_logo,
-    detect_logo_placement,
+    detect_logo_request,
     normalize_position,
 )
+from app.services.logo_scene import place_logo_in_scene
 from app.services.studio_service import StudioService
 
 router = APIRouter()
@@ -55,20 +56,30 @@ async def _owner(db: AsyncSession, workspace_id: str) -> User:
     return u
 
 
-def _resolve_logo_position(brand_logo: str | None, prompt: str) -> str | None:
-    """Turn the request's brand_logo option into a concrete position (or None).
-    'auto' reads the prompt for a logo request; anything else is taken as an
-    explicit position; 'off'/None means never."""
+def _resolve_logo_request(brand_logo: str | None, prompt: str) -> dict | None:
+    """Turn the request's brand_logo option into {mode, value} or None.
+    'auto' reads the prompt (a named surface -> 'scene', else a corner);
+    an explicit position -> a corner; 'off'/None -> never."""
     opt = (brand_logo or "").strip().lower()
     if not opt or opt == "off":
         return None
     if opt == "auto":
-        return detect_logo_placement(prompt)
-    return normalize_position(opt) or "bottom-right"
+        return detect_logo_request(prompt)
+    return {"mode": "corner", "value": normalize_position(opt) or "bottom-right"}
 
 
-def _reserve_space_hint(prompt: str, position: str) -> str:
-    spot = position.replace("-", " ")
+def _reserve_space_hint(prompt: str, req: dict) -> str:
+    if req["mode"] == "scene":
+        where = req["value"]
+        return (
+            f"{prompt}\n\n"
+            "IMPORTANT — branding: do NOT draw, invent or include ANY logo, emblem, "
+            "wordmark, brand name or invented text anywhere in this image. In "
+            f"particular render {where} completely plain and blank — no logo, no "
+            "text, no markings — because the real brand logo will be added onto it "
+            "afterwards. Keep that surface clearly visible and well lit."
+        )
+    spot = str(req["value"]).replace("-", " ")
     return (
         f"{prompt}\n\n"
         "IMPORTANT — branding: do NOT draw, invent or include ANY logo, emblem, "
@@ -81,17 +92,19 @@ def _reserve_space_hint(prompt: str, position: str) -> str:
     )
 
 
-def _apply_brand_logo(
+async def _apply_brand_logo(
     owner: User, result: dict, brand_logo: str | None, source_prompt: str
 ) -> tuple[str | None, str | None]:
-    """Composite the workspace brand logo onto the just-generated image, in
-    place. Returns (position_applied, note). Never raises — a failed overlay
-    leaves the image as generated."""
-    position = _resolve_logo_position(brand_logo, source_prompt)
-    if not position:
+    """Put the workspace brand logo on the just-generated image.
+    - corner  -> deterministic Pillow overlay (crisp, pixel-exact)
+    - scene   -> a gpt-image-1 edit that paints it onto the named surface
+    Returns (what_was_applied, note). Never raises."""
+    req = _resolve_logo_request(brand_logo, source_prompt)
+    if not req:
         return None, None
 
-    logo_path = _resolve_media(getattr(owner, "brand_logo_url", None))
+    logo_url = getattr(owner, "brand_logo_url", None)
+    logo_path = _resolve_media(logo_url)
     if not logo_path:
         return None, "No brand logo on file — add one in Content Studio to place it on images."
 
@@ -99,6 +112,16 @@ def _apply_brand_logo(
     if not img_path:
         return None, None
 
+    if req["mode"] == "scene":
+        placed = await place_logo_in_scene(img_path, logo_path, req["value"])
+        if placed:
+            new_path = _resolve_media(placed)
+            if new_path:
+                Path(new_path).replace(img_path)  # keep the original URL
+            return f"on {req['value']}", None
+        return None, "Couldn't place the logo in the scene — the image is unchanged."
+
+    position = req["value"]
     tmp = Path(img_path).with_suffix(".logo.png")
     if composite_logo(Path(img_path), Path(logo_path), tmp, position=position):
         tmp.replace(img_path)
@@ -161,10 +184,10 @@ async def studio_image(
 
     # Work out logo placement up front so the model can be told to leave a
     # clean spot for it (and not draw a fake logo of its own).
-    position = _resolve_logo_position(body.brand_logo, body.prompt)
+    req = _resolve_logo_request(body.brand_logo, body.prompt)
     gen_prompt = body.prompt
-    if position and _resolve_media(getattr(owner, "brand_logo_url", None)):
-        gen_prompt = _reserve_space_hint(body.prompt, position)
+    if req and _resolve_media(getattr(owner, "brand_logo_url", None)):
+        gen_prompt = _reserve_space_hint(body.prompt, req)
 
     try:
         result = await generate_image(
@@ -180,7 +203,7 @@ async def studio_image(
         raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Image generation failed: {exc}")
 
     result["prompt"] = body.prompt  # keep the user's words, not the space hint
-    logo_applied, logo_note = _apply_brand_logo(owner, result, body.brand_logo, body.prompt)
+    logo_applied, logo_note = await _apply_brand_logo(owner, result, body.brand_logo, body.prompt)
 
     asset_id = None
     if body.save:
@@ -218,7 +241,7 @@ async def studio_image_chat(
 
     # 'auto' reads the user's own instruction (not the model's rewritten
     # prompt) for a logo request; an explicit position is honoured directly.
-    logo_applied, logo_note = _apply_brand_logo(
+    logo_applied, logo_note = await _apply_brand_logo(
         owner, result, body.brand_logo, body.instruction
     )
 

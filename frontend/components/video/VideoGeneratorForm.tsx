@@ -80,7 +80,9 @@ export function VideoGeneratorForm() {
 
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
+  const [heroLogoWhere, setHeroLogoWhere] = useState("");
   const brandColors = models?.brand_colors ?? [];
+  const hasBrandLogo = !!models?.brand_logo_url;
 
   const activeModel = models?.models.find((m) => m.key === modelKey) ?? models?.models[0] ?? null;
   const effectiveModelKey = modelKey || activeModel?.key || "";
@@ -126,6 +128,10 @@ export function VideoGeneratorForm() {
         resolution,
         duration_seconds: duration,
         reference_image_url: referenceImage ?? undefined,
+        hero_logo_where:
+          hasBrandLogo && !referenceImage && heroLogoWhere.trim()
+            ? heroLogoWhere.trim()
+            : undefined,
       },
       { onSuccess: () => setPrompt("") },
     );
@@ -255,6 +261,25 @@ export function VideoGeneratorForm() {
           onPick={pickReferenceImage}
           onClear={() => setReferenceImage(null)}
         />
+
+        {hasBrandLogo && !referenceImage && (
+          <div className="rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-2">
+            <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-medium text-om-dim">
+              <Palette className="size-3 text-om-violet" /> Put my logo on a surface in the scene
+              <span className="text-om-faint">— optional</span>
+            </div>
+            <input
+              value={heroLogoWhere}
+              onChange={(e) => setHeroLogoWhere(e.target.value)}
+              placeholder="e.g. on the laptop lid · on the wall sign behind the desk"
+              className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[11.5px] text-om-text outline-none placeholder:text-om-muted focus:border-om-violet/60"
+            />
+            <div className="mt-1 text-[9.5px] text-om-faint">
+              We render the opening frame with your real logo on that surface and animate from it.
+              Works best on still or slow shots. Your logo also appears as a corner watermark either way.
+            </div>
+          </div>
+        )}
 
         {brandColors.length > 0 && (
           <div className="flex items-center gap-1.5 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5">

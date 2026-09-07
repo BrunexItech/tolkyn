@@ -32,7 +32,7 @@ type Msg =
   | { id: string; role: "assistant"; pending: true; editing: boolean };
 
 const LOGO_OPTS: { value: LogoPlacement; label: string }[] = [
-  { value: "auto", label: "Auto — where I say in the prompt" },
+  { value: "auto", label: "Auto — a corner, or on an object if I say so" },
   { value: "off", label: "No logo" },
   { value: "top-left", label: "Always top-left" },
   { value: "top-right", label: "Always top-right" },

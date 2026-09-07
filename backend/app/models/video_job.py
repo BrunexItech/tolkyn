@@ -34,6 +34,9 @@ class VideoJob(BaseModel):
     reference_image_url = Column(String(500), nullable=True)  # /media/... used as first-frame image-to-video
     brand_logo_url = Column(String(500), nullable=True)  # /media/... shown to the user, colors guide styling
     brand_colors = Column(JSON, nullable=True)  # hex strings extracted from the logo
+    # opt-in: where in the scene to place the real logo — a branded first
+    # frame is generated and used as the image-to-video reference.
+    hero_logo_where = Column(String(200), nullable=True)
 
     status = Column(Enum(VideoJobStatus), nullable=False, default=VideoJobStatus.QUEUED)
     operation_name = Column(String(300), nullable=True)  # Gemini operation, for polling

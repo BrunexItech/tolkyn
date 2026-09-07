@@ -127,6 +127,11 @@ class VideoService:
             # not something re-uploaded per generation — applied automatically.
             brand_logo_url=self.user.brand_logo_url,
             brand_colors=self.user.brand_colors,
+            hero_logo_where=(
+                (data.hero_logo_where or "").strip()[:200] or None
+                if self.user.brand_logo_url
+                else None
+            ),
             status=VideoJobStatus.QUEUED,
             cost_usd=cost,
         )
@@ -194,19 +199,76 @@ async def advance_pending_jobs(db: AsyncSession) -> int:
     return changed
 
 
-def _prompt_with_brand_colors(prompt: str, brand_colors: Optional[List[str]]) -> str:
-    """Veo has no separate 'color palette' parameter and doesn't reliably
-    render an uploaded logo verbatim (its 'ingredients to video' reference-
-    image feature isn't enabled on this account — confirmed live, not
-    assumed). Folding the extracted colors into the prompt text is the part
-    that's actually guaranteed to work."""
-    if not brand_colors:
-        return prompt
-    return f"{prompt} Color palette to reflect in lighting, props, and color grading: {', '.join(brand_colors)}."
+_NO_INVENTED_BRANDING = (
+    "Do not render any logo, wordmark, emblem, brand name or invented branding on any "
+    "sign, screen, poster, billboard, product, packaging, wall, garment or label — keep "
+    "every such surface plain, clean and unbranded."
+)
+_NEG_BRANDING = "logos, wordmarks, brand names, invented signage, text on products, watermarks"
+
+
+def _prompt_with_brand(prompt: str, brand_colors: Optional[List[str]], has_logo: bool) -> str:
+    """Veo has no colour-palette parameter and can't reliably paint an exact
+    logo into a scene, so: (1) fold the brand colours into the prompt text —
+    the part that's guaranteed to work — and (2) when a brand logo exists,
+    explicitly forbid Veo from inventing its own logos, so the real one (the
+    corner watermark, or a branded first frame) is the only mark in the clip."""
+    parts = [prompt]
+    if brand_colors:
+        parts.append(
+            f"Colour palette to reflect in lighting, props and colour grading: "
+            f"{', '.join(brand_colors)}."
+        )
+    if has_logo:
+        parts.append(_NO_INVENTED_BRANDING)
+    return " ".join(parts)
+
+
+def _negative_with_brand(negative_prompt: Optional[str], has_logo: bool) -> Optional[str]:
+    if not has_logo:
+        return negative_prompt
+    base = (negative_prompt or "").strip()
+    return f"{base}, {_NEG_BRANDING}".strip(" ,") if base else _NEG_BRANDING
+
+
+_HERO_SIZE = {"16:9": "1536x1024", "9:16": "1024x1536", "1:1": "1024x1024"}
+
+
+async def _build_hero_frame(job: VideoJob) -> Optional[str]:
+    """Opt-in: render the opening still of the shot with the real brand logo
+    composited onto the surface the user named, and hand it to Veo as the
+    first frame. Best path to 'our logo, on that object, in the video' for a
+    static/slow shot. Returns a /media/... url or None (fall back to plain)."""
+    logo_path = _resolve_media_path(job.brand_logo_url)
+    if not logo_path:
+        return None
+    from app.services.content_ai import generate_image
+    from app.services.logo_scene import place_logo_in_scene
+
+    try:
+        frame = await generate_image(
+            f"{job.prompt}. This is the opening still frame of a live-action video shot — "
+            "photographic, realistic lighting and texture.",
+            size=_HERO_SIZE.get(job.aspect_ratio, "1536x1024"),
+            quality="high",
+        )
+        placed = await place_logo_in_scene(frame["url"], job.brand_logo_url, job.hero_logo_where or "")
+        return placed or frame["url"]
+    except Exception as exc:  # noqa: BLE001 — never block the video on this
+        logger.warning("hero frame build failed: %s", exc)
+        return None
 
 
 async def _start_job(db: AsyncSession, job: VideoJob) -> int:
     model = get_model(job.model_key)
+    has_logo = bool(_resolve_media_path(job.brand_logo_url))
+
+    if job.hero_logo_where and not job.reference_image_url and has_logo:
+        hero = await _build_hero_frame(job)
+        if hero:
+            job.reference_image_url = hero
+            await db.commit()
+
     ref_bytes = None
     ref_path = _resolve_media_path(job.reference_image_url)
     if ref_path:
@@ -214,11 +276,11 @@ async def _start_job(db: AsyncSession, job: VideoJob) -> int:
 
     operation_name = await gemini.start_generation(
         model_id=model.model_id,
-        prompt=_prompt_with_brand_colors(job.prompt, job.brand_colors),
+        prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo),
         aspect_ratio=job.aspect_ratio,
         resolution=job.resolution,
         duration_seconds=job.duration_seconds,
-        negative_prompt=job.negative_prompt,
+        negative_prompt=_negative_with_brand(job.negative_prompt, has_logo),
         reference_image_bytes=ref_bytes,
     )
     job.operation_name = operation_name

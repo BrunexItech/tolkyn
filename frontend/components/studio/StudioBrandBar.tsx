@@ -55,7 +55,8 @@ export function StudioBrandBar() {
           <div className="min-w-0 flex-1">
             <div className="text-[12px] font-semibold text-om-text">Brand logo is on</div>
             <div className="text-[10.5px] text-om-muted">
-              Say where you want it — &ldquo;put our logo in the top-right&rdquo; — and it&apos;s placed there, crisp and exact.
+              Say where in your prompt — &ldquo;logo top-right&rdquo; for a corner, or &ldquo;our logo on the
+              laptop lid&rdquo; to place it on an object in the scene.
             </div>
           </div>
           <button

@@ -165,3 +165,35 @@ def detect_logo_placement(prompt: str) -> Optional[str]:
         if re.search(pat, low):
             return pos
     return "bottom-right"
+
+
+_ON_SURFACE_RE = re.compile(
+    r"\b(?:on|onto|across|over)\s+"
+    r"(?:the\s+|a\s+|an\s+|his\s+|her\s+|their\s+|its\s+|my\s+|our\s+)?"
+    r"([a-z][a-z' \-]{2,40}?)"
+    r"(?=[.,;!?]|\s+(?:and|with|in|at|for|so|then|that|which|while)\b|$)",
+    re.I,
+)
+
+
+def detect_logo_request(prompt: str) -> Optional[dict]:
+    """Richer than detect_logo_placement: distinguishes 'logo top-right'
+    (mode='corner') from 'logo on the laptop lid' (mode='scene', value='laptop
+    lid'). Returns None when the prompt doesn't ask for the logo at all."""
+    if not prompt:
+        return None
+    low = prompt.lower()
+    if not any(w in low for w in _LOGO_WORDS):
+        return None
+    idx = min((low.find(w) for w in _LOGO_WORDS if w in low), default=-1)
+    tail = prompt[idx: idx + 180] if idx >= 0 else prompt
+    m = _ON_SURFACE_RE.search(tail)
+    if m:
+        surface = m.group(1).strip(" -'")
+        # "on the top right" / "on the left" is a corner, not a real surface
+        if surface and not normalize_position(surface) and surface not in {
+            "screen", "frame", "image", "picture", "background", "right", "left", "top", "bottom", "side",
+        }:
+            return {"mode": "scene", "value": surface}
+    pos = detect_logo_placement(prompt)
+    return {"mode": "corner", "value": pos} if pos else None

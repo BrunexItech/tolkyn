@@ -32,6 +32,16 @@ class VideoGenerateRequest(BaseModel):
     resolution: str = Field(default="1080p")
     duration_seconds: int = Field(default=8)
     reference_image_url: Optional[str] = None
+    hero_logo_where: Optional[str] = Field(
+        None,
+        max_length=200,
+        description=(
+            "Opt-in. Where in the scene to place the real brand logo, e.g. "
+            "'on the laptop lid' or 'on the wall sign'. A branded first frame is "
+            "generated and used as the video's starting image. Ignored if no brand "
+            "logo is set."
+        ),
+    )
 
 
 class BrandUpdateRequest(BaseModel):

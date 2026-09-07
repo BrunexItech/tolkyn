@@ -58,6 +58,9 @@ export interface VideoGenerateRequest {
   resolution: string;
   duration_seconds: number;
   reference_image_url?: string;
+  /** opt-in: where in the scene to place the real brand logo (a branded first
+   * frame is generated and used as the video's starting image) */
+  hero_logo_where?: string;
 }
 
 export const videoApi = {

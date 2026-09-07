@@ -123,14 +123,51 @@ _LOGO_HINT = (
 
 
 _PROMPT_IMAGE_SYSTEM = (
-    "You are a senior art director who writes prompts for modern image models "
-    "(gpt-image-1 / Midjourney level). You turn a rough idea into ONE precise, vivid, "
-    "ready-to-paste prompt. Cover, in a natural flowing sentence or two: the subject and "
-    "what it's doing, the shot type and composition, the setting, lighting and time of day, "
-    "colour palette and mood, the rendering style / medium, and lens or camera feel when it "
-    "helps. Be concrete, not flowery. No lists, no 'highly detailed, 4k, trending on "
-    "artstation' filler. Never use emojis. Return ONLY JSON."
+    "You are a senior photographer and art director writing prompts for a modern image "
+    "model. Turn a rough idea into ONE precise, vivid, ready-to-paste prompt.\n\n"
+    "DEFAULT TO A REAL PHOTOGRAPH. Unless the user clearly asks for illustration, vector, "
+    "flat, cartoon, anime, 3D render, painting, sketch, watercolour or a logo, write the "
+    "prompt as a photograph and include concrete photographic detail: the camera and lens "
+    "feel (e.g. 'shot on a full-frame camera, 35mm f/1.8' or '85mm portrait lens'), the "
+    "light (soft window light, overcast, golden hour, hard studio key, practical lights), "
+    "depth of field, and realistic surface detail — natural skin texture with pores and "
+    "fine lines, fabric weave, real material reflections, subtle imperfections, true-to-life "
+    "colour. It should read as something a professional actually shot, not an AI render.\n\n"
+    "Cover in one or two natural sentences: the subject and what it's doing, the shot type "
+    "and composition, the setting, the light and time of day, the colour and mood. Be "
+    "concrete, never flowery. No lists, no '4k, ultra detailed, trending on artstation' "
+    "filler. If the user wants a non-photo style, commit to that style fully and skip the "
+    "camera talk. Never use emojis. Return ONLY JSON."
 )
+
+# Style words that mean the user deliberately wants a NON-photographic look —
+# don't force realism onto these.
+_NON_PHOTO_RE = re.compile(
+    r"\b(illustrat|vector|flat design|flat-design|cartoon|anime|manga|3d render|3-d|cgi|"
+    r"render(ed|ing)?|low.?poly|pixel art|painting|painted|oil painting|watercolou?r|gouache|"
+    r"sketch|line art|line-art|doodle|drawing|comic|logo|wordmark|icon set|isometric|"
+    r"claymation|papercraft|pop art|abstract|surreal|minimalist poster|risograph|woodcut)\b",
+    re.I,
+)
+
+_PHOTO_SUFFIX = (
+    " Photographic and true to life: shot on a full-frame camera with a fast prime lens, "
+    "natural directional light, real depth of field, authentic textures (skin pores, fabric "
+    "weave, material grain), accurate colour and subtle imperfections. Not an illustration, "
+    "not a 3D render, no plastic or airbrushed look, no visible AI artefacts."
+)
+
+
+def _photoreal_wrap(prompt: str, style: str, *, as_logo: bool, is_edit: bool) -> str:
+    """Append photo-realism direction unless this is a logo, an edit, or the
+    user has clearly asked for a non-photographic style."""
+    if as_logo or is_edit:
+        return prompt
+    blob = f"{prompt} {style}".lower()
+    if _NON_PHOTO_RE.search(blob):
+        return prompt
+    # already asking for a photo? still fine to reinforce, but keep it short
+    return f"{prompt}.{_PHOTO_SUFFIX}"
 _PROMPT_VIDEO_SYSTEM = (
     "You are a short-form video director. Turn a rough idea into ONE precise prompt for a "
     "video model: the core action and subject, camera movement, framing, setting, lighting "
@@ -200,6 +237,8 @@ async def generate_image(
     full_prompt = prompt if not style else f"{prompt}. Style: {style}."
     if as_logo:
         full_prompt += _LOGO_HINT
+    else:
+        full_prompt = _photoreal_wrap(full_prompt, style, as_logo=as_logo, is_edit=bool(input_image_path))
 
     model = _IMAGE_MINI_MODEL if draft else settings.OPENAI_IMAGE_MODEL
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
