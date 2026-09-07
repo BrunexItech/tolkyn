@@ -25,3 +25,5 @@ playwright==1.46.0
 gunicorn==22.0.0
 slowapi==0.1.9
 redis==5.0.8
+# Brand-logo compositing onto generated images
+Pillow==10.4.0

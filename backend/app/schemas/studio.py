@@ -45,6 +45,15 @@ class ImageRequest(BaseModel):
     input_image_url: Optional[str] = Field(None, description="An uploaded image to edit / use as a base")
     as_logo: bool = False
     save: bool = True
+    brand_logo: Optional[str] = Field(
+        None,
+        description=(
+            "Composite the workspace brand logo onto the result. "
+            "'off'/None = never; 'auto' = only if the prompt asks for a logo, "
+            "at the spot it names; or an explicit position "
+            "(top-left, top-right, bottom-left, bottom-right, center, …)."
+        ),
+    )
 
 
 class PromptRequest(BaseModel):
@@ -86,6 +95,8 @@ class ImageResponse(BaseModel):
     quality: str = "medium"
     model: str = ""
     style: str = ""
+    logo_applied: Optional[str] = Field(None, description="position the brand logo was placed, if any")
+    logo_note: Optional[str] = Field(None, description="why the logo wasn't placed, if it was requested")
 
 
 class ChatTurn(BaseModel):
@@ -98,6 +109,10 @@ class ImageChatRequest(BaseModel):
     attachment_url: Optional[str] = Field(None, description="A photo the user just attached")
     previous_image_url: Optional[str] = Field(None, description="The last image the tool made in this chat")
     history: List[ChatTurn] = Field(default_factory=list, max_length=40)
+    brand_logo: Optional[str] = Field(
+        None,
+        description="off/None, 'auto', or an explicit position — same as ImageRequest.brand_logo",
+    )
 
 
 class ImageChatResponse(BaseModel):
@@ -111,6 +126,8 @@ class ImageChatResponse(BaseModel):
     reply: str = ""
     operation: str = "generate"
     used_base: str = "none"
+    logo_applied: Optional[str] = None
+    logo_note: Optional[str] = None
 
 
 class AssetResponse(BaseModel):
@@ -128,3 +145,13 @@ class AssetResponse(BaseModel):
 
 class AssetList(BaseModel):
     items: List[AssetResponse]
+
+
+class BrandKitResponse(BaseModel):
+    brand_logo_url: Optional[str] = None
+    brand_colors: Optional[List[str]] = None
+
+
+class BrandKitUpdate(BaseModel):
+    logo_url: str = ""
+    colors: List[str] = Field(default_factory=list, max_length=6)

@@ -67,3 +67,28 @@ export function useDeleteAsset() {
     onError: (e: Error) => toast.err(e.message),
   });
 }
+
+export function useBrandKit() {
+  return useQuery({ queryKey: [...KEY, "brand"], queryFn: studioApi.brand });
+}
+
+export function useSetBrandKit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { logoUrl: string; colors: string[] }) => studioApi.setBrand(v.logoUrl, v.colors),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: [...KEY, "brand"] });
+      toast.ok("Brand logo saved");
+    },
+    onError: (e: Error) => toast.err(e.message),
+  });
+}
+
+export function useClearBrandKit() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: studioApi.clearBrand,
+    onSuccess: () => qc.invalidateQueries({ queryKey: [...KEY, "brand"] }),
+    onError: (e: Error) => toast.err(e.message),
+  });
+}

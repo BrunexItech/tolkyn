@@ -32,6 +32,20 @@ export interface CopyResponse {
 
 export type ImageQuality = "low" | "medium" | "high";
 
+/** "off" | "auto" | a position — where to composite the workspace brand logo. */
+export type LogoPlacement =
+  | "off"
+  | "auto"
+  | "top-left"
+  | "top-center"
+  | "top-right"
+  | "center-left"
+  | "center"
+  | "center-right"
+  | "bottom-left"
+  | "bottom-center"
+  | "bottom-right";
+
 export interface ImageResponse {
   asset_id: string | null;
   id: string;
@@ -41,6 +55,8 @@ export interface ImageResponse {
   quality: string;
   model: string;
   style: string;
+  logo_applied: string | null;
+  logo_note: string | null;
 }
 
 export interface ImageChatTurn {
@@ -59,6 +75,8 @@ export interface ImageChatResponse {
   reply: string;
   operation: string;
   used_base: string;
+  logo_applied: string | null;
+  logo_note: string | null;
 }
 
 export interface GeneratedAsset {
@@ -79,6 +97,11 @@ export interface PromptResult {
   notes: string;
 }
 
+export interface BrandKit {
+  brand_logo_url: string | null;
+  brand_colors: string[] | null;
+}
+
 export const studioApi = {
   copy: (body: { prompt: string; platforms: string[]; count?: number; tone?: string }) =>
     http.post<CopyResponse>("/studio/copy", body),
@@ -92,15 +115,21 @@ export const studioApi = {
     draft?: boolean;
     input_image_url?: string;
     as_logo?: boolean;
+    brand_logo?: LogoPlacement;
   }) => http.post<ImageResponse>("/studio/image", body),
   imageChat: (body: {
     instruction: string;
     attachment_url?: string;
     previous_image_url?: string;
     history?: ImageChatTurn[];
+    brand_logo?: LogoPlacement;
   }) => http.post<ImageChatResponse>("/studio/image/chat", body),
   assets: (kind?: AssetKind) => http.get<{ items: GeneratedAsset[] }>(`/studio/assets${qs({ kind })}`),
   deleteAsset: (id: string) => http.del<void>(`/studio/assets/${id}`),
+  brand: () => http.get<BrandKit>("/studio/brand"),
+  setBrand: (logo_url: string, colors: string[]) =>
+    http.patch<BrandKit>("/studio/brand", { logo_url, colors }),
+  clearBrand: () => http.del<BrandKit>("/studio/brand"),
   saveCaption: (body: {
     title: string;
     platform: string;

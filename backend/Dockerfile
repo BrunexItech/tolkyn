@@ -14,10 +14,12 @@ RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 # ------------------------------- runtime -------------------------------
 FROM python:3.11-slim AS runtime
 
-# libpq5 is the psycopg2 runtime lib; curl backs the container healthcheck.
+# libpq5 is the psycopg2 runtime lib; curl backs the container healthcheck;
+# ffmpeg composites the brand-logo watermark onto generated videos.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         libpq5 \
         curl \
+        ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
 RUN useradd --create-home --uid 1000 appuser

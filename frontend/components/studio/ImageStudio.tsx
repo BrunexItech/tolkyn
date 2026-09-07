@@ -16,7 +16,8 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/om/primitives/Card";
 import { uploadFile } from "@/lib/api/uploads";
-import { mediaUrl, type ImageChatTurn } from "@/lib/api/studio";
+import { mediaUrl, type ImageChatTurn, type LogoPlacement } from "@/lib/api/studio";
+import { StudioBrandBar } from "./StudioBrandBar";
 import { useImageChat } from "./hooks";
 import { ImageLightbox } from "./ImageLightbox";
 import { PromptHelper } from "./PromptHelper";
@@ -26,9 +27,19 @@ import { cn } from "@/lib/utils";
 
 type Msg =
   | { id: string; role: "user"; text: string; attachmentUrl?: string }
-  | { id: string; role: "assistant"; text: string; imageUrl: string; op: string }
+  | { id: string; role: "assistant"; text: string; imageUrl: string; op: string; logo?: string | null }
   | { id: string; role: "assistant"; error: string }
   | { id: string; role: "assistant"; pending: true; editing: boolean };
+
+const LOGO_OPTS: { value: LogoPlacement; label: string }[] = [
+  { value: "auto", label: "Auto — where I say in the prompt" },
+  { value: "off", label: "No logo" },
+  { value: "top-left", label: "Always top-left" },
+  { value: "top-right", label: "Always top-right" },
+  { value: "bottom-left", label: "Always bottom-left" },
+  { value: "bottom-right", label: "Always bottom-right" },
+  { value: "center", label: "Always centered" },
+];
 
 const EXAMPLES = [
   "A clean wordmark logo for a coffee cart called Brew Bus, warm browns",
@@ -45,6 +56,7 @@ export function ImageStudio() {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<string | null>(null);
+  const [logoMode, setLogoMode] = useState<LogoPlacement>("auto");
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -111,6 +123,7 @@ export function ImageStudio() {
         attachment_url: att ? att.replace(/^https?:\/\/[^/]+/, "") : undefined,
         previous_image_url: !att && previousImage ? previousImage.replace(/^https?:\/\/[^/]+/, "") : undefined,
         history,
+        brand_logo: logoMode,
       },
       {
         onSuccess: (r) => {
@@ -118,12 +131,20 @@ export function ImageStudio() {
             const copy = [...cur];
             for (let i = copy.length - 1; i >= 0; i--) {
               if (copy[i].role === "assistant" && "pending" in copy[i]) {
-                copy[i] = { id: copy[i].id, role: "assistant", text: r.reply, imageUrl: mediaUrl(r.url), op: r.operation };
+                copy[i] = {
+                  id: copy[i].id,
+                  role: "assistant",
+                  text: r.reply,
+                  imageUrl: mediaUrl(r.url),
+                  op: r.operation,
+                  logo: r.logo_applied,
+                };
                 break;
               }
             }
             return copy;
           });
+          if (r.logo_note) toast.err(r.logo_note);
         },
         onError: (e: Error) => {
           setMessages((cur) => {
@@ -152,7 +173,9 @@ export function ImageStudio() {
   };
 
   return (
-    <Card noEdge className="flex h-[calc(100vh-215px)] min-h-[420px] flex-col p-0">
+    <div className="space-y-3">
+    <StudioBrandBar />
+    <Card noEdge className="flex h-[calc(100vh-275px)] min-h-[420px] flex-col p-0">
       {/* thread */}
       <div ref={scrollRef} className="om-scroll flex-1 space-y-4 overflow-y-auto p-4">
         {messages.length === 0 ? (
@@ -211,6 +234,11 @@ export function ImageStudio() {
             ) : (
               <div key={m.id} className="space-y-2">
                 {m.text && <div className="text-[12px] leading-relaxed text-om-dim">{m.text}</div>}
+                {m.logo && (
+                  <div className="inline-flex items-center gap-1 rounded-md border border-om-green/25 bg-om-green/10 px-1.5 py-0.5 text-[10px] font-medium text-om-green">
+                    <ImageIcon className="size-2.5" /> Brand logo · {m.logo.replace("-", " ")}
+                  </div>
+                )}
                 <div className="group relative w-fit max-w-full overflow-hidden rounded-xl border border-om-border">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
@@ -312,10 +340,24 @@ export function ImageStudio() {
             {chat.isPending ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
           </button>
         </div>
-        <div className="mt-1 flex items-center justify-between text-[9.5px] text-om-faint">
+        <div className="mt-1 flex items-center justify-between gap-2 text-[9.5px] text-om-faint">
           <span className="flex items-center gap-1">
             <ImageIcon className="size-3" /> Enter to send · Shift+Enter for a new line
           </span>
+          <label className="flex items-center gap-1.5">
+            <span>Logo</span>
+            <select
+              value={logoMode}
+              onChange={(e) => setLogoMode(e.target.value as LogoPlacement)}
+              className="rounded border border-om-border bg-white/[0.03] px-1 py-0.5 text-[9.5px] text-om-dim outline-none focus:border-om-blue/60"
+            >
+              {LOGO_OPTS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <span className={cn(over && "text-om-red")}>
             {over ? `${input.length}/${PROMPT_LIMITS.image} — too long` : ""}
           </span>
@@ -335,5 +377,6 @@ export function ImageStudio() {
         />
       )}
     </Card>
+    </div>
   );
 }
