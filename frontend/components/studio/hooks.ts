@@ -32,21 +32,32 @@ export function useBuildPrompt() {
   });
 }
 
+/** Kick off a background image job (returns { id, status: "queued" }). */
 export function useGenerateImage() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: studioApi.image,
-    onSuccess: () => done(qc, "image generated"),
     onError: (e: Error) => toast.err(e.message),
   });
 }
 
+/** Kick off a background conversational image turn. */
 export function useImageChat() {
-  const qc = useQueryClient();
   return useMutation({
     mutationFn: studioApi.imageChat,
-    onSuccess: () => qc.invalidateQueries({ queryKey: KEY }),
     // errors are shown inline in the chat thread, not as a toast
+  });
+}
+
+/** Poll one image job until it finishes (every 1.8s while still running). */
+export function useImageJob(id: string | null) {
+  return useQuery({
+    queryKey: [...KEY, "job", id],
+    queryFn: () => studioApi.imageJob(id as string),
+    enabled: !!id,
+    refetchInterval: (q) => {
+      const s = q.state.data?.status;
+      return s === "succeeded" || s === "failed" ? false : 1800;
+    },
   });
 }
 

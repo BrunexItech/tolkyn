@@ -316,8 +316,10 @@ async def _poll_job(db: AsyncSession, job: VideoJob) -> int:
     logo_path = _resolve_media_path(job.brand_logo_url)
     watermarked = False
     if logo_path:
-        width, _ = video_pixel_width(job.resolution, job.aspect_ratio)
-        watermarked = await apply_watermark(raw_path, logo_path, final_path, video_width=width)
+        width, height = video_pixel_width(job.resolution, job.aspect_ratio)
+        watermarked = await apply_watermark(
+            raw_path, logo_path, final_path, video_width=width, video_height=height
+        )
     if not watermarked:
         raw_path.replace(final_path)
     else:

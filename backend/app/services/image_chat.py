@@ -61,6 +61,7 @@ async def run_turn(
     attachment_path: Optional[str] = None,
     previous_path: Optional[str] = None,
     history: Optional[List[Dict[str, str]]] = None,
+    extra_prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
     client = ai()
 
@@ -113,6 +114,10 @@ async def run_turn(
     size = plan["size"] if plan.get("size") in _SIZES else "1024x1024"
     quality = plan["quality"] if plan.get("quality") in ("low", "medium", "high") else "high"
     prompt = strip_emoji(str(plan.get("prompt") or instruction)).strip() or instruction
+    # non-negotiable directions (e.g. "leave room for the brand logo, draw
+    # none of your own") that the planner must not paraphrase away
+    if extra_prompt:
+        prompt = f"{prompt}\n\n{extra_prompt.strip()}"
 
     result = await generate_image(
         prompt,

@@ -69,8 +69,23 @@ async def run_due_posts_once() -> int:
 
     await _run_scheduled_automations()
     await _advance_video_jobs()
+    await _advance_image_jobs()
     await _scan_social_leads_once()
     return published
+
+
+async def _advance_image_jobs() -> None:
+    """Safety net for background image generation — re-runs any job whose
+    worker died before finishing it (the common path starts them immediately
+    via asyncio.create_task)."""
+    from app.services.image_job_service import advance_stale_jobs
+
+    try:
+        n = await advance_stale_jobs()
+        if n:
+            print(f"[scheduler] recovered {n} stalled image job(s)")
+    except Exception as exc:  # pragma: no cover - best effort
+        print(f"[scheduler] image job sweep error: {exc}")
 
 
 async def _scan_social_leads_once() -> None:

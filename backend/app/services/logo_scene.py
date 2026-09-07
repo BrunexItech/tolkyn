@@ -22,10 +22,13 @@ _EDIT_INSTRUCTION = (
     "The FIRST image is a photo. The SECOND image is a brand logo on a transparent "
     "background. Composite that exact logo onto {where} in the first image so it looks "
     "physically printed / applied there — follow the surface's angle, perspective, "
-    "curvature and lighting, with realistic scale and a natural amount of wear. Reproduce "
-    "the logo's shapes, colours and any text faithfully; do not redraw or restyle it, and "
-    "do not add any other logo or text. Keep everything else in the first image — the "
-    "subject, composition, colours, background and every other detail — exactly as it is."
+    "curvature and lighting, with realistic scale and a natural amount of wear. The "
+    "ENTIRE logo must sit fully within the photo frame and fully on that surface — never "
+    "cropped, cut off, running past an edge, or clipped by the surface's border; if it "
+    "won't fit at a natural size, make it smaller. Reproduce the logo's shapes, colours "
+    "and any text faithfully; do not redraw or restyle it, and do not add any other logo "
+    "or text. Keep everything else in the first image — the subject, composition, "
+    "colours, background and every other detail — exactly as it is."
 )
 
 

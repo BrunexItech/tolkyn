@@ -147,6 +147,24 @@ class AssetList(BaseModel):
     items: List[AssetResponse]
 
 
+class ImageJobResponse(BaseModel):
+    """Poll target for a background image generation."""
+    id: str
+    status: str  # queued | processing | succeeded | failed
+    mode: str    # generate | chat
+    # populated once status == succeeded
+    url: Optional[str] = None
+    asset_id: Optional[str] = None
+    reply: Optional[str] = None
+    operation: Optional[str] = None
+    used_base: Optional[str] = None
+    logo_applied: Optional[str] = None
+    logo_note: Optional[str] = None
+    error: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
 class BrandKitResponse(BaseModel):
     brand_logo_url: Optional[str] = None
     brand_colors: Optional[List[str]] = None

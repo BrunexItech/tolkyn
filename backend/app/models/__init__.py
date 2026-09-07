@@ -57,6 +57,7 @@ from app.models.organization import (
 )
 from app.models.activity_log import ActivityLog
 from app.models.video_job import VideoJob, VideoJobStatus
+from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.auth_token import AuthToken, AuthTokenKind
 
 __all__ = [
@@ -131,6 +132,8 @@ __all__ = [
     "ActivityLog",
     "VideoJob",
     "VideoJobStatus",
+    "ImageJob",
+    "ImageJobStatus",
     "AuthToken",
     "AuthTokenKind",
 ]

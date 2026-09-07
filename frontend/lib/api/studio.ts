@@ -46,37 +46,26 @@ export type LogoPlacement =
   | "bottom-center"
   | "bottom-right";
 
-export interface ImageResponse {
-  asset_id: string | null;
-  id: string;
-  url: string;
-  prompt: string;
-  size: string;
-  quality: string;
-  model: string;
-  style: string;
-  logo_applied: string | null;
-  logo_note: string | null;
-}
-
 export interface ImageChatTurn {
   role: "user" | "assistant";
   text: string;
 }
 
-export interface ImageChatResponse {
-  asset_id: string | null;
+export type ImageJobStatus = "queued" | "processing" | "succeeded" | "failed";
+
+/** A background image generation. Created by POST, then polled. */
+export interface ImageJob {
   id: string;
-  url: string;
-  prompt: string;
-  size: string;
-  quality: string;
-  model: string;
-  reply: string;
-  operation: string;
-  used_base: string;
+  status: ImageJobStatus;
+  mode: "generate" | "chat";
+  url: string | null;
+  asset_id: string | null;
+  reply: string | null;
+  operation: string | null;
+  used_base: string | null;
   logo_applied: string | null;
   logo_note: string | null;
+  error: string | null;
 }
 
 export interface GeneratedAsset {
@@ -116,14 +105,15 @@ export const studioApi = {
     input_image_url?: string;
     as_logo?: boolean;
     brand_logo?: LogoPlacement;
-  }) => http.post<ImageResponse>("/studio/image", body),
+  }) => http.post<ImageJob>("/studio/image", body),
   imageChat: (body: {
     instruction: string;
     attachment_url?: string;
     previous_image_url?: string;
     history?: ImageChatTurn[];
     brand_logo?: LogoPlacement;
-  }) => http.post<ImageChatResponse>("/studio/image/chat", body),
+  }) => http.post<ImageJob>("/studio/image/chat", body),
+  imageJob: (id: string) => http.get<ImageJob>(`/studio/image/jobs/${id}`),
   assets: (kind?: AssetKind) => http.get<{ items: GeneratedAsset[] }>(`/studio/assets${qs({ kind })}`),
   deleteAsset: (id: string) => http.del<void>(`/studio/assets/${id}`),
   brand: () => http.get<BrandKit>("/studio/brand"),

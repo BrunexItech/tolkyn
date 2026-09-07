@@ -103,16 +103,29 @@ def composite_logo(
 
         bw, bh = base.size
         frac = scale if scale is not None else (_CENTER_SCALE if position == "center" else _DEFAULT_SCALE)
-        target_w = max(24, round(bw * frac))
+        margin = round(bw * _DEFAULT_MARGIN) if position != "center" else 0
+
+        # Size the logo, then make sure it physically fits inside the frame
+        # minus the margins on both sides — a wide/tall logo or a small image
+        # can never get cropped.
+        max_w = max(1, bw - 2 * margin)
+        max_h = max(1, round(bh * 0.42) - (2 * margin if position == "center" else 0))
+        target_w = min(max(24, round(bw * frac)), max_w)
         ratio = target_w / logo.width
-        logo = logo.resize((target_w, max(1, round(logo.height * ratio))), Image.LANCZOS)
+        target_h = max(1, round(logo.height * ratio))
+        if target_h > max_h:
+            target_h = max_h
+            target_w = max(1, round(logo.width * (target_h / logo.height)))
+        logo = logo.resize((target_w, target_h), Image.LANCZOS)
 
         if opacity < 1.0:
             alpha = logo.split()[3].point(lambda a: round(a * max(0.0, min(1.0, opacity))))
             logo.putalpha(alpha)
 
-        margin = round(bw * _DEFAULT_MARGIN) if position != "center" else 0
         x, y = _anchor(position, (bw, bh), logo.size, margin)
+        # final guard: clamp fully on-canvas
+        x = max(0, min(x, bw - logo.width))
+        y = max(0, min(y, bh - logo.height))
 
         canvas = Image.new("RGBA", base.size)
         canvas.paste(base, (0, 0))

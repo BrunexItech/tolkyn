@@ -18,7 +18,7 @@ import { Card } from "@/components/om/primitives/Card";
 import { uploadFile } from "@/lib/api/uploads";
 import { mediaUrl, type ImageChatTurn, type LogoPlacement } from "@/lib/api/studio";
 import { StudioBrandBar } from "./StudioBrandBar";
-import { useImageChat } from "./hooks";
+import { useImageChat, useImageJob } from "./hooks";
 import { ImageLightbox } from "./ImageLightbox";
 import { PromptHelper } from "./PromptHelper";
 import { PROMPT_LIMITS, canSubmitPrompt } from "./limits";
@@ -59,9 +59,51 @@ export function ImageStudio() {
   const [logoMode, setLogoMode] = useState<LogoPlacement>("auto");
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
+  const [activeJobId, setActiveJobId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  // maps the running job -> the pending message + what to retry on failure
+  const pendingRef = useRef<{ msgId: string; instruction: string; att: string | null } | null>(null);
+
+  const { data: job } = useImageJob(activeJobId);
+  const busy = chat.isPending || !!activeJobId;
+
+  // react to a job finishing: swap the pending message for the image or an error
+  useEffect(() => {
+    if (!job || (job.status !== "succeeded" && job.status !== "failed")) return;
+    const p = pendingRef.current;
+    if (!p || p.msgId !== `job-${job.id}`) return;
+
+    setMessages((cur) => {
+      const copy = [...cur];
+      const idx = copy.findIndex((m) => m.id === p.msgId);
+      if (idx === -1) return cur;
+      if (job.status === "succeeded" && job.url) {
+        copy[idx] = {
+          id: p.msgId,
+          role: "assistant",
+          text: job.reply ?? "",
+          imageUrl: mediaUrl(job.url),
+          op: job.operation ?? "generate",
+          logo: job.logo_applied,
+        };
+      } else {
+        copy.splice(idx, 1);
+        copy.push({
+          id: uid(),
+          role: "assistant",
+          error: job.error || "Something went wrong generating the image.",
+        });
+        setInput(p.instruction === "Use this image." ? "" : p.instruction);
+        if (p.att) setAttachment(p.att);
+      }
+      return copy;
+    });
+    if (job.status === "succeeded" && job.logo_note) toast.err(job.logo_note);
+    pendingRef.current = null;
+    setActiveJobId(null);
+  }, [job?.status, job?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const previousImage =
     [...messages].reverse().find((m): m is Extract<Msg, { role: "assistant"; imageUrl: string }> =>
@@ -98,7 +140,7 @@ export function ImageStudio() {
 
   const send = () => {
     const text = input.trim();
-    if ((!text && !attachment) || over || chat.isPending) return;
+    if ((!text && !attachment) || over || busy) return;
 
     const att = attachment;
     const instruction = text || "Use this image.";
@@ -109,10 +151,10 @@ export function ImageStudio() {
       .slice(-6)
       .map((m) => ({ role: m.role, text: m.text }));
 
+    const userMsgId = uid();
     setMessages((cur) => [
       ...cur,
-      { id: uid(), role: "user", text: text || "(use attached image)", attachmentUrl: att ?? undefined },
-      { id: uid(), role: "assistant", pending: true, editing },
+      { id: userMsgId, role: "user", text: text || "(use attached image)", attachmentUrl: att ?? undefined },
     ]);
     setInput("");
     setAttachment(null);
@@ -127,32 +169,20 @@ export function ImageStudio() {
       },
       {
         onSuccess: (r) => {
-          setMessages((cur) => {
-            const copy = [...cur];
-            for (let i = copy.length - 1; i >= 0; i--) {
-              if (copy[i].role === "assistant" && "pending" in copy[i]) {
-                copy[i] = {
-                  id: copy[i].id,
-                  role: "assistant",
-                  text: r.reply,
-                  imageUrl: mediaUrl(r.url),
-                  op: r.operation,
-                  logo: r.logo_applied,
-                };
-                break;
-              }
-            }
-            return copy;
-          });
-          if (r.logo_note) toast.err(r.logo_note);
+          // one pending bubble, keyed to the job id — the poll effect swaps it
+          const msgId = `job-${r.id}`;
+          pendingRef.current = { msgId, instruction, att };
+          setMessages((cur) => [
+            ...cur,
+            { id: msgId, role: "assistant", pending: true, editing },
+          ]);
+          setActiveJobId(r.id);
         },
         onError: (e: Error) => {
-          setMessages((cur) => {
-            const copy = cur.filter((m) => !("pending" in m));
-            copy.push({ id: uid(), role: "assistant", error: e.message || "Something went wrong." });
-            return copy;
-          });
-          // let the user retry the same instruction
+          setMessages((cur) => [
+            ...cur,
+            { id: uid(), role: "assistant", error: e.message || "Something went wrong." },
+          ]);
           setInput(instruction === "Use this image." ? "" : instruction);
           if (att) setAttachment(att);
         },
@@ -221,7 +251,8 @@ export function ImageStudio() {
             ) : "pending" in m ? (
               <div key={m.id} className="flex items-center gap-2 text-[11.5px] text-om-muted">
                 <Loader2 className="size-3.5 animate-spin text-om-blue" />
-                {m.editing ? "Editing the image…" : "Generating…"} this takes ~10–25s
+                {m.editing ? "Editing your image" : "Generating your image"} — this runs in the
+                background and can take up to a minute or two. You can keep it open.
               </div>
             ) : "error" in m ? (
               <div
@@ -334,10 +365,10 @@ export function ImageStudio() {
           />
           <button
             onClick={send}
-            disabled={(!ok && !attachment) || over || chat.isPending}
+            disabled={(!ok && !attachment) || over || busy}
             className="shrink-0 rounded-lg bg-om-blue p-1.5 text-white transition-colors hover:bg-[#5c85ff] disabled:opacity-40"
           >
-            {chat.isPending ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
+            {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
           </button>
         </div>
         <div className="mt-1 flex items-center justify-between gap-2 text-[9.5px] text-om-faint">

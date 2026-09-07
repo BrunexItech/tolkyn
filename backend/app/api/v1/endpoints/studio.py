@@ -1,11 +1,8 @@
-from pathlib import Path
-
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
-from app.core.limits import enforce_daily_limit
 from app.db import get_db
 from app.models.generated_asset import AssetKind
 from app.models.user import User
@@ -17,116 +14,24 @@ from app.schemas.studio import (
     CopyRequest,
     CopyResponse,
     ImageChatRequest,
-    ImageChatResponse,
+    ImageJobResponse,
     ImageRequest,
-    ImageResponse,
     PromptRequest,
     PromptResponse,
     SaveCaptionRequest,
 )
-from app.services.content_ai import build_prompt, generate_copy, generate_image
-from app.services.image_chat import run_turn
-from app.services.logo_overlay import (
-    composite_logo,
-    detect_logo_request,
-    normalize_position,
-)
-from app.services.logo_scene import place_logo_in_scene
+from app.services.content_ai import build_prompt, generate_copy
+from app.services.image_job_service import ImageJobService
 from app.services.studio_service import StudioService
 
 router = APIRouter()
 
-_MEDIA_ROOT = Path(__file__).resolve().parents[4] / "media"
-
-
-def _resolve_media(url: str | None) -> str | None:
-    if not url or not url.startswith("/media/"):
-        return None
-    p = (_MEDIA_ROOT / url[len("/media/"):]).resolve()
-    if _MEDIA_ROOT.resolve() in p.parents and p.is_file():
-        return str(p)
-    return None
-
-
 async def _owner(db: AsyncSession, workspace_id: str) -> User:
-    """The workspace owner's User row — carries the daily-limit fields + package."""
+    """The workspace owner's User row — carries the brand-kit fields."""
     u = (await db.execute(select(User).where(User.id == workspace_id))).scalar_one_or_none()
     if not u:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Workspace not found")
     return u
-
-
-def _resolve_logo_request(brand_logo: str | None, prompt: str) -> dict | None:
-    """Turn the request's brand_logo option into {mode, value} or None.
-    'auto' reads the prompt (a named surface -> 'scene', else a corner);
-    an explicit position -> a corner; 'off'/None -> never."""
-    opt = (brand_logo or "").strip().lower()
-    if not opt or opt == "off":
-        return None
-    if opt == "auto":
-        return detect_logo_request(prompt)
-    return {"mode": "corner", "value": normalize_position(opt) or "bottom-right"}
-
-
-def _reserve_space_hint(prompt: str, req: dict) -> str:
-    if req["mode"] == "scene":
-        where = req["value"]
-        return (
-            f"{prompt}\n\n"
-            "IMPORTANT — branding: do NOT draw, invent or include ANY logo, emblem, "
-            "wordmark, brand name or invented text anywhere in this image. In "
-            f"particular render {where} completely plain and blank — no logo, no "
-            "text, no markings — because the real brand logo will be added onto it "
-            "afterwards. Keep that surface clearly visible and well lit."
-        )
-    spot = str(req["value"]).replace("-", " ")
-    return (
-        f"{prompt}\n\n"
-        "IMPORTANT — branding: do NOT draw, invent or include ANY logo, emblem, "
-        "badge, icon, monogram, wordmark, watermark, brand name, or the literal "
-        "word \"brand\" anywhere in this image. The artwork must carry no branding "
-        "of its own. In particular keep the "
-        f"{spot} of the frame completely clean, empty and unobstructed — plain "
-        "background only, with generous negative space — because a real brand "
-        "logo will be composited into that exact spot afterwards."
-    )
-
-
-async def _apply_brand_logo(
-    owner: User, result: dict, brand_logo: str | None, source_prompt: str
-) -> tuple[str | None, str | None]:
-    """Put the workspace brand logo on the just-generated image.
-    - corner  -> deterministic Pillow overlay (crisp, pixel-exact)
-    - scene   -> a gpt-image-1 edit that paints it onto the named surface
-    Returns (what_was_applied, note). Never raises."""
-    req = _resolve_logo_request(brand_logo, source_prompt)
-    if not req:
-        return None, None
-
-    logo_url = getattr(owner, "brand_logo_url", None)
-    logo_path = _resolve_media(logo_url)
-    if not logo_path:
-        return None, "No brand logo on file — add one in Content Studio to place it on images."
-
-    img_path = _resolve_media(result.get("url"))
-    if not img_path:
-        return None, None
-
-    if req["mode"] == "scene":
-        placed = await place_logo_in_scene(img_path, logo_path, req["value"])
-        if placed:
-            new_path = _resolve_media(placed)
-            if new_path:
-                Path(new_path).replace(img_path)  # keep the original URL
-            return f"on {req['value']}", None
-        return None, "Couldn't place the logo in the scene — the image is unchanged."
-
-    position = req["value"]
-    tmp = Path(img_path).with_suffix(".logo.png")
-    if composite_logo(Path(img_path), Path(logo_path), tmp, position=position):
-        tmp.replace(img_path)
-        return position, None
-    return None, "Couldn't place the logo on this image — the image is unchanged."
 
 
 @router.post("/prompt", response_model=PromptResponse)
@@ -173,92 +78,73 @@ async def save_caption(
     return AssetResponse.model_validate(asset)
 
 
-@router.post("/image", response_model=ImageResponse)
+def _job_response(job) -> ImageJobResponse:
+    return ImageJobResponse(
+        id=job.id,
+        status=job.status.value if hasattr(job.status, "value") else str(job.status),
+        mode=job.mode,
+        url=job.result_url,
+        asset_id=job.asset_id,
+        reply=job.reply,
+        operation=job.operation,
+        used_base=job.used_base,
+        logo_applied=job.logo_applied,
+        logo_note=job.logo_note,
+        error=job.error,
+    )
+
+
+@router.post("/image", response_model=ImageJobResponse, status_code=status.HTTP_202_ACCEPTED)
 async def studio_image(
     body: ImageRequest,
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    owner = await _owner(db, user_id)
-    await enforce_daily_limit(db, owner, "image")
-
-    # Work out logo placement up front so the model can be told to leave a
-    # clean spot for it (and not draw a fake logo of its own).
-    req = _resolve_logo_request(body.brand_logo, body.prompt)
-    gen_prompt = body.prompt
-    if req and _resolve_media(getattr(owner, "brand_logo_url", None)):
-        gen_prompt = _reserve_space_hint(body.prompt, req)
-
-    try:
-        result = await generate_image(
-            gen_prompt,
-            size=body.size,
-            quality=body.quality.value,
-            style=body.style,
-            draft=body.draft,
-            input_image_path=_resolve_media(body.input_image_url),
-            as_logo=body.as_logo,
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Image generation failed: {exc}")
-
-    result["prompt"] = body.prompt  # keep the user's words, not the space hint
-    logo_applied, logo_note = await _apply_brand_logo(owner, result, body.brand_logo, body.prompt)
-
-    asset_id = None
-    if body.save:
-        asset = await StudioService(db, user_id).save(
-            AssetKind.IMAGE, body.prompt, title=body.prompt[:120], image_url=result["url"],
-            payload={"size": result["size"], "quality": result["quality"], "style": result["style"]},
-        )
-        asset_id = asset.id
-    return ImageResponse(
-        asset_id=asset_id, logo_applied=logo_applied, logo_note=logo_note, **result
+    """Queue a background image generation. Poll GET /studio/image/jobs/{id}."""
+    job = await ImageJobService(db, user_id).create(
+        "generate",
+        body.prompt,
+        {
+            "size": body.size,
+            "quality": body.quality.value,
+            "style": body.style,
+            "draft": body.draft,
+            "input_image_url": body.input_image_url,
+            "as_logo": body.as_logo,
+            "save": body.save,
+            "brand_logo": body.brand_logo,
+        },
     )
+    return _job_response(job)
 
 
-@router.post("/image/chat", response_model=ImageChatResponse)
+@router.post("/image/chat", response_model=ImageJobResponse, status_code=status.HTTP_202_ACCEPTED)
 async def studio_image_chat(
     body: ImageChatRequest,
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    owner = await _owner(db, user_id)
-    await enforce_daily_limit(db, owner, "image")
-    attachment = _resolve_media(body.attachment_url)
-    previous = _resolve_media(body.previous_image_url)
-    try:
-        result = await run_turn(
-            body.instruction.strip(),
-            has_attachment=attachment is not None,
-            has_previous=previous is not None,
-            attachment_path=attachment,
-            previous_path=previous,
-            history=[{"role": t.role, "text": t.text} for t in body.history],
-        )
-    except Exception as exc:  # noqa: BLE001
-        raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Image generation failed: {exc}")
-
-    # 'auto' reads the user's own instruction (not the model's rewritten
-    # prompt) for a logo request; an explicit position is honoured directly.
-    logo_applied, logo_note = await _apply_brand_logo(
-        owner, result, body.brand_logo, body.instruction
-    )
-
-    asset = await StudioService(db, user_id).save(
-        AssetKind.IMAGE,
-        result["prompt"],
-        title=result["prompt"][:120],
-        image_url=result["url"],
-        payload={
-            "size": result["size"],
-            "quality": result["quality"],
-            "operation": result["operation"],
+    """Queue a background conversational image turn. Poll the job."""
+    job = await ImageJobService(db, user_id).create(
+        "chat",
+        body.instruction.strip(),
+        {
+            "attachment_url": body.attachment_url,
+            "previous_image_url": body.previous_image_url,
+            "history": [{"role": t.role, "text": t.text} for t in body.history],
+            "brand_logo": body.brand_logo,
         },
     )
-    return ImageChatResponse(
-        asset_id=asset.id, logo_applied=logo_applied, logo_note=logo_note, **result
-    )
+    return _job_response(job)
+
+
+@router.get("/image/jobs/{job_id}", response_model=ImageJobResponse)
+async def studio_image_job(
+    job_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return _job_response(await ImageJobService(db, user_id).get(job_id))
 
 
 @router.get("/assets", response_model=AssetList)
