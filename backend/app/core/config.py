@@ -112,7 +112,9 @@ class Settings(BaseSettings):
     # AI
     GROQ_API_KEY: Optional[str] = Field(default=None, description="Groq API Key")
     OPENAI_API_KEY: Optional[str] = Field(default=None, description="OpenAI API Key")
-    OPENAI_IMAGE_MODEL: str = Field(default="gpt-image-1", description="OpenAI image model")
+    # gpt-image-2 is what ChatGPT itself uses (branded "ChatGPT Images 2.0") —
+    # cleaner photos, far better text rendering, up to 2K. Override in .env.
+    OPENAI_IMAGE_MODEL: str = Field(default="gpt-image-2", description="OpenAI image model")
 
     # Video generation — Google Veo 3.1 via the Gemini API
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Gemini API key (Veo 3.1 video generation)")
