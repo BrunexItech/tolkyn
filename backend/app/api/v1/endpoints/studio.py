@@ -133,6 +133,9 @@ async def studio_image_chat(
             "previous_image_url": body.previous_image_url,
             "history": [{"role": t.role, "text": t.text} for t in body.history],
             "brand_logo": body.brand_logo,
+            "style": body.style or None,
+            "size": body.size or None,
+            "draft": bool(body.draft),
         },
     )
     return _job_response(job)

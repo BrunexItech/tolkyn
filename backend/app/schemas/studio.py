@@ -115,6 +115,16 @@ class ImageChatRequest(BaseModel):
         None,
         description="off/None, 'auto', or an explicit position — same as ImageRequest.brand_logo",
     )
+    style: Optional[str] = Field(
+        None,
+        description="A style preset key (photo, documentary, product, lifestyle, editorial, "
+        "cinematic, illustration, 3d, flat) or '' / None for auto.",
+    )
+    size: Optional[str] = Field(
+        None,
+        description="Aspect preset: auto | square | landscape | portrait | wide | story",
+    )
+    draft: bool = Field(False, description="Use the fast image model (Flare)")
 
 
 class ImageChatResponse(BaseModel):

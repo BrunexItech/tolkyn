@@ -16,7 +16,13 @@ import {
 } from "lucide-react";
 import { Card } from "@/components/om/primitives/Card";
 import { uploadFile } from "@/lib/api/uploads";
-import { mediaUrl, type ImageChatTurn, type LogoPlacement } from "@/lib/api/studio";
+import {
+  mediaUrl,
+  type ImageChatTurn,
+  type LogoPlacement,
+  type ImageStylePreset,
+  type ImageSizePreset,
+} from "@/lib/api/studio";
 import { StudioBrandBar } from "./StudioBrandBar";
 import { useImageChat, useImageJob } from "./hooks";
 import { ImageLightbox } from "./ImageLightbox";
@@ -41,6 +47,28 @@ const LOGO_OPTS: { value: LogoPlacement; label: string }[] = [
   { value: "center", label: "Always centered" },
 ];
 
+const STYLE_OPTS: { value: ImageStylePreset; label: string }[] = [
+  { value: "", label: "Style · Auto" },
+  { value: "photo", label: "Photorealistic" },
+  { value: "documentary", label: "Documentary photo" },
+  { value: "product", label: "Product / advertising" },
+  { value: "lifestyle", label: "Lifestyle" },
+  { value: "editorial", label: "Editorial / magazine" },
+  { value: "cinematic", label: "Cinematic" },
+  { value: "illustration", label: "Flat illustration" },
+  { value: "3d", label: "3D render" },
+  { value: "flat", label: "Minimal flat design" },
+];
+
+const SIZE_OPTS: { value: ImageSizePreset; label: string }[] = [
+  { value: "auto", label: "Size · Auto" },
+  { value: "square", label: "Square 1:1" },
+  { value: "landscape", label: "Landscape 3:2" },
+  { value: "portrait", label: "Portrait 2:3" },
+  { value: "wide", label: "Wide / banner 16:9" },
+  { value: "story", label: "Story / reel 9:16" },
+];
+
 const EXAMPLES = [
   "A clean wordmark logo for a coffee cart called Brew Bus, warm browns",
   "A launch-day banner: phone on a desk at golden hour, lots of empty space for a headline",
@@ -57,6 +85,8 @@ export function ImageStudio() {
   const [input, setInput] = useState("");
   const [attachment, setAttachment] = useState<string | null>(null);
   const [logoMode, setLogoMode] = useState<LogoPlacement>("auto");
+  const [style, setStyle] = useState<ImageStylePreset>("");
+  const [sizePreset, setSizePreset] = useState<ImageSizePreset>("auto");
   const [uploading, setUploading] = useState(false);
   const [lightbox, setLightbox] = useState<{ src: string; caption: string } | null>(null);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
@@ -166,6 +196,8 @@ export function ImageStudio() {
         previous_image_url: !att && previousImage ? previousImage.replace(/^https?:\/\/[^/]+/, "") : undefined,
         history,
         brand_logo: logoMode,
+        style: style || undefined,
+        size: sizePreset !== "auto" ? sizePreset : undefined,
       },
       {
         onSuccess: (r) => {
@@ -371,27 +403,49 @@ export function ImageStudio() {
             {busy ? <Loader2 className="size-4 animate-spin" /> : <ArrowUp className="size-4" />}
           </button>
         </div>
-        <div className="mt-1 flex items-center justify-between gap-2 text-[9.5px] text-om-faint">
+        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[9.5px] text-om-faint">
           <span className="flex items-center gap-1">
             <ImageIcon className="size-3" /> Enter to send · Shift+Enter for a new line
           </span>
-          <label className="flex items-center gap-1.5">
-            <span>Logo</span>
+          <div className="ml-auto flex flex-wrap items-center gap-x-3 gap-y-1">
             <select
-              value={logoMode}
-              onChange={(e) => setLogoMode(e.target.value as LogoPlacement)}
+              aria-label="Style"
+              value={style}
+              onChange={(e) => setStyle(e.target.value as ImageStylePreset)}
               className="rounded border border-om-border bg-white/[0.03] px-1 py-0.5 text-[9.5px] text-om-dim outline-none focus:border-om-blue/60"
             >
-              {LOGO_OPTS.map((o) => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
+              {STYLE_OPTS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
-          </label>
-          <span className={cn(over && "text-om-red")}>
-            {over ? `${input.length}/${PROMPT_LIMITS.image} — too long` : ""}
-          </span>
+            <select
+              aria-label="Size"
+              value={sizePreset}
+              onChange={(e) => setSizePreset(e.target.value as ImageSizePreset)}
+              className="rounded border border-om-border bg-white/[0.03] px-1 py-0.5 text-[9.5px] text-om-dim outline-none focus:border-om-blue/60"
+            >
+              {SIZE_OPTS.map((o) => (
+                <option key={o.value} value={o.value}>{o.label}</option>
+              ))}
+            </select>
+            <label className="flex items-center gap-1.5">
+              <span>Logo</span>
+              <select
+                value={logoMode}
+                onChange={(e) => setLogoMode(e.target.value as LogoPlacement)}
+                className="rounded border border-om-border bg-white/[0.03] px-1 py-0.5 text-[9.5px] text-om-dim outline-none focus:border-om-blue/60"
+              >
+                {LOGO_OPTS.map((o) => (
+                  <option key={o.value} value={o.value}>{o.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+          {over && (
+            <span className="w-full text-right text-om-red">
+              {input.length}/{PROMPT_LIMITS.image} — too long
+            </span>
+          )}
         </div>
       </div>
 

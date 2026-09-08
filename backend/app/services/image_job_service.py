@@ -285,6 +285,8 @@ async def run_job(job_id: str) -> None:
                     previous_path=previous,
                     previous_response_id=prev_response_id,
                     brand_colors=colors if isinstance(colors, list) else None,
+                    style=p.get("style"),
+                    size=p.get("size"),
                     draft=bool(p.get("draft")),
                 )
                 job.openai_response_id = result.get("response_id")

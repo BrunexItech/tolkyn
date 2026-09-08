@@ -30,7 +30,14 @@ export interface CopyResponse {
   generated_by: string;
 }
 
-export type ImageQuality = "low" | "medium" | "high";
+export type ImageQuality = "low" | "medium" | "high" | "xhigh" | "max";
+
+export type ImageStylePreset =
+  | "" | "photo" | "documentary" | "product" | "lifestyle"
+  | "editorial" | "cinematic" | "illustration" | "3d" | "flat";
+
+export type ImageSizePreset =
+  | "auto" | "square" | "landscape" | "portrait" | "wide" | "story";
 
 /** "off" | "auto" | a position — where to composite the workspace brand logo. */
 export type LogoPlacement =
@@ -112,6 +119,9 @@ export const studioApi = {
     previous_image_url?: string;
     history?: ImageChatTurn[];
     brand_logo?: LogoPlacement;
+    style?: ImageStylePreset;
+    size?: ImageSizePreset;
+    draft?: boolean;
   }) => http.post<ImageJob>("/studio/image/chat", body),
   imageJob: (id: string) => http.get<ImageJob>(`/studio/image/jobs/${id}`),
   assets: (kind?: AssetKind) => http.get<{ items: GeneratedAsset[] }>(`/studio/assets${qs({ kind })}`),

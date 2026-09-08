@@ -27,6 +27,29 @@ from app.core.config import settings
 MEDIA_DIR = Path(__file__).resolve().parents[2] / "media" / "generated"
 MEDIA_DIR.mkdir(parents=True, exist_ok=True)
 
+# Composer presets. Style is a directive appended to the orchestrator's
+# instructions; size maps to concrete gpt-image-2.5 dimensions ("auto" lets
+# the model choose, ChatGPT-style).
+_STYLE_DIRECTIVES = {
+    "photo": "a real, natural photograph — believable light, real texture, honest colour, no heavy retouching",
+    "documentary": "candid documentary photography — 35mm, available light, unposed, a real moment",
+    "product": "high-end product / advertising photography — clean studio or lifestyle setting, controlled light, crisp detail",
+    "lifestyle": "warm lifestyle photography — real people and places, soft natural light, shallow depth of field",
+    "editorial": "polished editorial / magazine photography — strong composition, confident colour direction",
+    "cinematic": "cinematic film still — anamorphic feel, motivated lighting, filmic colour, subtle grain",
+    "illustration": "clean flat vector illustration — simple shapes, limited palette, no photorealism",
+    "3d": "a polished 3D render — soft studio lighting, clean materials, gentle ambient occlusion",
+    "flat": "minimal flat design — bold simple shapes, generous negative space, no gradients",
+}
+_SIZE_PRESETS = {
+    "square": "1024x1024",
+    "landscape": "1536x1024",
+    "portrait": "1024x1536",
+    "wide": "1536x864",
+    "story": "1024x1792",
+    "auto": "auto",
+}
+
 _INSTRUCTIONS = (
     "You are the image assistant inside a marketing platform. The user either describes an "
     "image they want or asks for a change to the image already in this conversation. Always "
@@ -85,6 +108,8 @@ async def run_turn(
     previous_path: Optional[str] = None,
     previous_response_id: Optional[str] = None,
     brand_colors: Optional[List[str]] = None,
+    style: Optional[str] = None,
+    size: Optional[str] = None,
     draft: bool = False,
 ) -> Dict[str, Any]:
     if not settings.OPENAI_API_KEY:
@@ -97,6 +122,13 @@ async def run_turn(
         else "The user has not set brand colours."
     )
     instructions = _INSTRUCTIONS.format(brand=brand_line)
+    directive = _STYLE_DIRECTIVES.get((style or "").strip().lower())
+    if directive:
+        instructions += (
+            f"\n\nVISUAL STYLE (overrides the default): render this as {directive}. "
+            "Hold this style unless the user's message clearly asks for something else."
+        )
+    tool_size = _SIZE_PRESETS.get((size or "auto").strip().lower(), "auto")
 
     # content parts: the text, plus any images the model should work from
     content: List[Dict[str, Any]] = [{"type": "input_text", "text": instruction}]
@@ -119,7 +151,7 @@ async def run_turn(
         "type": "image_generation",
         "model": image_model,
         "quality": "high",
-        "size": "auto",
+        "size": tool_size,
         "moderation": "auto",
     }
 
