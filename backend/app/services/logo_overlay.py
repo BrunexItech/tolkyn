@@ -207,6 +207,11 @@ _NOT_A_SURFACE = {
     "screen", "frame", "image", "picture", "background", "right", "left",
     "top", "bottom", "side", "corner", "logo", "brand", "brand identity",
     "everything", "it", "them", "product", "products",
+    # photo / camera boilerplate that trails many prompts ("...logo. Shot on a
+    # full-frame camera...") — never a real surface for the mark
+    "full-frame camera", "full frame camera", "camera", "a full-frame camera",
+    "dslr", "mirrorless camera", "lens", "prime lens", "tripod", "location",
+    "set", "shoot", "shot", "display", "canvas",
 }
 
 # Real, printable surfaces to look for in a described scene, most-preferred
@@ -258,7 +263,11 @@ def detect_logo_request(prompt: str) -> Optional[dict]:
     if not any(w in low for w in _LOGO_WORDS):
         return None
     idx = min((low.find(w) for w in _LOGO_WORDS if w in low), default=-1)
+    # only the SAME clause as the logo word — stop at the first sentence break so
+    # trailing camera/lighting boilerplate ("...logo. Shot on a full-frame
+    # camera...") can never be read as "put the logo on the camera".
     tail = prompt[idx: idx + 160] if idx >= 0 else prompt
+    tail = re.split(r"[.!?;\n]", tail, maxsplit=1)[0]
     m = _ON_SURFACE_RE.search(tail)
     if m:
         surface = m.group(1).strip(" -'").lower()
