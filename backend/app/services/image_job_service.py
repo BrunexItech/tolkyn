@@ -28,13 +28,16 @@ from app.services.logo_overlay import (
     composite_logo,
     detect_logo_request,
     normalize_position,
+    pick_scene_surface,
 )
 from app.services.logo_scene import place_logo_in_scene
 from app.services.studio_service import StudioService
 
 _MEDIA_ROOT = Path(__file__).resolve().parents[2] / "media"
 _STALE_QUEUED = timedelta(seconds=25)
-_STALE_PROCESSING = timedelta(minutes=8)
+# longer than the OpenAI client's own timeout (540s) + slack, so the safety-net
+# sweep never re-runs a job that's simply taking a while (double charge).
+_STALE_PROCESSING = timedelta(minutes=12)
 
 
 def _now() -> datetime:
@@ -52,11 +55,27 @@ def resolve_media(url: Optional[str]) -> Optional[str]:
 
 # --- brand-logo helpers (shared by both modes) ---------------------------
 def _resolve_logo_request(brand_logo: Optional[str], prompt: str) -> Optional[dict]:
+    """Where the workspace brand logo should go on this image.
+
+    - "off" / None              -> nowhere
+    - an explicit position       -> flat corner overlay there (the user chose it)
+    - "auto"                     -> the user's own instruction if they gave one;
+                                    else onto a real branded surface in the
+                                    scene (sign, cup, packaging…); else a small,
+                                    discreet bottom-right corner mark. Never a
+                                    big centred paste.
+    """
     opt = (brand_logo or "").strip().lower()
     if not opt or opt == "off":
         return None
     if opt == "auto":
-        return detect_logo_request(prompt)
+        explicit = detect_logo_request(prompt)
+        if explicit:
+            return explicit
+        surface = pick_scene_surface(prompt)
+        if surface:
+            return {"mode": "scene", "value": surface}
+        return {"mode": "corner", "value": "bottom-right", "auto": True}
     return {"mode": "corner", "value": normalize_position(opt) or "bottom-right"}
 
 
@@ -114,7 +133,10 @@ async def apply_brand_logo(
         return None, "Couldn't place the logo in the scene — the image is unchanged."
 
     tmp = Path(img_path).with_suffix(".logo.png")
-    if composite_logo(Path(img_path), Path(logo_path), tmp, position=req["value"]):
+    # 'auto' corner = a restrained brand mark (≈11% width); an explicit choice
+    # gets the standard size the user is expecting.
+    scale = 0.11 if req.get("auto") else None
+    if composite_logo(Path(img_path), Path(logo_path), tmp, position=req["value"], scale=scale):
         tmp.replace(img_path)
         return req["value"], None
     return None, "Couldn't place the logo on this image — the image is unchanged."

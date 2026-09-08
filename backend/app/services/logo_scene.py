@@ -19,15 +19,16 @@ logger = logging.getLogger(__name__)
 MEDIA_DIR = Path(__file__).resolve().parents[2] / "media" / "generated"
 
 _EDIT_INSTRUCTION = (
-    "The FIRST image is a photo. The SECOND image is a brand logo on a transparent "
-    "background. Composite that exact logo onto {where} in the first image so it looks "
-    "physically printed / applied there — follow the surface's angle, perspective, "
-    "curvature and lighting, with realistic scale and a natural amount of wear. The "
-    "ENTIRE logo must sit fully within the photo frame and fully on that surface — never "
-    "cropped, cut off, running past an edge, or clipped by the surface's border; if it "
-    "won't fit at a natural size, make it smaller. Reproduce the logo's shapes, colours "
-    "and any text faithfully; do not redraw or restyle it, and do not add any other logo "
-    "or text. Keep everything else in the first image — the subject, composition, "
+    "The FIRST image is a photo. The SECOND image is the real company brand logo on a "
+    "transparent background — not a placeholder. Composite that exact logo onto {where} in "
+    "the first image so it looks physically printed / applied there — follow the surface's "
+    "angle, perspective, curvature and lighting, with realistic scale and a natural amount "
+    "of wear. The ENTIRE logo must sit fully within the photo frame and fully on that "
+    "surface — never cropped, cut off, running past an edge, or clipped by the surface's "
+    "border; if it won't fit at a natural size, make it smaller. Reproduce the logo's exact "
+    "shapes, proportions, colours and any lettering pixel-faithfully; do NOT redraw, "
+    "restyle, recolour, re-letter or simplify it, and do NOT add any other logo, badge or "
+    "text anywhere. Keep everything else in the first image — the subject, composition, "
     "colours, background and every other detail — exactly as it is."
 )
 
@@ -75,7 +76,7 @@ async def place_logo_in_scene(
     from openai import OpenAI
 
     def _run() -> Optional[str]:
-        client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=420.0, max_retries=1)
         model = settings.OPENAI_IMAGE_MODEL
         try:
             with open(base_path, "rb") as b, open(logo_path, "rb") as l:

@@ -138,46 +138,61 @@ def composite_logo(
         return False
 
 
-# --- deciding whether the prompt asked for a logo, and where ---------------
+# --- deciding whether / where a logo goes ---------------------------------
+#
+# The rule: a logo is composited only when the prompt *directs* a placement
+# ("logo in the top-right", "logo on the storefront sign"). Merely describing
+# a brand ("use our official logo and brand identity") is NOT a direction —
+# that text is about the look, and slapping a flat PNG onto a photo because
+# the word "logo" appeared is exactly what used to wreck these images.
 
-_LOGO_WORDS = ("logo", "watermark", "brand mark", "brandmark", "our brand", "company mark")
-_CTR = r"(?:centre|center|centered|centred|middle)"
-_POS_PATTERNS = [
-    (r"(?:top|upper)[\s-]*left", "top-left"),
-    (r"(?:top|upper)[\s-]*right", "top-right"),
-    (rf"(?:top|upper)[\s-]*{_CTR}|{_CTR}[\s-]*top", "top-center"),
-    (r"(?:bottom|lower)[\s-]*left", "bottom-left"),
-    (r"(?:bottom|lower)[\s-]*right", "bottom-right"),
-    (rf"(?:bottom|lower)[\s-]*{_CTR}|{_CTR}[\s-]*bottom", "bottom-center"),
-    (rf"{_CTR}[\s-]*left|left[\s-]*{_CTR}", "center-left"),
-    (rf"{_CTR}[\s-]*right|right[\s-]*{_CTR}", "center-right"),
-    (rf"\b(?:dead[\s-]*)?{_CTR}\b", "center"),
-    (r"\btop\b|\bhead(?:er)?\b", "top-center"),
-    (r"\bbottom\b|\bfoot(?:er)?\b", "bottom-center"),
-    (r"\bleft\b", "center-left"),
-    (r"\bright\b", "center-right"),
+_LOGO_WORDS = ("logo", "watermark", "brand mark", "brandmark", "wordmark", "company mark")
+
+# compound nouns that merely CONTAIN "center/centre" — a product/place name,
+# never an instruction to centre the logo ("command center", "call centre").
+_FALSE_CENTER_RE = re.compile(
+    r"\b(?:command|call|contact|data|help|service|resource|learning|distribution|"
+    r"fulfil?ment|control|message|notification|action|operations?|support|business|"
+    r"town|shopping|convention|media|wellness|fitness|garden|welcome|customer|"
+    r"experience|innovation|research|training|day\s?care|child\s?care|nerve|"
+    r"epi|profit|cost|revenue)\s+cent(?:er|re)s?\b",
+    re.I,
+)
+
+# an EXPLICIT corner instruction, matched only in a tight window around the
+# logo word — no loose "there's a 'left' somewhere in the prompt" guessing.
+_EXPLICIT_POS = [
+    (r"\b(?:top|upper)[\s-]*left\b", "top-left"),
+    (r"\b(?:top|upper)[\s-]*right\b", "top-right"),
+    (r"\b(?:bottom|lower)[\s-]*left\b", "bottom-left"),
+    (r"\b(?:bottom|lower)[\s-]*right\b", "bottom-right"),
+    (r"\b(?:top|upper)[\s-]*cent(?:er|re)\b|\bcent(?:er|re)[\s-]*top\b", "top-center"),
+    (r"\b(?:bottom|lower)[\s-]*cent(?:er|re)\b|\bcent(?:er|re)[\s-]*bottom\b", "bottom-center"),
+    (r"\bdead[\s-]*cent(?:er|re)\b|\bcent(?:er|re)(?:ed|red)?\s+(?:in|on|of)\s+the\s+"
+     r"(?:image|frame|picture|canvas|composition|shot)\b|\bin\s+the\s+(?:middle|cent(?:er|re))"
+     r"\s+of\s+the\s+(?:image|frame|picture|shot)\b", "center"),
+    (r"\btop\b", "top-center"),
+    (r"\bbottom\b|\bfooter\b", "bottom-center"),
 ]
 
 
-def detect_logo_placement(prompt: str) -> Optional[str]:
-    """If the prompt asks for the brand logo, return the requested position
-    (defaulting to bottom-right when a spot isn't named). Return None if the
-    prompt doesn't mention a logo at all."""
-    if not prompt:
-        return None
-    low = prompt.lower()
-    if not any(w in low for w in _LOGO_WORDS):
-        return None
-    # look for a position near the logo mention first, then anywhere
+def _pos_near_logo(prompt: str) -> Optional[str]:
+    """An explicit corner instruction sitting next to the word 'logo', or None."""
+    low = _FALSE_CENTER_RE.sub(" ", (prompt or "").lower())
     idx = min((low.find(w) for w in _LOGO_WORDS if w in low), default=-1)
-    window = low[max(0, idx - 60): idx + 120] if idx >= 0 else low
-    for pat, pos in _POS_PATTERNS:
+    if idx < 0:
+        return None
+    window = low[max(0, idx - 40): idx + 90]
+    for pat, pos in _EXPLICIT_POS:
         if re.search(pat, window):
             return pos
-    for pat, pos in _POS_PATTERNS:
-        if re.search(pat, low):
-            return pos
-    return "bottom-right"
+    return None
+
+
+def detect_logo_placement(prompt: str) -> Optional[str]:
+    """Explicit corner instruction for the logo, or None. (No default — a bare
+    mention of a logo is not a placement.)"""
+    return _pos_near_logo(prompt)
 
 
 _ON_SURFACE_RE = re.compile(
@@ -188,25 +203,69 @@ _ON_SURFACE_RE = re.compile(
     re.I,
 )
 
+_NOT_A_SURFACE = {
+    "screen", "frame", "image", "picture", "background", "right", "left",
+    "top", "bottom", "side", "corner", "logo", "brand", "brand identity",
+    "everything", "it", "them", "product", "products",
+}
+
+# Real, printable surfaces to look for in a described scene, most-preferred
+# first. Screens (laptop/phone/monitor) are deliberately absent — a logo
+# fighting live UI reads worse than a clean image corner, which is what real
+# ad campaigns use anyway.
+_SCENE_SURFACES = [
+    ("the storefront sign", r"store\s?front|shop\s?front|shop sign|store sign|\bsignage\b|"
+                            r"sign\s?board|\bstorefront\b|\bawning\b|shop window|fa[cç]ade|marquee"),
+    ("the billboard", r"\bbillboard\b|\bhoarding\b"),
+    ("the banner behind them", r"\bbanner\b|\bbackdrop\b|step[\s-]and[\s-]repeat|press wall|"
+                               r"pop[\s-]?up stand|exhibition stand|trade[\s-]?show booth"),
+    ("the poster on the wall", r"\bposter\b|framed print|wall art"),
+    ("the feature wall behind them", r"feature wall|accent wall|wall behind|brand(?:ed)? wall|"
+                                     r"lobby wall|reception wall|\bmural\b"),
+    ("the coffee cup", r"coffee cup|paper cup|take\s?away cup|to-go cup|disposable cup|\bmug\b"),
+    ("the t-shirt", r"t-?shirt|\btee\b|polo shirt|\bhoodie\b|\bjersey\b|staff (?:shirt|uniform)|\bapron\b"),
+    ("the tote bag", r"tote bag|shopping bag|paper bag|gift bag|canvas bag|carrier bag"),
+    ("the packaging", r"\bpackaging\b|product box|shipping box|\bcarton\b|gift box|\bpackage\b|pouch"),
+    ("the bottle", r"water bottle|\bbottle\b|\bflask\b|\btumbler\b"),
+    ("the can", r"soda can|beverage can|drink can|alumin[iu]m can"),
+    ("the cap", r"baseball cap|\bsnapback\b|\bbeanie\b|trucker cap"),
+    ("the delivery van", r"delivery van|company van|box truck|delivery truck|company car|branded vehicle"),
+    ("the business card", r"business card|name card|calling card"),
+]
+
+
+def pick_scene_surface(prompt: str) -> Optional[str]:
+    """For 'auto' mode with no explicit instruction: the most natural real
+    surface in the described scene to carry the brand mark, or None when the
+    scene has no obvious spot (portrait, landscape, screen-only) — the caller
+    then falls back to a small, discreet corner mark."""
+    low = (prompt or "").lower()
+    for where, pat in _SCENE_SURFACES:
+        if re.search(pat, low):
+            return where
+    return None
+
 
 def detect_logo_request(prompt: str) -> Optional[dict]:
-    """Richer than detect_logo_placement: distinguishes 'logo top-right'
-    (mode='corner') from 'logo on the laptop lid' (mode='scene', value='laptop
-    lid'). Returns None when the prompt doesn't ask for the logo at all."""
+    """The user's EXPLICIT logo direction, if there is one:
+        {"mode": "scene",  "value": "the laptop lid"}   ("... logo on the laptop lid")
+        {"mode": "corner", "value": "top-right"}        ("... logo in the top-right")
+    Returns None when the prompt only *describes* a brand rather than directing
+    where its mark goes."""
     if not prompt:
         return None
     low = prompt.lower()
     if not any(w in low for w in _LOGO_WORDS):
         return None
     idx = min((low.find(w) for w in _LOGO_WORDS if w in low), default=-1)
-    tail = prompt[idx: idx + 180] if idx >= 0 else prompt
+    tail = prompt[idx: idx + 160] if idx >= 0 else prompt
     m = _ON_SURFACE_RE.search(tail)
     if m:
-        surface = m.group(1).strip(" -'")
-        # "on the top right" / "on the left" is a corner, not a real surface
-        if surface and not normalize_position(surface) and surface not in {
-            "screen", "frame", "image", "picture", "background", "right", "left", "top", "bottom", "side",
-        }:
-            return {"mode": "scene", "value": surface}
-    pos = detect_logo_placement(prompt)
-    return {"mode": "corner", "value": pos} if pos else None
+        surface = m.group(1).strip(" -'").lower()
+        if surface and not normalize_position(surface) and surface not in _NOT_A_SURFACE:
+            article = "" if surface.startswith(("the ", "a ", "an ")) else "the "
+            return {"mode": "scene", "value": f"{article}{surface}".strip()}
+    pos = _pos_near_logo(prompt)
+    if pos:
+        return {"mode": "corner", "value": pos}
+    return None

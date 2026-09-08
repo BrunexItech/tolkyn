@@ -172,7 +172,7 @@ def _photoreal_wrap(prompt: str, style: str, *, as_logo: bool, is_edit: bool) ->
     if _NON_PHOTO_RE.search(blob):
         return prompt
     # already asking for a photo? still fine to reinforce, but keep it short
-    return f"{prompt}.{_PHOTO_SUFFIX}"
+    return f"{prompt.rstrip('. ')}.{_PHOTO_SUFFIX}"
 _PROMPT_VIDEO_SYSTEM = (
     "You are a short-form video director. Turn a rough idea into ONE precise prompt for a "
     "video model: the core action and subject, camera movement, framing, setting, lighting "
@@ -275,7 +275,10 @@ async def generate_image(
         # like pasting it into ChatGPT; don't second-guess it
         full_prompt = _photoreal_wrap(full_prompt, style, as_logo=as_logo, is_edit=bool(input_image_path))
 
-    client = OpenAI(api_key=settings.OPENAI_API_KEY)
+    # a generous hard cap: a busy "high" render can take many minutes, but if
+    # OpenAI truly hangs we want a clean failure the job can report, not a
+    # worker stuck forever.
+    client = OpenAI(api_key=settings.OPENAI_API_KEY, timeout=540.0, max_retries=1)
 
     def _run() -> str:
         common: Dict[str, Any] = {
