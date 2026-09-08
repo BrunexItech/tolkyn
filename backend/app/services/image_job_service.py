@@ -140,7 +140,13 @@ async def apply_brand_logo(
             if new_path:
                 Path(new_path).replace(img_path)
             return f"on {req['value']}", None
-        return None, "Couldn't place the logo in the scene — the image is unchanged."
+        # the in-scene edit (a second AI call) failed — don't leave the user
+        # with no logo at all; fall back to a clean, restrained corner mark.
+        tmp = Path(img_path).with_suffix(".logo.png")
+        if composite_logo(Path(img_path), Path(logo_path), tmp, position="bottom-right", scale=0.11):
+            tmp.replace(img_path)
+            return "bottom-right", None
+        return None, "Couldn't place the logo on this image — the image is unchanged."
 
     tmp = Path(img_path).with_suffix(".logo.png")
     # 'auto' corner = a restrained brand mark (≈11% width); an explicit choice
