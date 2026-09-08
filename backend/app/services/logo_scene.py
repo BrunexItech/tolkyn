@@ -32,6 +32,11 @@ _EDIT_INSTRUCTION = (
 )
 
 
+def _model_takes_input_fidelity(model: str) -> bool:
+    m = (model or "").lower()
+    return m in ("gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "gpt-image-1.5-mini")
+
+
 def _resolve(url_or_path: str) -> Optional[Path]:
     p = Path(url_or_path)
     if p.is_file():
@@ -71,16 +76,15 @@ async def place_logo_in_scene(
 
     def _run() -> Optional[str]:
         client = OpenAI(api_key=settings.OPENAI_API_KEY)
+        model = settings.OPENAI_IMAGE_MODEL
         try:
             with open(base_path, "rb") as b, open(logo_path, "rb") as l:
-                res = client.images.edit(
-                    model=settings.OPENAI_IMAGE_MODEL,
-                    image=[b, l],
-                    prompt=prompt,
-                    size="auto",
-                    quality=quality,
-                    input_fidelity="high",
+                kw: dict = dict(
+                    model=model, image=[b, l], prompt=prompt, size="auto", quality=quality
                 )
+                if _model_takes_input_fidelity(model):
+                    kw["input_fidelity"] = "high"
+                res = client.images.edit(**kw)
             item = res.data[0]
             if getattr(item, "b64_json", None):
                 return item.b64_json

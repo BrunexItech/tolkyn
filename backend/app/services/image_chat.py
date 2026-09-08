@@ -15,8 +15,16 @@ _PLANNER_MODEL = "gpt-5.6-luna"
 
 import re as _re
 
-_WIDE_RE = _re.compile(r"\b(banner|cover|header|hero|landscape|wide|16[:x]9|widescreen|billboard|thumbnail|desktop)\b", _re.I)
-_TALL_RE = _re.compile(r"\b(story|stories|reel|portrait|vertical|9[:x]16|poster|phone wallpaper|pinterest)\b", _re.I)
+_WIDE_RE = _re.compile(
+    r"\b(banner|cover|header|hero|landscape|wide|16[:x]9|widescreen|billboard|"
+    r"thumbnail|desktop|ad\b|advert|advertising|campaign|website|web page|blog)\b",
+    _re.I,
+)
+_TALL_RE = _re.compile(
+    r"\b(story|stories|reel|portrait|vertical|9[:x]16|poster|phone wallpaper|"
+    r"pinterest|tiktok|instagram story)\b",
+    _re.I,
+)
 
 
 def _guess_size(text: str) -> str:

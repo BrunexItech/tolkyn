@@ -212,8 +212,28 @@ async def build_prompt(intent: str, brief: str) -> Dict[str, Any]:
     return data
 
 
-_IMAGE_MINI_MODEL = "gpt-image-1-mini"
-_VALID_SIZES = {"1024x1024", "1024x1536", "1536x1024", "auto"}
+# gpt-image-1 / -1.5 only take these; gpt-image-2 takes far more (edges a
+# multiple of 16, ≤ ~2560x1440 reliably, aspect ≤ 3:1).
+_LEGACY_SIZES = {"1024x1024", "1024x1536", "1536x1024", "auto"}
+_GPT_IMAGE_2_SIZES = _LEGACY_SIZES | {
+    "1536x1536", "1792x1024", "1024x1792", "2048x2048",
+    "2560x1440", "1440x2560", "1920x1080", "1080x1920",
+}
+
+
+_LEGACY_IMAGE_MODELS = {
+    "gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "gpt-image-1.5-mini",
+}
+
+
+def _is_v2(model: str) -> bool:
+    """gpt-image-2+ / chatgpt-image-latest — no input_fidelity, flexible sizes.
+    Anything that isn't an explicitly-known legacy id is treated as v2."""
+    return (model or "").lower() not in _LEGACY_IMAGE_MODELS
+
+
+def _valid_sizes(model: str) -> set[str]:
+    return _GPT_IMAGE_2_SIZES if _is_v2(model) else _LEGACY_SIZES
 
 
 async def generate_image(
@@ -231,14 +251,21 @@ async def generate_image(
 ) -> Dict[str, Any]:
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY is required for image generation")
-    if size not in _VALID_SIZES:
-        size = "1024x1024"
     if quality not in ("low", "medium", "high"):
         quality = "high"
     if background not in ("auto", "transparent", "opaque"):
         background = "auto"
     if input_fidelity not in ("high", "low"):
         input_fidelity = "high"
+
+    # Draft = the same top model at medium quality (fast + cheaper), not a
+    # weaker model — the mini models look noticeably worse.
+    model = settings.OPENAI_IMAGE_MODEL
+    if draft:
+        quality = "medium"
+
+    if size not in _valid_sizes(model):
+        size = "1024x1024"
 
     full_prompt = prompt if not style else f"{prompt}. Style: {style}."
     if as_logo:
@@ -248,7 +275,6 @@ async def generate_image(
         # like pasting it into ChatGPT; don't second-guess it
         full_prompt = _photoreal_wrap(full_prompt, style, as_logo=as_logo, is_edit=bool(input_image_path))
 
-    model = _IMAGE_MINI_MODEL if draft else settings.OPENAI_IMAGE_MODEL
     client = OpenAI(api_key=settings.OPENAI_API_KEY)
 
     def _run() -> str:
@@ -258,9 +284,10 @@ async def generate_image(
         if background != "auto":
             common["background"] = background
         if input_image_path:
-            # input_fidelity=high keeps the source image's subject, faces, logos and
-            # fine detail intact — only the requested change is applied. (full model only)
-            if not draft:
+            # input_fidelity keeps the source subject/faces/detail intact — but
+            # only gpt-image-1 / -1.5 accept the parameter; v2 is high-fidelity
+            # by default and 400s if it's sent.
+            if not _is_v2(model):
                 common["input_fidelity"] = input_fidelity
             with open(input_image_path, "rb") as fh:
                 res = client.images.edit(image=fh, **common)

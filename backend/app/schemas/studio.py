@@ -37,11 +37,11 @@ class ImageQuality(str, Enum):
 
 
 class ImageRequest(BaseModel):
-    prompt: str = Field(..., min_length=3, max_length=6000)
+    prompt: str = Field(..., min_length=3, max_length=16000)
     size: str = "1024x1024"
-    quality: ImageQuality = ImageQuality.MEDIUM
+    quality: ImageQuality = ImageQuality.HIGH
     style: str = ""
-    draft: bool = Field(False, description="Use the cheaper gpt-image-1-mini model")
+    draft: bool = Field(False, description="Faster: the same model at 'medium' quality")
     input_image_url: Optional[str] = Field(None, description="An uploaded image to edit / use as a base")
     as_logo: bool = False
     save: bool = True
@@ -105,7 +105,7 @@ class ChatTurn(BaseModel):
 
 
 class ImageChatRequest(BaseModel):
-    instruction: str = Field(..., min_length=1, max_length=6000)
+    instruction: str = Field(..., min_length=1, max_length=16000)
     attachment_url: Optional[str] = Field(None, description="A photo the user just attached")
     previous_image_url: Optional[str] = Field(None, description="The last image the tool made in this chat")
     history: List[ChatTurn] = Field(default_factory=list, max_length=40)
