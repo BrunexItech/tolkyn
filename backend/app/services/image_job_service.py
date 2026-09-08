@@ -23,7 +23,7 @@ from app.models.generated_asset import AssetKind
 from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.user import User
 from app.services.content_ai import generate_image
-from app.services.image_chat import run_turn
+from app.services.image_responses import run_turn
 from app.services.logo_overlay import (
     composite_logo,
     detect_logo_request,
@@ -54,16 +54,19 @@ def resolve_media(url: Optional[str]) -> Optional[str]:
 
 
 # --- brand-logo helpers (shared by both modes) ---------------------------
-def _resolve_logo_request(brand_logo: Optional[str], prompt: str) -> Optional[dict]:
+def _resolve_logo_request(
+    brand_logo: Optional[str], prompt: str, prior: Optional[dict] = None
+) -> Optional[dict]:
     """Where the workspace brand logo should go on this image.
 
     - "off" / None              -> nowhere
     - an explicit position       -> flat corner overlay there (the user chose it)
     - "auto"                     -> the user's own instruction if they gave one;
-                                    else onto a real branded surface in the
-                                    scene (sign, cup, packaging…); else a small,
-                                    discreet bottom-right corner mark. Never a
-                                    big centred paste.
+                                    else, on a refine, wherever it was last time
+                                    (`prior`); else onto a real branded surface
+                                    in the scene (sign, cup, packaging…); else a
+                                    small, discreet bottom-right corner mark.
+                                    Never a big centred paste.
     """
     opt = (brand_logo or "").strip().lower()
     if not opt or opt == "off":
@@ -72,6 +75,8 @@ def _resolve_logo_request(brand_logo: Optional[str], prompt: str) -> Optional[di
         explicit = detect_logo_request(prompt)
         if explicit:
             return explicit
+        if prior:  # a refine — keep the mark where it already was
+            return prior
         surface = pick_scene_surface(prompt)
         if surface:
             return {"mode": "scene", "value": surface}
@@ -109,11 +114,16 @@ def reserve_space_hint(prompt: str, req: dict) -> str:
 
 
 async def apply_brand_logo(
-    owner: User, result: dict, brand_logo: Optional[str], source_prompt: str
+    owner: User,
+    result: dict,
+    brand_logo: Optional[str],
+    source_prompt: str,
+    prior: Optional[dict] = None,
 ) -> tuple[Optional[str], Optional[str]]:
     """corner -> deterministic Pillow overlay; scene -> a gpt-image-1 edit.
-    Returns (what_was_applied, note). Never raises."""
-    req = _resolve_logo_request(brand_logo, source_prompt)
+    `prior` is the previous turn's placement, reused on a refine so the mark
+    doesn't jump around. Returns (what_was_applied, note). Never raises."""
+    req = _resolve_logo_request(brand_logo, source_prompt, prior)
     if not req:
         return None, None
     logo_path = resolve_media(getattr(owner, "brand_logo_url", None))
@@ -140,6 +150,42 @@ async def apply_brand_logo(
         tmp.replace(img_path)
         return req["value"], None
     return None, "Couldn't place the logo on this image — the image is unchanged."
+
+
+async def _prev_turn(
+    db: AsyncSession, workspace_id: str, previous_image_url: Optional[str]
+) -> tuple[Optional[str], Optional[str]]:
+    """(openai_response_id, logo_applied) of the image the user is refining —
+    so the next turn continues the same OpenAI conversation AND keeps the brand
+    logo where it already was."""
+    if not previous_image_url:
+        return None, None
+    url = previous_image_url.split("?")[0]
+    row = (
+        await db.execute(
+            select(ImageJob.openai_response_id, ImageJob.logo_applied)
+            .where(
+                ImageJob.workspace_id == workspace_id,
+                ImageJob.result_url == url,
+            )
+            .order_by(ImageJob.created_at.desc())
+            .limit(1)
+        )
+    ).first()
+    if not row:
+        return None, None
+    return row[0], row[1]
+
+
+def _placement_from_prior(prior: Optional[str]) -> Optional[dict]:
+    """Turn a stored logo_applied string back into a placement dict."""
+    if not prior:
+        return None
+    p = prior.strip()
+    if p.startswith("on "):
+        return {"mode": "scene", "value": p[3:].strip()}
+    pos = normalize_position(p)
+    return {"mode": "corner", "value": pos} if pos else None
 
 
 # --- the service -------------------------------------------------------
@@ -225,28 +271,26 @@ async def run_job(job_id: str) -> None:
             if job.mode == "chat":
                 attachment = resolve_media(p.get("attachment_url"))
                 previous = resolve_media(p.get("previous_image_url"))
-                # if a logo will go on a fresh image, tell the model to leave
-                # room for it and invent none of its own
-                logo_req = _resolve_logo_request(brand_logo, job.prompt)
-                extra = (
-                    reserve_directive(logo_req)
-                    if logo_req
-                    and not attachment
-                    and not previous
-                    and resolve_media(getattr(owner, "brand_logo_url", None))
-                    else None
+                # continue the same OpenAI conversation when this is a refine of
+                # an image we made before (true multi-turn, like ChatGPT)
+                prev_response_id, prev_logo = (
+                    await _prev_turn(db, job.workspace_id, p.get("previous_image_url"))
+                    if previous
+                    else (None, None)
                 )
+                colors = getattr(owner, "brand_colors", None) or None
                 result = await run_turn(
                     job.prompt.strip(),
-                    has_attachment=attachment is not None,
-                    has_previous=previous is not None,
                     attachment_path=attachment,
                     previous_path=previous,
-                    history=p.get("history") or [],
-                    extra_prompt=extra,
+                    previous_response_id=prev_response_id,
+                    brand_colors=colors if isinstance(colors, list) else None,
+                    draft=bool(p.get("draft")),
                 )
+                job.openai_response_id = result.get("response_id")
                 logo_applied, logo_note = await apply_brand_logo(
-                    owner, result, brand_logo, job.prompt
+                    owner, result, brand_logo, job.prompt,
+                    prior=_placement_from_prior(prev_logo),
                 )
                 asset = await StudioService(db, job.workspace_id).save(
                     AssetKind.IMAGE,

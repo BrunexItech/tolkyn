@@ -175,6 +175,7 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS segment_index INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS segment_paths JSON NOT NULL DEFAULT '[]'",
     "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS continuation_frame_url VARCHAR(500)",
+    "ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS openai_response_id VARCHAR(80)",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

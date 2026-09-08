@@ -117,6 +117,10 @@ class Settings(BaseSettings):
     # fast sibling (same quality class as gpt-image-2) used for drafts.
     OPENAI_IMAGE_MODEL: str = Field(default="gpt-image-2.5-sunburst", description="OpenAI image model (final quality)")
     OPENAI_IMAGE_MODEL_FAST: str = Field(default="gpt-image-2.5-flare", description="OpenAI image model (fast / draft)")
+    # Mainline model that drives the Responses-API image pipeline: it revises the
+    # user's prompt, decides generate-vs-edit, and calls the image tool — the
+    # same role GPT-5/6 plays inside ChatGPT. Needs a gpt-5+ model.
+    OPENAI_IMAGE_ORCHESTRATOR_MODEL: str = Field(default="gpt-6-astra", description="Mainline model for the image Responses pipeline")
     # Text model for classification / copy / prompt-writing. gpt-5.6-luna is
     # the current cheap+fast one; gpt-4o-mini still works if you need to pin.
     OPENAI_FAST_MODEL: str = Field(default="gpt-5.6-luna", description="OpenAI text model")

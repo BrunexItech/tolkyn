@@ -37,6 +37,9 @@ class ImageJob(BaseModel):
     logo_applied = Column(String(160), nullable=True)
     logo_note = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
+    # chat mode via the Responses API: the OpenAI response id, so the next turn
+    # can continue the conversation with previous_response_id (true multi-turn).
+    openai_response_id = Column(String(80), nullable=True)
 
     started_at = Column(DateTime(timezone=True), nullable=True)
     finished_at = Column(DateTime(timezone=True), nullable=True)
