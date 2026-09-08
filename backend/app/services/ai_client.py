@@ -7,7 +7,15 @@ from openai import OpenAI
 
 from app.core.config import settings
 
-_FAST_MODEL = "gpt-4o-mini"
+# Cheap, current, fast — used for classification, prompt writing, copy, etc.
+# Override with OPENAI_FAST_MODEL in .env.
+_FAST_MODEL = settings.OPENAI_FAST_MODEL
+
+
+def _is_next_gen(model: str) -> bool:
+    """gpt-5.x / gpt-6.x take max_completion_tokens and only temperature=1."""
+    m = (model or "").lower()
+    return m.startswith(("gpt-5", "gpt-6", "o1", "o3", "o4"))
 
 
 class AIClient:
@@ -87,9 +95,13 @@ class AIClient:
                 {"role": "system", "content": system},
                 {"role": "user", "content": user},
             ],
-            temperature=temperature,
-            max_tokens=max_tokens,
         )
+        if _is_next_gen(model):
+            # reasoning tokens also count here, so give it real headroom
+            kwargs["max_completion_tokens"] = max(max_tokens, 2000)
+        else:
+            kwargs["temperature"] = temperature
+            kwargs["max_tokens"] = max_tokens
         if as_json:
             kwargs["response_format"] = {"type": "json_object"}
         resp = self._client.chat.completions.create(**kwargs)

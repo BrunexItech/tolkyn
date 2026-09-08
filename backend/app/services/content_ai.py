@@ -227,6 +227,7 @@ async def generate_image(
     input_fidelity: str = "high",
     as_logo: bool = False,
     background: str = "auto",
+    passthrough: bool = False,
 ) -> Dict[str, Any]:
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY is required for image generation")
@@ -242,7 +243,9 @@ async def generate_image(
     full_prompt = prompt if not style else f"{prompt}. Style: {style}."
     if as_logo:
         full_prompt += _LOGO_HINT
-    else:
+    elif not passthrough:
+        # the user wrote their own detailed prompt — send it verbatim, exactly
+        # like pasting it into ChatGPT; don't second-guess it
         full_prompt = _photoreal_wrap(full_prompt, style, as_logo=as_logo, is_edit=bool(input_image_path))
 
     model = _IMAGE_MINI_MODEL if draft else settings.OPENAI_IMAGE_MODEL

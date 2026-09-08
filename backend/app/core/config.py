@@ -115,6 +115,9 @@ class Settings(BaseSettings):
     # gpt-image-2 is what ChatGPT itself uses (branded "ChatGPT Images 2.0") —
     # cleaner photos, far better text rendering, up to 2K. Override in .env.
     OPENAI_IMAGE_MODEL: str = Field(default="gpt-image-2", description="OpenAI image model")
+    # Text model for classification / copy / prompt-writing. gpt-5.6-luna is
+    # the current cheap+fast one; gpt-4o-mini still works if you need to pin.
+    OPENAI_FAST_MODEL: str = Field(default="gpt-5.6-luna", description="OpenAI text model")
 
     # Video generation — Google Veo 3.1 via the Gemini API
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Gemini API key (Veo 3.1 video generation)")
