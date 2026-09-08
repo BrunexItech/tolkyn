@@ -112,9 +112,11 @@ class Settings(BaseSettings):
     # AI
     GROQ_API_KEY: Optional[str] = Field(default=None, description="Groq API Key")
     OPENAI_API_KEY: Optional[str] = Field(default=None, description="OpenAI API Key")
-    # gpt-image-2 is what ChatGPT itself uses (branded "ChatGPT Images 2.0") —
-    # cleaner photos, far better text rendering, up to 2K. Override in .env.
-    OPENAI_IMAGE_MODEL: str = Field(default="gpt-image-2", description="OpenAI image model")
+    # GPT Image 2.5 Sunburst — OpenAI's current top image model: best quality
+    # and editing precision, xhigh/max quality tiers, up to 4K. Flare is the
+    # fast sibling (same quality class as gpt-image-2) used for drafts.
+    OPENAI_IMAGE_MODEL: str = Field(default="gpt-image-2.5-sunburst", description="OpenAI image model (final quality)")
+    OPENAI_IMAGE_MODEL_FAST: str = Field(default="gpt-image-2.5-flare", description="OpenAI image model (fast / draft)")
     # Text model for classification / copy / prompt-writing. gpt-5.6-luna is
     # the current cheap+fast one; gpt-4o-mini still works if you need to pin.
     OPENAI_FAST_MODEL: str = Field(default="gpt-5.6-luna", description="OpenAI text model")

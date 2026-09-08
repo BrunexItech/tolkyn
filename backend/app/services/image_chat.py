@@ -36,47 +36,45 @@ def _guess_size(text: str) -> str:
     return "1024x1024"
 
 
-# A long, maximalist or self-contradicting brief ("show the dashboard with
-# social media, CRM, analytics, a call center… and readable UI… and clean
-# white space… and our exact logo… and a tagline"). Sending that verbatim
-# makes the model average 20 demands into mush. The architect keeps every
-# concrete visual detail but resolves the conflicts and drops the asks no
-# image model can do — the same thing ChatGPT does silently before it calls
-# the image model.
+# A long or internally-conflicting brief. Sending it verbatim makes the model
+# average many demands into mush. The architect restructures it — the same
+# thing a mainline model does when it revises your prompt — WITHOUT throwing
+# away any of the ideas.
 _HARD_ASK_RE = _re.compile(
-    r"\b(legible|readable|read(?:s|able)? clearly|text reads?|actual text|real text|"
-    r"\bUI\b|user interface|interface (?:show|display)|dashboard (?:show|display|with|of)|"
-    r"screen (?:show|display|with)|mock-?up of (?:the|a|an) (?:app|dashboard|screen|platform)|"
+    r"\b(\bUI\b|user interface|dashboard|screen show|screen display|mock-?up|"
     r"exact logo|logo (?:exactly )?as (?:provided|shown|attached|given)|official logo|"
-    r"brand identity|\btagline\b|\bslogan\b|central message|the (?:words?|message|phrase)[:\"'])",
+    r"brand identity|\btagline\b|\bslogan\b|central message|icons?|connect(?:ing|ed)?|"
+    r"the (?:words?|message|phrase)[:\"'])",
     _re.I,
 )
 
 _ARCHITECT_SYSTEM = (
-    "You take an over-long or internally-conflicting image brief and rewrite it into ONE "
-    "clean prompt that a modern image model (gpt-image-2) will render beautifully — exactly "
-    "the way ChatGPT quietly rewrites a messy prompt before it generates.\n\n"
-    "KEEP everything that makes the image what the user wants: the concept and story, the "
-    "mood, the specific subject and what they are doing, the setting and the real props, the "
-    "colour palette, the lighting and camera direction, the composition, the specific people "
-    "or place, every concrete visual detail they named.\n\n"
-    "FIX silently:\n"
-    "- Resolve contradictions (e.g. 'lots of clean white space' + 'show ten features at "
-    "once' -> commit to the stronger reading).\n"
-    "- Replace impossible asks. A screen or dashboard showing legible app UI -> 'the laptop "
-    "screen shows a softly out-of-focus dashboard: coloured charts, a chat list and a blue "
-    "accent, individual labels not readable'. 'Render the exact brand logo' / a tagline / "
-    "on-image slogan text -> DROP it entirely (the real logo is composited afterwards; "
-    "taglines are added later in a design tool).\n"
-    "- Lead with the main subject in the first sentence.\n"
-    "- Trim to ONE flowing paragraph, roughly 110-180 words. A real photograph by default "
-    "unless the brief clearly asks for illustration/3D/vector.\n\n"
-    "DO NOT genericise, DO NOT drop concrete detail, DO NOT add stock adjectives ('sleek', "
-    "'vibrant', 'bustling', 'cutting-edge', 'state-of-the-art'), DO NOT change the creative "
-    "idea, DO NOT start with 'Generate' / 'Create' / 'An image of'.\n\n"
-    'Return JSON: {"prompt": "<the rewritten paragraph>", "size": "1024x1024" | "1536x1024" '
-    '(wide / banner / campaign) | "1024x1536" (portrait / story / poster), "reply": "<one '
-    'short friendly sentence on what you are making, no emojis>"}'
+    "You restructure an over-long or internally-conflicting image brief into ONE clean, "
+    "well-ordered prompt that GPT Image 2.5 will render beautifully — the way a mainline "
+    "model revises a prompt before it generates. This model renders app icons, tasteful "
+    "interface mock-ups, connecting graphics and short exact text well, so KEEP those "
+    "requests — do not strip them.\n\n"
+    "KEEP every idea the user put in: the concept and story, the subject and what they are "
+    "doing, the setting and real props, the colour palette, the lighting and camera "
+    "direction, the composition, named people or places, the social-media icons / arcs / "
+    "screens, and any short on-image text they asked for.\n\n"
+    "RESTRUCTURE into four short labelled sections, in this order:\n"
+    "  Scene: — the environment, one line.\n"
+    "  Subject: — the person/product and their action, gaze, framing.\n"
+    "  Details: — props, wardrobe, the phone/screen and what shows on it (describe an "
+    "interface as if it already exists and is well-designed, not 'a mockup of'), any icons "
+    "or connecting graphics, light, depth of field, real texture.\n"
+    "  Text: — only exact words the user wants on the image, in quotes, once each; write "
+    "'none' if they asked for no text.\n"
+    "  Constraints: — 'photorealistic, real photograph' by default (unless they asked for "
+    "illustration/3D/vector); then what to avoid — 'no invented logos or brand names, leave "
+    "the brand mark to be added afterward; no floating clutter; no neon; no gibberish text'.\n\n"
+    "Resolve genuine contradictions by committing to the stronger reading. Do NOT genericise, "
+    "do NOT drop any element, do NOT add stock adjectives ('sleek', 'vibrant', 'bustling', "
+    "'cutting-edge'), do NOT start with 'Generate' / 'Create'.\n\n"
+    'Return JSON: {"prompt": "<the labelled prompt>", "size": "1024x1024" | "1536x1024" '
+    '(wide / banner / campaign / ad) | "1024x1536" (portrait / story / poster), "reply": '
+    '"<one short friendly sentence on what you are making, no emojis>"}'
 )
 
 
@@ -251,10 +249,9 @@ async def run_turn(
     if extra_prompt:
         prompt = f"{prompt}\n\n{extra_prompt.strip()}"
 
-    # A busy, wordy scene at "high" adds minutes of render time for little
-    # visible gain (and risks a gateway/OpenAI timeout). "medium" on
-    # gpt-image-2 is near-identical there. Clean/short prompts keep "high".
-    quality = "medium" if len(prompt) > 1200 else "high"
+    # gpt-image-2.5 handles busy prompts well at "high"; the background job
+    # already absorbs the render time, so premium quality every time.
+    quality = "high"
 
     result = await generate_image(
         prompt,

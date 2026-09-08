@@ -271,7 +271,7 @@ async def run_job(job_id: str) -> None:
                 result = await generate_image(
                     gen_prompt,
                     size=p.get("size", "1024x1024"),
-                    quality=p.get("quality", "medium"),
+                    quality=p.get("quality", "high"),
                     style=p.get("style", ""),
                     draft=bool(p.get("draft")),
                     input_image_path=resolve_media(p.get("input_image_url")),

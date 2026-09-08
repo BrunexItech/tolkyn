@@ -212,28 +212,41 @@ async def build_prompt(intent: str, brief: str) -> Dict[str, Any]:
     return data
 
 
-# gpt-image-1 / -1.5 only take these; gpt-image-2 takes far more (edges a
-# multiple of 16, ≤ ~2560x1440 reliably, aspect ≤ 3:1).
+# gpt-image-1 / -1.5 only take these three fixed sizes.
 _LEGACY_SIZES = {"1024x1024", "1024x1536", "1536x1024", "auto"}
-_GPT_IMAGE_2_SIZES = _LEGACY_SIZES | {
-    "1536x1536", "1792x1024", "1024x1792", "2048x2048",
-    "2560x1440", "1440x2560", "1920x1080", "1080x1920",
-}
-
 
 _LEGACY_IMAGE_MODELS = {
     "gpt-image-1", "gpt-image-1-mini", "gpt-image-1.5", "gpt-image-1.5-mini",
 }
+# quality tiers, in ascending order — gpt-image-2.5 adds xhigh / max
+_QUALITIES = ("low", "medium", "high", "xhigh", "max")
+_LEGACY_QUALITIES = ("low", "medium", "high")
 
 
 def _is_v2(model: str) -> bool:
-    """gpt-image-2+ / chatgpt-image-latest — no input_fidelity, flexible sizes.
-    Anything that isn't an explicitly-known legacy id is treated as v2."""
+    """gpt-image-2 / gpt-image-2.5-* — no input_fidelity, flexible sizes,
+    xhigh/max quality. Anything not an explicitly-known legacy id is v2+."""
     return (model or "").lower() not in _LEGACY_IMAGE_MODELS
 
 
-def _valid_sizes(model: str) -> set[str]:
-    return _GPT_IMAGE_2_SIZES if _is_v2(model) else _LEGACY_SIZES
+def _valid_size(model: str, size: str) -> bool:
+    """gpt-image-2.5: W and H multiples of 16, aspect 1:3–3:1, each edge
+    ≤ 3840, total pixels 655,360–8,294,400 (4K). Legacy: the fixed three."""
+    s = (size or "").lower()
+    if not _is_v2(model):
+        return s in _LEGACY_SIZES
+    if s == "auto":
+        return True
+    m = re.fullmatch(r"(\d{2,4})x(\d{2,4})", s)
+    if not m:
+        return False
+    w, h = int(m.group(1)), int(m.group(2))
+    if w % 16 or h % 16 or w > 3840 or h > 3840:
+        return False
+    if not (655_360 <= w * h <= 8_294_400):
+        return False
+    lo, hi = sorted((w, h))
+    return hi <= lo * 3
 
 
 async def generate_image(
@@ -251,20 +264,20 @@ async def generate_image(
 ) -> Dict[str, Any]:
     if not settings.OPENAI_API_KEY:
         raise RuntimeError("OPENAI_API_KEY is required for image generation")
-    if quality not in ("low", "medium", "high"):
-        quality = "high"
     if background not in ("auto", "transparent", "opaque"):
         background = "auto"
     if input_fidelity not in ("high", "low"):
         input_fidelity = "high"
 
-    # Draft = the same top model at medium quality (fast + cheaper), not a
-    # weaker model — the mini models look noticeably worse.
-    model = settings.OPENAI_IMAGE_MODEL
-    if draft:
-        quality = "medium"
+    # Draft = the fast model (Flare), not a downgraded quality tier — Flare is
+    # its own high-quality model, just quicker. Final assets use Sunburst.
+    model = settings.OPENAI_IMAGE_MODEL_FAST if draft else settings.OPENAI_IMAGE_MODEL
 
-    if size not in _valid_sizes(model):
+    allowed_q = _QUALITIES if _is_v2(model) else _LEGACY_QUALITIES
+    if quality not in allowed_q:
+        quality = "high"
+
+    if not _valid_size(model, size):
         size = "1024x1024"
 
     full_prompt = prompt if not style else f"{prompt}. Style: {style}."

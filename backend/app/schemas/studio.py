@@ -34,6 +34,8 @@ class ImageQuality(str, Enum):
     LOW = "low"
     MEDIUM = "medium"
     HIGH = "high"
+    XHIGH = "xhigh"
+    MAX = "max"
 
 
 class ImageRequest(BaseModel):
@@ -41,7 +43,7 @@ class ImageRequest(BaseModel):
     size: str = "1024x1024"
     quality: ImageQuality = ImageQuality.HIGH
     style: str = ""
-    draft: bool = Field(False, description="Faster: the same model at 'medium' quality")
+    draft: bool = Field(False, description="Faster: uses the quick image model (GPT Image 2.5 Flare) instead of Sunburst")
     input_image_url: Optional[str] = Field(None, description="An uploaded image to edit / use as a base")
     as_logo: bool = False
     save: bool = True

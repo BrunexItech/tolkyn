@@ -171,21 +171,26 @@ _EXPLICIT_POS = [
     (r"\bdead[\s-]*cent(?:er|re)\b|\bcent(?:er|re)(?:ed|red)?\s+(?:in|on|of)\s+the\s+"
      r"(?:image|frame|picture|canvas|composition|shot)\b|\bin\s+the\s+(?:middle|cent(?:er|re))"
      r"\s+of\s+the\s+(?:image|frame|picture|shot)\b", "center"),
-    (r"\btop\b", "top-center"),
-    (r"\bbottom\b|\bfooter\b", "bottom-center"),
 ]
+# Bare "top"/"bottom"/"left"/"right" are deliberately NOT patterns — "a banner
+# across the top of her stall" describes the scene, it is not "put the logo at
+# the top". Only unambiguous placements above count.
 
 
 def _pos_near_logo(prompt: str) -> Optional[str]:
-    """An explicit corner instruction sitting next to the word 'logo', or None."""
+    """An explicit corner instruction phrased right around the word 'logo'
+    ('...logo in the top-right', 'a bottom-right watermark'). Returns None for a
+    scene mention that merely happens to contain 'top' / 'left' / etc."""
     low = _FALSE_CENTER_RE.sub(" ", (prompt or "").lower())
     idx = min((low.find(w) for w in _LOGO_WORDS if w in low), default=-1)
     if idx < 0:
         return None
-    window = low[max(0, idx - 40): idx + 90]
-    for pat, pos in _EXPLICIT_POS:
-        if re.search(pat, window):
-            return pos
+    # a short span each side of the logo word — real placement phrasing sits
+    # tight against it, scene description does not
+    for span in (low[max(0, idx - 26): idx], low[idx: idx + 40]):
+        for pat, pos in _EXPLICIT_POS:
+            if re.search(pat, span):
+                return pos
     return None
 
 
