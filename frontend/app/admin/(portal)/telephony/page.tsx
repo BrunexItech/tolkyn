@@ -119,6 +119,7 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
   }
 
   const isCloudOne = form.provider === "cloudone";
+  const isAsterisk = form.provider === "asterisk";
 
   return (
     <div className="space-y-3">
@@ -136,7 +137,8 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
             onChange={(e) => set("provider", e.target.value)}
           >
             <option value="simulated">Simulated — demo calls, no real audio</option>
-            <option value="cloudone">CloudOne / Yeastar P-Series (SIP trunk)</option>
+            <option value="asterisk">Tolkyn PBX — Cloud One SIP trunk</option>
+            <option value="cloudone">CloudOne / Yeastar P-Series (OpenAPI)</option>
           </OmSelect>
         </Field>
 
@@ -158,14 +160,39 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
           Record calls
         </label>
 
-        <Field label="Outbound caller ID" hint="E.164 number shown to the person being called (optional).">
+        <Field
+          label={isAsterisk ? "Assigned DID (caller ID)" : "Outbound caller ID"}
+          hint={
+            isAsterisk
+              ? "The Cloud One number allocated to this client. Used as caller ID on their outbound calls and to route inbound calls to this workspace."
+              : "E.164 number shown to the person being called (optional)."
+          }
+        >
           <OmInput
             value={form.outbound_caller_id ?? ""}
             onChange={(e) => set("outbound_caller_id", e.target.value)}
-            placeholder="+254207901234"
+            placeholder="254207901958"
           />
         </Field>
       </Card>
+
+      {isAsterisk && (
+        <Card className="flex flex-col gap-1.5 text-[11.5px] text-om-muted">
+          <div className="text-[13px] font-semibold text-om-text">Tolkyn PBX</div>
+          <p>
+            Calls route through Tolkyn&apos;s shared Asterisk PBX and the Cloud One SIP trunk — no
+            per-client trunk credentials needed here.
+          </p>
+          <p>To finish provisioning this client:</p>
+          <ol className="ml-4 list-decimal space-y-0.5">
+            <li>Set their <strong>Assigned DID</strong> above and tick <strong>Active</strong>.</li>
+            <li>
+              In the client&apos;s <strong>Call Center → Agent lines</strong>, give each agent a SIP
+              extension + password (these must also exist in the PBX config).
+            </li>
+          </ol>
+        </Card>
+      )}
 
       {isCloudOne && (
         <>

@@ -235,7 +235,7 @@ class TelephonyConfigResponse(BaseModel):
 
 
 class TelephonyConfigUpdate(BaseModel):
-    provider: Optional[str] = None  # simulated | cloudone
+    provider: Optional[str] = None  # simulated | cloudone | asterisk
     is_active: Optional[bool] = None
     pbx_base_url: Optional[str] = None
     api_client_id: Optional[str] = None

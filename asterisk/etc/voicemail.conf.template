@@ -1,0 +1,11 @@
+[general]
+format = wav49|wav
+maxmsg = 100
+maxsecs = 180
+minsecs = 2
+maxsilence = 5
+sendvoicemail = no
+attach = no
+
+[default]
+${SOFTPHONE_EXT} => 0000,Agent,,,attach=no

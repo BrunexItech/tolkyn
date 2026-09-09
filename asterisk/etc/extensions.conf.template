@@ -1,0 +1,74 @@
+;======================================================================
+; Tolkyn PBX dialplan. Cloud One's numbering rules (article 109):
+;   inbound  — normalise caller ID to +254XXXXXXXXX (E.164)
+;   outbound — Kenya local in 0XXXXXXXXX form; international in +CC / E.164
+;   caller ID on every outbound leg MUST be our DID (trunk authentication)
+;
+; Asterisk picks the MOST SPECIFIC matching pattern, so the +254 / 254 rules
+; below win over the generic international ones for Kenyan numbers.
+;======================================================================
+[general]
+static = yes
+writeprotect = no
+clearglobalvars = no
+
+[globals]
+DID = ${CLOUDONE_DID}
+AGENT = PJSIP/${SOFTPHONE_EXT}
+RINGTIME = 25
+
+;--- Inbound: Cloud One -> the DID -> ring the agent, else voicemail ---
+[from-cloudone]
+exten => ${CLOUDONE_DID},1,Goto(handle,1)
+exten => s,1,Goto(handle,1)
+exten => _X!,1,Goto(handle,1)
+
+exten => handle,1,NoOp(Inbound from ${CALLERID(num)})
+ same => n,Set(CNUM=${FILTER(0-9+,${CALLERID(num)})})
+ same => n,ExecIf($["${CNUM:0:3}" = "254"]?Set(CNUM=+${CNUM}))
+ same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
+ same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
+ same => n,Set(CALLERID(num)=${CNUM})
+ same => n,Dial(${AGENT},${RINGTIME},rtT)
+ same => n,VoiceMail(${SOFTPHONE_EXT}@default,u)
+ same => n,Hangup()
+
+exten => h,1,Hangup()
+
+;--- Outbound: from the agent softphone -> Cloud One trunk ---
+[from-internal]
+; Kenya: +254XXXXXXXXX -> 0XXXXXXXXX
+exten => _+254XXXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Dial(PJSIP/0${EXTEN:4}@cloudone,60,rtT)
+ same => n,Hangup()
+
+; Kenya: 254XXXXXXXXX -> 0XXXXXXXXX
+exten => _254XXXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Dial(PJSIP/0${EXTEN:3}@cloudone,60,rtT)
+ same => n,Hangup()
+
+; Kenya: already 0XXXXXXXXX (10 digits) -> send as-is
+exten => _0XXXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Dial(PJSIP/${EXTEN}@cloudone,60,rtT)
+ same => n,Hangup()
+
+; Kenya: bare 9-digit local (7XXXXXXXX / 1XXXXXXXX) -> prefix 0
+exten => _[17]XXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Dial(PJSIP/0${EXTEN}@cloudone,60,rtT)
+ same => n,Hangup()
+
+; International dialled as 000<CC>... -> +<CC>...
+exten => _000X.,1,Set(CALLERID(num)=${DID})
+ same => n,Dial(PJSIP/+${EXTEN:3}@cloudone,60,rtT)
+ same => n,Hangup()
+
+; International, already E.164 with a leading + -> send as-is
+exten => _+X.,1,Set(CALLERID(num)=${DID})
+ same => n,Dial(PJSIP/${EXTEN}@cloudone,60,rtT)
+ same => n,Hangup()
+
+; voicemail access
+exten => *97,1,VoiceMailMain(${SOFTPHONE_EXT}@default)
+ same => n,Hangup()
+
+exten => h,1,Hangup()

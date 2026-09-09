@@ -1,0 +1,12 @@
+; Asterisk's built-in HTTP server. Used only for the SIP-over-WebSocket
+; endpoint (/ws) that the browser softphone (SIP.js) connects to.
+;
+; Plain HTTP on localhost — the host nginx terminates TLS on
+; pbx.tolkyn.co.ke and proxies  wss://…/ws  ->  ws://127.0.0.1:${PBX_WS_PORT}/ws
+[general]
+enabled = yes
+bindaddr = 127.0.0.1
+bindport = ${PBX_WS_PORT}
+sessionlimit = 200
+session_inactivity = 30000
+session_keep_alive = 15000

@@ -115,6 +115,34 @@ services:
         condition: service_healthy
     networks: [internal]
 
+  # PBX for the Cloud One SIP trunk. Host networking is deliberate — RTP audio
+  # (UDP) does not survive Docker's bridge NAT. See asterisk/README.md.
+  asterisk:
+    build:
+      context: ./asterisk
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      CLOUDONE_SIP_HOST: ${CLOUDONE_SIP_HOST:-LS02.CLOUDONE.CO.KE}
+      CLOUDONE_SIP_USER: ${CLOUDONE_SIP_USER:?set CLOUDONE_SIP_USER in .env}
+      CLOUDONE_SIP_PASSWORD: ${CLOUDONE_SIP_PASSWORD:?set CLOUDONE_SIP_PASSWORD in .env}
+      CLOUDONE_DID: ${CLOUDONE_DID:-254207901958}
+      PBX_PUBLIC_IP: ${PBX_PUBLIC_IP:?set PBX_PUBLIC_IP in .env}
+      SOFTPHONE_EXT: ${SOFTPHONE_EXT:-1001}
+      SOFTPHONE_EXT_PASSWORD: ${SOFTPHONE_EXT_PASSWORD:?set SOFTPHONE_EXT_PASSWORD in .env}
+      PBX_WS_PORT: ${PBX_WS_PORT:-8188}
+    volumes:
+      # voicemail + call recordings survive a container rebuild; a Docker named
+      # volume is seeded from the image on first use so the default spool tree
+      # is preserved.
+      - asterisk_spool:/var/spool/asterisk
+    healthcheck:
+      test: ["CMD", "asterisk", "-rx", "core waitfullybooted"]
+      interval: 20s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
+
   nginx:
     image: nginx:1.27-alpine
     restart: unless-stopped
@@ -138,3 +166,4 @@ volumes:
   postgres_data:
   backend_media:
   whatsapp_sessions:
+  asterisk_spool:

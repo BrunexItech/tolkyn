@@ -78,6 +78,44 @@ the container's `:443` block alone — TLS terminates at the host.
 (and `"443:443"`), and use the container's own `nginx/nginx.conf` TLS block
 per the checklist above.
 
+## Call centre — Asterisk PBX + Cloud One SIP trunk
+
+Tolkyn runs **one** Asterisk (`asterisk/`) for all tenants, in front of a
+single shared Cloud One SIP trunk (Tolkyn is the reseller — it owns the trunk
+and its pool of DIDs, and assigns one DID per client). See `asterisk/README.md`
+for the internals.
+
+**Enable it:**
+
+1. Root `.env` — fill in the `CLOUDONE_*` / `PBX_*` / `SOFTPHONE_*` block
+   (see `.env.example`). `CLOUDONE_SIP_PASSWORD` and `SOFTPHONE_EXT_PASSWORD`
+   are required; `PBX_PUBLIC_IP` is this server's public IP.
+
+2. DNS — a `pbx.<domain>` A record at the server IP (Cloudflare: Proxied is
+   fine; it's covered by a `*.<domain>` origin cert).
+
+3. Host nginx — the PBX WebSocket vhost:
+   ```bash
+   sudo cp nginx/host-pbx.tolkyn.co.ke.conf /etc/nginx/sites-available/pbx.tolkyn.co.ke
+   sudo ln -s /etc/nginx/sites-available/pbx.tolkyn.co.ke /etc/nginx/sites-enabled/
+   sudo nginx -t && sudo systemctl reload nginx
+   ```
+
+4. `docker-compose up -d asterisk` (it uses `network_mode: host` — no firewall
+   changes needed if the host has no `ufw`/cloud firewall; otherwise open
+   `udp/10000-20000` and confirm outbound `udp/5060` to the trunk host).
+
+5. Check the trunk registered:
+   ```bash
+   docker-compose exec asterisk asterisk -rx "pjsip show registrations"
+   ```
+
+**Per client:** Super Admin → Telephony → set provider **Tolkyn PBX**, tick
+Active, set their **Assigned DID**. Then in that client's Call Center → Agent
+lines, give each agent a SIP extension + password — and add the matching
+endpoint to `asterisk/etc/pjsip.conf.template` (multi-tenant PJSIP-from-DB and
+ARI call control / CDR is the next phase, not the POC).
+
 ## Capacity — running ~100 client workspaces
 
 100 tenant workspaces is a *data* number, not a load number — most are idle at

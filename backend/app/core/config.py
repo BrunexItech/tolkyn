@@ -125,6 +125,13 @@ class Settings(BaseSettings):
     # the current cheap+fast one; gpt-4o-mini still works if you need to pin.
     OPENAI_FAST_MODEL: str = Field(default="gpt-5.6-luna", description="OpenAI text model")
 
+    # Call centre — the self-hosted Asterisk PBX in front of the Cloud One SIP
+    # trunk. The trunk itself is one shared account (Tolkyn is the reseller);
+    # per-workspace config lives in telephony_configs, per-agent lines on
+    # call_agents. These just tell the backend where the softphone connects.
+    PBX_WS_URL: str = Field(default="wss://pbx.tolkyn.co.ke/ws", description="SIP-over-WebSocket URL the browser softphone dials")
+    PBX_SIP_DOMAIN: str = Field(default="pbx.tolkyn.co.ke", description="SIP realm/domain for softphone registration")
+
     # Video generation — Google Veo 3.1 via the Gemini API
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Gemini API key (Veo 3.1 video generation)")
     GEMINI_API_BASE: str = Field(

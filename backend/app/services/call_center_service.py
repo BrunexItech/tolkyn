@@ -489,14 +489,14 @@ class CallCenterService:
         softphone. `configured: false` => the UI stays in simulated mode."""
         await self._ensure_seed()
         cfg = await get_config(self.db, self.workspace_id)
-        if not (cfg and cfg.is_active and cfg.provider == "cloudone"):
+        if not (cfg and cfg.is_active and cfg.provider in ("cloudone", "asterisk")):
             return {"configured": False, "provider": "simulated"}
         agent = await self._self_agent()
         provider = await get_provider(self.db, self.workspace_id)
         creds = provider.sip_credentials(agent.sip_extension, agent.sip_password_enc, agent.name)
         return {
             "configured": creds.configured,
-            "provider": "cloudone",
+            "provider": cfg.provider,
             "ws_url": creds.ws_url,
             "domain": creds.domain,
             "extension": creds.extension,

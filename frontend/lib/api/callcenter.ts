@@ -132,7 +132,7 @@ export interface IvrSimulateResult {
 export interface SoftphoneConfig {
   /** true only when a real SIP trunk is active AND this agent has a line assigned */
   configured: boolean;
-  provider: string; // simulated | cloudone
+  provider: string; // simulated | cloudone | asterisk
   ws_url: string | null;
   domain: string | null;
   extension: string | null;

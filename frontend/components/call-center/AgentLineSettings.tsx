@@ -21,7 +21,7 @@ export function AgentLineSettings() {
   const [pw, setPw] = useState("");
 
   if (!myRole?.is_owner) return null;
-  if (!softphone || softphone.provider !== "cloudone") return null;
+  if (!softphone || softphone.provider === "simulated") return null;
 
   const start = (id: string, current: string | null) => {
     setEditing(id);

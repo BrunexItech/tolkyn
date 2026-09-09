@@ -49,7 +49,7 @@ function TrunkStatus({
 
   if (!softphone.configured) {
     const reason =
-      softphone.provider === "cloudone"
+      softphone.provider !== "simulated"
         ? "SIP trunk is live for this workspace — ask an admin to assign you an extension."
         : "Simulated mode — calls are demo only. An admin can connect a SIP trunk in Admin → Telephony.";
     return (

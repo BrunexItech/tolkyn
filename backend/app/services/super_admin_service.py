@@ -423,6 +423,13 @@ class SuperAdminService:
         if "api_client_secret" in patch:
             v = patch["api_client_secret"]
             cfg.api_client_secret_enc = _encrypt(v) if v else None
+        # "asterisk" = Tolkyn's shared PBX + Cloud One trunk. The super-admin
+        # only needs to flip is_active and set the workspace's assigned DID
+        # (outbound_caller_id); the softphone URL/domain default to the shared
+        # PBX so they don't have to be re-typed for every client.
+        if cfg.provider == "asterisk":
+            cfg.sip_ws_url = cfg.sip_ws_url or _settings.PBX_WS_URL
+            cfg.sip_domain = cfg.sip_domain or _settings.PBX_SIP_DOMAIN
         if not cfg.webhook_secret:
             cfg.webhook_secret = _secrets.token_hex(24)
         await self.db.commit()

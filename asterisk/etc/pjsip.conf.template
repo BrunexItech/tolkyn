@@ -1,0 +1,100 @@
+;======================================================================
+; Tolkyn PBX — Cloud One SIP trunk + one WebRTC softphone extension.
+; Rendered from pjsip.conf.template by entrypoint.sh.
+;======================================================================
+
+;--- Transports --------------------------------------------------------
+[transport-udp]
+type = transport
+protocol = udp
+bind = 0.0.0.0:5060
+external_media_address = ${PBX_PUBLIC_IP}
+external_signaling_address = ${PBX_PUBLIC_IP}
+local_net = 10.0.0.0/8
+local_net = 172.16.0.0/12
+local_net = 192.168.0.0/16
+local_net = 127.0.0.0/8
+
+; the browser softphone connects here. nginx terminates TLS on
+; pbx.tolkyn.co.ke and proxies to Asterisk's plain-ws HTTP server (http.conf),
+; so this transport is 'ws', not 'wss'. The listening socket is http.conf's.
+[transport-ws]
+type = transport
+protocol = ws
+bind = 127.0.0.1
+
+;--- Cloud One trunk -------------------------------------------------
+[cloudone_auth]
+type = auth
+auth_type = userpass
+username = ${CLOUDONE_SIP_USER}
+password = ${CLOUDONE_SIP_PASSWORD}
+
+[cloudone_aor]
+type = aor
+contact = sip:${CLOUDONE_SIP_HOST}
+qualify_frequency = 60
+
+[cloudone_reg]
+type = registration
+transport = transport-udp
+outbound_auth = cloudone_auth
+server_uri = sip:${CLOUDONE_SIP_HOST}
+client_uri = sip:${CLOUDONE_SIP_USER}@${CLOUDONE_SIP_HOST}
+retry_interval = 30
+forbidden_retry_interval = 300
+fatal_retry_interval = 300
+expiration = 300
+line = yes
+endpoint = cloudone
+
+[cloudone]
+type = endpoint
+transport = transport-udp
+context = from-cloudone
+disallow = all
+allow = ulaw
+allow = alaw
+allow = g729
+outbound_auth = cloudone_auth
+aors = cloudone_aor
+from_user = ${CLOUDONE_DID}
+from_domain = ${CLOUDONE_SIP_HOST}
+dtmf_mode = rfc4733
+rtp_symmetric = yes
+force_rport = yes
+rewrite_contact = yes
+direct_media = no
+
+[cloudone_identify]
+type = identify
+endpoint = cloudone
+match = ${CLOUDONE_SIP_HOST}
+
+;--- Agent softphone (WebRTC) --------------------------------------
+[${SOFTPHONE_EXT}_auth]
+type = auth
+auth_type = userpass
+username = ${SOFTPHONE_EXT}
+password = ${SOFTPHONE_EXT_PASSWORD}
+
+[${SOFTPHONE_EXT}]
+type = aor
+max_contacts = 3
+remove_existing = yes
+
+[${SOFTPHONE_EXT}]
+type = endpoint
+transport = transport-ws
+context = from-internal
+disallow = all
+allow = opus
+allow = ulaw
+allow = alaw
+auth = ${SOFTPHONE_EXT}_auth
+aors = ${SOFTPHONE_EXT}
+webrtc = yes
+dtls_auto_generate_cert = yes
+mailboxes = ${SOFTPHONE_EXT}@default
+callerid = ${SOFTPHONE_EXT}
+direct_media = no
