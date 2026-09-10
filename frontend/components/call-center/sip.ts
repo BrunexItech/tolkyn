@@ -61,6 +61,19 @@ export class SipPhone {
         authorizationUsername: this.cfg.extension,
         authorizationPassword: this.cfg.password ?? "",
         displayName: this.cfg.display_name ?? this.cfg.extension,
+        // Without a STUN server the browser only offers its LAN address as an
+        // ICE candidate, so the PBX can't send audio back to an agent behind
+        // NAT — the call connects but is silent. Public STUN lets the browser
+        // discover its own public address.
+        sessionDescriptionHandlerFactoryOptions: {
+          peerConnectionConfiguration: {
+            iceServers: [
+              { urls: "stun:stun.l.google.com:19302" },
+              { urls: "stun:stun1.l.google.com:19302" },
+            ],
+          },
+          iceGatheringTimeout: 3000,
+        },
       },
       delegate: {
         onCallReceived: async () => {
