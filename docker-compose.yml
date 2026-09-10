@@ -121,7 +121,13 @@ services:
 
   # TURN relay — a browser-side fallback path for WebRTC audio when the agent's
   # NAT won't allow a direct route to the PBX.
+  #
+  # NOTE: the PBX now runs natively on the host (asterisk/install-on-host.sh) —
+  # Docker's network layer breaks WebRTC media. These two services are kept for
+  # reference but no longer start by default. `docker-compose --profile docker-pbx up`
+  # to run them anyway.
   coturn:
+    profiles: ["docker-pbx"]
     image: coturn/coturn:4.6-alpine
     restart: unless-stopped
     networks:
@@ -154,6 +160,7 @@ services:
   # via external_media_address, and STUN gives the WebRTC leg a reflexive
   # candidate. See asterisk/README.md.
   asterisk:
+    profiles: ["docker-pbx"]
     build:
       context: ./asterisk
     restart: unless-stopped

@@ -12,7 +12,9 @@ bind = 0.0.0.0:5060
 ; container's bridge address.
 external_media_address = ${PBX_PUBLIC_IP}
 external_signaling_address = ${PBX_PUBLIC_IP}
-local_net = 172.31.9.0/24
+local_net = 10.0.0.0/8
+local_net = 172.16.0.0/12
+local_net = 192.168.0.0/16
 local_net = 127.0.0.0/8
 
 ; the browser softphone connects here. nginx terminates TLS on
