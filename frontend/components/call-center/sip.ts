@@ -62,13 +62,19 @@ export class SipPhone {
       { urls: "stun:stun.l.google.com:19302" },
       { urls: "stun:stun1.l.google.com:19302" },
     ];
-    if (this.cfg.turn_url && this.cfg.turn_user && this.cfg.turn_password) {
+    const hasTurn = !!(this.cfg.turn_url && this.cfg.turn_user && this.cfg.turn_password);
+    if (hasTurn) {
       iceServers.push({
-        urls: this.cfg.turn_url,
-        username: this.cfg.turn_user,
-        credential: this.cfg.turn_password,
+        urls: this.cfg.turn_url!,
+        username: this.cfg.turn_user!,
+        credential: this.cfg.turn_password!,
       });
     }
+    // The PBX host runs several other projects; Asterisk's bundled ICE cannot
+    // settle on a working media path among the host's many Docker bridge
+    // interfaces. When a relay is configured, force ALL call audio through it:
+    // one deterministic path, independent of the server's interface soup.
+    const iceTransportPolicy: RTCIceTransportPolicy = hasTurn ? "relay" : "all";
 
     this.user = new SimpleUser(this.cfg.ws_url, {
       aor,
@@ -78,7 +84,7 @@ export class SipPhone {
         authorizationPassword: this.cfg.password ?? "",
         displayName: this.cfg.display_name ?? this.cfg.extension,
         sessionDescriptionHandlerFactoryOptions: {
-          peerConnectionConfiguration: { iceServers },
+          peerConnectionConfiguration: { iceServers, iceTransportPolicy },
           iceGatheringTimeout: 3000,
         },
       },

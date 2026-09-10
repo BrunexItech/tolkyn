@@ -10,10 +10,20 @@ Cloud One  ──SIP/UDP 5060──►  Asterisk (host network)  ◄──WSS /w
                                                    outbound → normalise → trunk (caller ID = DID)
 ```
 
-## Why `network_mode: host`
-RTP audio is UDP and does not survive Docker's bridge NAT cleanly (one-way
-audio, dropped media). Host networking lets Asterisk bind the real interface,
-so `external_media_address` = the VPS public IP is all the NAT handling needed.
+## Runs natively on the host (not Docker)
+`sudo bash asterisk/install-on-host.sh` from the repo root. RTP audio is UDP and
+does not survive Docker's bridge NAT cleanly, and Asterisk's bundled ICE trips
+over the host's many Docker bridge interfaces ("Error sending STUN request:
+Invalid argument"). Native install: Asterisk binds the real interface,
+`external_media_address` = the VPS public IP.
+
+## Call audio goes through coturn (relay-only)
+The same install script also installs **coturn**, bound to the public IP only,
+and the browser softphone is forced to `iceTransportPolicy: "relay"`. Every
+call's audio therefore takes one deterministic path
+(browser → coturn:3478 → Asterisk) instead of asking Asterisk's ICE to choose
+among ~12 interfaces. Needs `PBX_TURN_*` set in `.env`. coturn ports
+(3478 + 49152-49200/udp) are opened to the world by the script.
 
 ## Config
 Templates in `etc/` are rendered by `entrypoint.sh` using these env vars

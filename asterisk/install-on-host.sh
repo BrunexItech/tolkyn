@@ -68,6 +68,59 @@ for ip in "$CLOUDONE_IP" 102.164.53.14; do
 done
 iptables -C INPUT -p udp --dport 5060 -j DROP 2>/dev/null || iptables -A INPUT -p udp --dport 5060 -j DROP
 iptables -C INPUT -p tcp --dport 5060 -j DROP 2>/dev/null || iptables -A INPUT -p tcp --dport 5060 -j DROP
+
+# --- 4b. coturn: the media relay -------------------------------------
+# Asterisk's bundled ICE can't negotiate a direct WebRTC media path on this box
+# — the host carries ~12 Docker bridge interfaces (other projects) and
+# pjproject's connectivity checks die on them ("Error sending STUN request:
+# Invalid argument"). Fix: run a TURN relay bound to ONLY the public IP and
+# force every call's audio through it (frontend sets iceTransportPolicy:relay).
+# One clean path, no interface guessing.
+if [ -n "${PBX_TURN_PASSWORD:-}" ]; then
+  echo "==> installing + configuring coturn (media relay on ${PBX_PUBLIC_IP})"
+  ( cd "$ROOT" && docker-compose stop coturn 2>/dev/null ) || true
+  command -v turnserver >/dev/null || apt-get install -y --no-install-recommends coturn
+  : "${PBX_TURN_USER:=tolkyn}"
+  TURN_MIN=49152 TURN_MAX=49200
+  cat > /etc/turnserver.conf <<EOF
+# rendered by asterisk/install-on-host.sh — do not hand-edit
+listening-port=3478
+# bind the public IP only: never enumerate the Docker bridge interfaces
+listening-ip=${PBX_PUBLIC_IP}
+relay-ip=${PBX_PUBLIC_IP}
+external-ip=${PBX_PUBLIC_IP}
+min-port=${TURN_MIN}
+max-port=${TURN_MAX}
+realm=tolkyn
+lt-cred-mech
+user=${PBX_TURN_USER}:${PBX_TURN_PASSWORD}
+no-tls
+no-dtls
+no-cli
+no-software-attribute
+no-multicast-peers
+# this VPS hosts other projects — never let the relay reach internal ranges
+denied-peer-ip=10.0.0.0-10.255.255.255
+denied-peer-ip=172.16.0.0-172.31.255.255
+denied-peer-ip=192.168.0.0-192.168.255.255
+denied-peer-ip=169.254.0.0-169.254.255.255
+denied-peer-ip=127.0.0.0-127.255.255.255
+# the only peer the browser ever needs to reach is Asterisk, on the public IP
+allowed-peer-ip=${PBX_PUBLIC_IP}
+EOF
+  chmod 640 /etc/turnserver.conf
+  echo "TURNSERVER_ENABLED=1" > /etc/default/coturn
+  # coturn is browser-facing — open to the world (agents connect from anywhere)
+  iptables -C INPUT -p udp --dport 3478 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 3478 -j ACCEPT
+  iptables -C INPUT -p tcp --dport 3478 -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport 3478 -j ACCEPT
+  iptables -C INPUT -p udp --dport ${TURN_MIN}:${TURN_MAX} -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT -p udp --dport ${TURN_MIN}:${TURN_MAX} -j ACCEPT
+  systemctl enable coturn >/dev/null 2>&1 || true
+  systemctl restart coturn
+else
+  echo "==> PBX_TURN_PASSWORD not set — skipping coturn (call audio will not work)"
+fi
+
 command -v netfilter-persistent >/dev/null && netfilter-persistent save || \
   { mkdir -p /etc/iptables && iptables-save > /etc/iptables/rules.v4; }
 
@@ -81,6 +134,10 @@ echo
 echo "================= done ================="
 asterisk -rx "core show version" | head -1
 asterisk -rx "pjsip show registrations"
+if [ -n "${PBX_TURN_PASSWORD:-}" ]; then
+  echo
+  systemctl is-active --quiet coturn && echo "coturn: active on ${PBX_PUBLIC_IP}:3478" || echo "coturn: NOT running — check: journalctl -u coturn -n40"
+fi
 echo
 echo "check:  asterisk -rx 'pjsip show contacts'     # softphone + trunk"
 echo "logs:   journalctl -u asterisk -f"

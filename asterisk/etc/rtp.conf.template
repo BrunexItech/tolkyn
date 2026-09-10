@@ -15,6 +15,14 @@ ice_blacklist = 172.16.0.0/12
 ice_blacklist = 10.0.0.0/8
 ice_blacklist = 192.168.0.0/16
 ice_blacklist = 169.254.0.0/16
+; IPv6 link-local / ULA on the Docker bridges are the usual trigger for
+; pjproject's "Error sending STUN request: Invalid argument".
+ice_blacklist = fe80::/10
+ice_blacklist = fc00::/7
+
+; The browser softphone is forced to relay-only (iceTransportPolicy:"relay"),
+; so its one candidate is coturn's relay on the public IP. Asterisk answers
+; that from its own public-IP host candidate — a single, deterministic pair.
 
 ; The trunk leg (plain SIP/UDP to Cloud One) uses external_media_address in
 ; pjsip.conf, not ICE.
