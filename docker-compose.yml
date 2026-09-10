@@ -119,34 +119,51 @@ services:
         condition: service_healthy
     networks: [internal]
 
-  # TURN relay — carries WebRTC audio between the agent browser and Asterisk
-  # when a direct path can't be negotiated (agent behind CGNAT, etc).
+  # TURN relay — a browser-side fallback path for WebRTC audio when the agent's
+  # NAT won't allow a direct route to the PBX.
   coturn:
     image: coturn/coturn:4.6-alpine
     restart: unless-stopped
-    network_mode: host
+    networks:
+      pbx:
+        ipv4_address: 172.31.9.3
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
     command:
       - "-n"
       - "--log-file=stdout"
+      - "--listening-ip=172.31.9.3"
       - "--listening-port=3478"
-      - "--min-port=49152"
-      - "--max-port=49252"
+      - "--relay-ip=172.31.9.3"
+      - "--min-port=49160"
+      - "--max-port=49200"
       - "--realm=tolkyn"
       - "--lt-cred-mech"
       - "--user=${PBX_TURN_USER:-tolkyn}:${PBX_TURN_PASSWORD:?set PBX_TURN_PASSWORD in .env}"
-      - "--external-ip=${PBX_PUBLIC_IP:?set PBX_PUBLIC_IP in .env}"
+      - "--external-ip=${PBX_PUBLIC_IP:?set PBX_PUBLIC_IP in .env}/172.31.9.3"
       - "--no-tls"
       - "--no-dtls"
       - "--no-cli"
       - "--no-multicast-peers"
 
-  # PBX for the Cloud One SIP trunk. Host networking is deliberate — RTP audio
-  # (UDP) does not survive Docker's bridge NAT. See asterisk/README.md.
+  # PBX for the Cloud One SIP trunk. On its own bridge network with a fixed IP
+  # (one interface — Asterisk's pjproject ICE breaks when it sees the host's
+  # many Docker bridges). RTP ports are published; SDP advertises the public IP
+  # via external_media_address, and STUN gives the WebRTC leg a reflexive
+  # candidate. See asterisk/README.md.
   asterisk:
     build:
       context: ./asterisk
     restart: unless-stopped
-    network_mode: host
+    networks:
+      pbx:
+        ipv4_address: 172.31.9.2
+    ports:
+      - "5060:5060/udp"
+      - "10000-10100:10000-10100/udp"
+      - "127.0.0.1:8188:8188"
     environment:
       CLOUDONE_SIP_HOST: ${CLOUDONE_SIP_HOST:-LS02.CLOUDONE.CO.KE}
       CLOUDONE_SIP_USER: ${CLOUDONE_SIP_USER:?set CLOUDONE_SIP_USER in .env}
@@ -156,8 +173,6 @@ services:
       SOFTPHONE_EXT: ${SOFTPHONE_EXT:-1001}
       SOFTPHONE_EXT_PASSWORD: ${SOFTPHONE_EXT_PASSWORD:?set SOFTPHONE_EXT_PASSWORD in .env}
       PBX_WS_PORT: ${PBX_WS_PORT:-8188}
-      PBX_TURN_USER: ${PBX_TURN_USER:-tolkyn}
-      PBX_TURN_PASSWORD: ${PBX_TURN_PASSWORD:?set PBX_TURN_PASSWORD in .env}
     volumes:
       # voicemail + call recordings survive a container rebuild; a Docker named
       # volume is seeded from the image on first use so the default spool tree
@@ -188,6 +203,13 @@ services:
 networks:
   internal:
     driver: bridge
+  # dedicated net for the PBX + TURN so they get fixed IPs and don't inherit
+  # the host's interface soup
+  pbx:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.31.9.0/24
 
 volumes:
   postgres_data:
