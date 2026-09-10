@@ -1,0 +1,22 @@
+[Unit]
+Description=Tolkyn PBX -> backend call-event bridge (AMI)
+After=network.target asterisk.service
+Wants=asterisk.service
+
+[Service]
+Type=simple
+# EnvironmentFile is written by install-on-host.sh from the repo-root .env
+EnvironmentFile=/etc/tolkyn/ami-bridge.env
+ExecStart=/usr/bin/python3 /opt/tolkyn/ami-bridge.py
+Restart=always
+RestartSec=3
+User=asterisk
+Group=asterisk
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=/opt/tolkyn
+
+[Install]
+WantedBy=multi-user.target

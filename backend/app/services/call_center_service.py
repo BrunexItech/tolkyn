@@ -150,7 +150,10 @@ class CallCenterService:
             "name": c.contact_name or "Unknown caller",
             "number": c.number,
             "direction": c.direction.value,
+            # while ringing, started_at is NULL; send created_at so the client
+            # can still parse a date, but `ringing` tells it not to run a timer.
             "startedAt": _aware(c.started_at or c.created_at).isoformat(),
+            "ringing": c.started_at is None,
             "muted": bool(c.muted),
             "onHold": bool(c.on_hold),
         }
@@ -342,7 +345,10 @@ class CallCenterService:
             contact_name=(name or "").strip() or "Unknown caller",
             number=number.strip(),
             recorded=True,
-            started_at=_now(),
+            # started_at stays NULL until the far end actually answers — the
+            # AMI bridge (or the softphone's own report) sets it. Keeps the
+            # on-screen timer from counting ring time.
+            started_at=None,
             agent_id=self.user_id,
             provider_channel_id=channel_id,
             workspace_id=self.workspace_id,
@@ -368,8 +374,32 @@ class CallCenterService:
         await self.db.refresh(c)
         return c
 
+    async def _end_call(self, c: Call, outcome: Optional[str] = None) -> Call:
+        """Move a Call to ENDED and compute its billed duration. A call that
+        never got a started_at (nobody answered) is MISSED, not completed."""
+        answered = c.started_at is not None
+        c.state = CallState.ENDED
+        if outcome and not (outcome == "completed" and not answered):
+            c.outcome = CallOutcome(outcome)
+        else:
+            c.outcome = CallOutcome.COMPLETED if answered else CallOutcome.MISSED
+        c.ended_at = _now()
+        base = _aware(c.started_at)
+        c.duration_sec = (
+            max(0, int((_aware(c.ended_at) - base).total_seconds())) if base else 0
+        )
+        c.on_hold = False
+        c.muted = False
+        if c.outcome in (CallOutcome.MISSED, CallOutcome.VOICEMAIL):
+            c.recorded = c.outcome == CallOutcome.VOICEMAIL
+        await self.db.commit()
+        await self.db.refresh(c)
+        return c
+
     async def hangup(self, call_id: str, outcome: str = "completed") -> Call:
         c = await self._get_call(call_id)
+        if c.state == CallState.ENDED:
+            return c  # the AMI bridge or the far end got there first — fine
         if c.state != CallState.ACTIVE:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "No active call to end")
         if c.provider_channel_id:
@@ -378,18 +408,7 @@ class CallCenterService:
                 await provider.hangup(c.provider_channel_id)
             except TelephonyError:
                 pass  # the leg may already be gone — end our record regardless
-        c.state = CallState.ENDED
-        c.outcome = CallOutcome(outcome)
-        c.ended_at = _now()
-        base = _aware(c.started_at) or _aware(c.ended_at)
-        c.duration_sec = max(0, int((_aware(c.ended_at) - base).total_seconds())) if base else 0
-        c.on_hold = False
-        c.muted = False
-        if c.outcome in (CallOutcome.MISSED, CallOutcome.VOICEMAIL):
-            c.recorded = c.outcome == CallOutcome.VOICEMAIL
-        await self.db.commit()
-        await self.db.refresh(c)
-        return c
+        return await self._end_call(c, outcome)
 
     async def set_flags(self, call_id: str, muted: Optional[bool], on_hold: Optional[bool]) -> Call:
         c = await self._get_call(call_id)
@@ -524,34 +543,65 @@ class CallCenterService:
         await self.db.refresh(agent)
         return agent
 
+    async def _call_by_channel(self, channel: Optional[str]) -> Optional[Call]:
+        if not channel:
+            return None
+        return (
+            await self.db.execute(
+                select(Call).where(
+                    Call.workspace_id == self.workspace_id,
+                    Call.provider_channel_id == channel,
+                )
+            )
+        ).scalars().first()
+
     async def handle_pbx_event(self, payload: Dict[str, Any]) -> None:
-        """Yeastar P-Series call events. Shapes vary by firmware/config, so
-        we read defensively: match on the PBX channel id, move our Call row's
-        state, and create a queued row for a brand-new inbound ring."""
+        """Call events from the host AMI bridge (asterisk/ami-bridge.py).
+
+        Normalised shape: {"type": ring|dialing|answered|hangup,
+        "channel_id": <Asterisk Linkedid — stable for the whole call>,
+        "caller_number"/"callee_number", "caller_name", "direction"}.
+        Read defensively so older/other shapes still work."""
+        await self._ensure_seed()
         etype = (payload.get("type") or payload.get("event") or "").lower()
         d = payload.get("data") or payload
         channel = str(d.get("channel_id") or d.get("call_id") or d.get("channelId") or "") or None
-        number = d.get("caller_number") or d.get("from") or d.get("callee_number") or d.get("number") or ""
+        number = str(
+            d.get("caller_number") or d.get("from")
+            or d.get("callee_number") or d.get("number") or d.get("to") or ""
+        ).strip()
         name = d.get("caller_name") or d.get("from_name") or "Unknown caller"
+        direction = str(d.get("direction") or "").lower()
 
-        existing = None
-        if channel:
-            existing = (
+        existing = await self._call_by_channel(channel)
+
+        # --- brand-new inbound ring -----------------------------------
+        if direction != "outbound" and any(
+            k in etype for k in ("ring", "incoming", "new_call", "inbound")
+        ):
+            if existing:
+                return
+            # a softphone report may already have queued this caller
+            match = (
                 await self.db.execute(
                     select(Call).where(
-                        Call.workspace_id == self.workspace_id, Call.provider_channel_id == channel
+                        Call.workspace_id == self.workspace_id,
+                        Call.direction == CallDirection.INBOUND,
+                        Call.state == CallState.QUEUED,
+                        Call.provider_channel_id.is_(None),
+                        Call.number == (number or "unknown"),
                     )
                 )
-            ).scalar_one_or_none()
-
-        if any(k in etype for k in ("ring", "incoming", "new_call", "inbound")):
-            if existing:
+            ).scalars().first()
+            if match:
+                match.provider_channel_id = channel
+                await self.db.commit()
                 return
             call = Call(
                 direction=CallDirection.INBOUND,
                 state=CallState.QUEUED,
                 contact_name=name,
-                number=str(number) or "unknown",
+                number=number or "unknown",
                 reason="Inbound call",
                 provider_channel_id=channel,
                 queued_at=_now(),
@@ -563,6 +613,25 @@ class CallCenterService:
             from app.services.ivr_service import IvrService
 
             await IvrService(self.db, self.workspace_id).on_call_enter(call)
+            return
+
+        # --- outbound leg started: bind the channel to the dial() row --
+        if not existing and (direction == "outbound" or "dial" in etype or "originate" in etype):
+            row = (
+                await self.db.execute(
+                    select(Call)
+                    .where(
+                        Call.workspace_id == self.workspace_id,
+                        Call.direction == CallDirection.OUTBOUND,
+                        Call.state == CallState.ACTIVE,
+                        Call.provider_channel_id.is_(None),
+                    )
+                    .order_by(Call.created_at.desc())
+                )
+            ).scalars().first()
+            if row and channel:
+                row.provider_channel_id = channel
+                await self.db.commit()
             return
 
         if not existing:
@@ -583,19 +652,133 @@ class CallCenterService:
             await IvrService(self.db, self.workspace_id).on_timeout(existing)
             return
 
-        if any(k in etype for k in ("answer", "bridge", "connected")):
-            if existing.state == CallState.QUEUED:
-                existing.state = CallState.ACTIVE
-                existing.started_at = _now()
+        if any(k in etype for k in ("answer", "bridge", "connected")) or etype in ("up", "newstate"):
+            if existing.state != CallState.ENDED:
+                if existing.state == CallState.QUEUED:
+                    existing.state = CallState.ACTIVE
+                    existing.agent_id = existing.agent_id or self.user_id
+                existing.ivr_state = None
+                if existing.started_at is None:
+                    existing.started_at = _now()
+                    if existing.direction == CallDirection.INBOUND:
+                        await self._bump_self(1)
+                await self.db.commit()
         elif any(k in etype for k in ("hangup", "end", "terminate", "cdr")):
             if existing.state != CallState.ENDED:
-                existing.state = CallState.ENDED
-                existing.ended_at = _now()
-                base = _aware(existing.started_at)
-                existing.outcome = (
-                    CallOutcome.COMPLETED if base else CallOutcome.MISSED
+                disp = str(d.get("disposition") or "").upper()
+                outcome = "missed" if disp in ("NO ANSWER", "BUSY", "FAILED", "CONGESTION") else None
+                await self._end_call(existing, outcome)
+
+    async def report_softphone(
+        self,
+        kind: str,
+        number: Optional[str] = None,
+        name: Optional[str] = None,
+    ) -> Optional[Call]:
+        """The browser softphone self-reporting its SIP session lifecycle.
+        Redundant with the AMI bridge but keeps the UI correct while the
+        agent's tab is open even if the bridge is down."""
+        await self._ensure_seed()
+        kind = (kind or "").lower()
+        num = (number or "").strip()
+
+        if kind in ("inbound_ring", "ringing", "incoming"):
+            hit = (
+                await self.db.execute(
+                    select(Call).where(
+                        Call.workspace_id == self.workspace_id,
+                        Call.direction == CallDirection.INBOUND,
+                        Call.state.in_([CallState.QUEUED, CallState.ACTIVE]),
+                        Call.number == (num or "unknown"),
+                    )
                 )
-                existing.duration_sec = (
-                    max(0, int((_aware(existing.ended_at) - base).total_seconds())) if base else 0
+            ).scalars().first()
+            if hit:
+                return hit
+            c = Call(
+                direction=CallDirection.INBOUND,
+                state=CallState.QUEUED,
+                contact_name=(name or "").strip() or "Unknown caller",
+                number=num or "unknown",
+                reason="Inbound call",
+                queued_at=_now(),
+                workspace_id=self.workspace_id,
+            )
+            self.db.add(c)
+            await self.db.commit()
+            await self.db.refresh(c)
+            return c
+
+        if kind in ("inbound_answered", "answered"):
+            if await self._active():
+                return await self._active()
+            c = None
+            if num:
+                c = (
+                    await self.db.execute(
+                        select(Call).where(
+                            Call.workspace_id == self.workspace_id,
+                            Call.direction == CallDirection.INBOUND,
+                            Call.state == CallState.QUEUED,
+                            Call.number == num,
+                        )
+                    )
+                ).scalars().first()
+            if c is None:
+                c = (
+                    await self.db.execute(
+                        select(Call)
+                        .where(
+                            Call.workspace_id == self.workspace_id,
+                            Call.direction == CallDirection.INBOUND,
+                            Call.state == CallState.QUEUED,
+                        )
+                        .order_by(Call.queued_at.desc())
+                    )
+                ).scalars().first()
+            if c is None:
+                c = Call(
+                    direction=CallDirection.INBOUND,
+                    number=num or "unknown",
+                    contact_name=(name or "").strip() or "Unknown caller",
+                    reason="Inbound call",
+                    workspace_id=self.workspace_id,
                 )
-        await self.db.commit()
+                self.db.add(c)
+            c.state = CallState.ACTIVE
+            c.ivr_state = None
+            c.started_at = _now()
+            c.recorded = True
+            c.agent_id = self.user_id
+            await self._bump_self(1)
+            await self.db.commit()
+            await self.db.refresh(c)
+            return c
+
+        if kind in ("outbound_answered", "connected"):
+            c = await self._active()
+            if c and c.started_at is None:
+                c.started_at = _now()
+                await self.db.commit()
+                await self.db.refresh(c)
+            return c
+
+        if kind in ("ended", "hangup", "bye", "declined", "rejected"):
+            c = await self._active()
+            if c:
+                return await self._end_call(c)
+            if num:
+                ring = (
+                    await self.db.execute(
+                        select(Call).where(
+                            Call.workspace_id == self.workspace_id,
+                            Call.direction == CallDirection.INBOUND,
+                            Call.state == CallState.QUEUED,
+                            Call.number == num,
+                        )
+                    )
+                ).scalars().first()
+                if ring:
+                    return await self._end_call(ring, "missed")
+            return None
+        return None

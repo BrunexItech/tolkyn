@@ -28,6 +28,7 @@ class ActiveCall(BaseModel):
     number: str
     direction: str
     startedAt: str
+    ringing: bool = False   # dialled/answered-pending — the UI shows no timer yet
     muted: bool
     onHold: bool
 
@@ -101,6 +102,13 @@ class FlagsRequest(BaseModel):
 
 class PresenceRequest(BaseModel):
     status: str
+
+
+class SoftphoneEvent(BaseModel):
+    # inbound_ring | inbound_answered | outbound_answered | ended | declined
+    kind: str = Field(..., max_length=32)
+    number: Optional[str] = Field(default=None, max_length=40)
+    name: Optional[str] = Field(default=None, max_length=200)
 
 
 class SoftphoneConfig(BaseModel):

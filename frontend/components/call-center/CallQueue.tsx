@@ -8,7 +8,10 @@ import { useCallCenter } from "./store";
 import { formatDuration } from "@/lib/om/call-center";
 
 export function CallQueue() {
-  const { queue, answer, dismissQueued, active } = useCallCenter();
+  const { queue, answer, dismissQueued, active, softphone } = useCallCenter();
+  // With a live SIP line the agent answers on the softphone (the incoming-call
+  // card), not here — this list is then just visibility into who's ringing.
+  const answerOnSoftphone = !!softphone?.configured && softphone.provider !== "simulated";
 
   return (
     <Card accent={queue.length ? "amber" : "default"}>
@@ -53,14 +56,20 @@ export function CallQueue() {
               <span className="shrink-0 font-mono text-[11px] text-om-amber">
                 {formatDuration(c.waitedSec)}
               </span>
-              <button
-                onClick={() => answer(c.id)}
-                disabled={!!active}
-                className="grid size-8 shrink-0 place-items-center rounded-lg bg-om-green text-black transition-colors hover:brightness-105 disabled:opacity-40"
-                aria-label="Answer"
-              >
-                <Phone className="size-3.5" />
-              </button>
+              {answerOnSoftphone ? (
+                <span className="shrink-0 text-[10px] font-medium text-om-muted">
+                  ringing your line
+                </span>
+              ) : (
+                <button
+                  onClick={() => answer(c.id)}
+                  disabled={!!active}
+                  className="grid size-8 shrink-0 place-items-center rounded-lg bg-om-green text-black transition-colors hover:brightness-105 disabled:opacity-40"
+                  aria-label="Answer"
+                >
+                  <Phone className="size-3.5" />
+                </button>
+              )}
               <button
                 onClick={() => dismissQueued(c.id)}
                 className="grid size-7 shrink-0 place-items-center rounded-lg text-om-muted hover:bg-white/[0.05] hover:text-om-text"

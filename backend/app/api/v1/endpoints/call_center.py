@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor, get_actor, get_workspace_id
+from app.core.config import settings
 from app.db import get_db
 from app.models.team_member import TeamRole
 from app.models.telephony import TelephonyConfig
@@ -19,6 +20,7 @@ from app.schemas.call_center import (
     IvrSimulateResult,
     PresenceRequest,
     SoftphoneConfig,
+    SoftphoneEvent,
 )
 from app.services.call_center_service import CallCenterService
 from app.services.ivr_service import IvrService
@@ -136,6 +138,20 @@ async def softphone(
     return SoftphoneConfig(**await _svc(db, user_id).softphone_config())
 
 
+@router.post("/softphone/event", response_model=CallOverview)
+async def softphone_event(
+    body: SoftphoneEvent,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """The browser softphone reports its own SIP lifecycle (inbound ring,
+    answered, ended). Keeps the Call Center in sync while the agent's tab is
+    open even if the server-side AMI bridge is down."""
+    svc = _svc(db, user_id)
+    await svc.report_softphone(body.kind, body.number, body.name)
+    return await svc.overview()
+
+
 @router.patch("/agents/{agent_id}/sip", response_model=CallOverview)
 async def set_agent_sip(
     agent_id: str,
@@ -213,13 +229,29 @@ async def pbx_event(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    cfg = (
-        await db.execute(select(TelephonyConfig).where(TelephonyConfig.workspace_id == workspace_id))
-    ).scalar_one_or_none()
-    if not cfg or not cfg.webhook_secret:
+    # "_default" => the single workspace whose telephony provider is the
+    # self-hosted Asterisk (the POC has exactly one). Saves the host bridge
+    # from having to know a workspace UUID.
+    cfg = None
+    if workspace_id == "_default":
+        cfg = (
+            await db.execute(
+                select(TelephonyConfig).where(
+                    TelephonyConfig.provider == "asterisk",
+                    TelephonyConfig.is_active.is_(True),
+                )
+            )
+        ).scalars().first()
+    else:
+        cfg = (
+            await db.execute(select(TelephonyConfig).where(TelephonyConfig.workspace_id == workspace_id))
+        ).scalar_one_or_none()
+    if not cfg:
         raise HTTPException(status.HTTP_404_NOT_FOUND)
+
     supplied = request.headers.get("x-webhook-secret") or request.query_params.get("secret")
-    if supplied != cfg.webhook_secret:
+    allowed = {s for s in (cfg.webhook_secret, settings.PBX_EVENT_WEBHOOK_SECRET) if s}
+    if not allowed or supplied not in allowed:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad webhook secret")
     payload = await request.json()
-    await CallCenterService(db, workspace_id).handle_pbx_event(payload)
+    await CallCenterService(db, cfg.workspace_id).handle_pbx_event(payload)

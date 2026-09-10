@@ -11,15 +11,33 @@ import { toast } from "@/lib/om/toast";
  * inert no-op and the Call Center runs entirely on the backend's simulated
  * provider.
  *
- * The PBX click-to-dial model: POST /call-center/dial makes the PBX ring this
- * registered extension; we auto-answer that leg so the agent hears audio. Manual
- * outbound straight from the softphone uses `dial()`.
+ * Lifecycle is reported out via `onEvent` so the Call Center store can keep the
+ * backend Call row in sync (timer starts on answer, card clears on hangup, an
+ * inbound INVITE raises a ringing card). Inbound calls are NOT auto-answered —
+ * the agent accepts or declines from the UI.
  */
-export function useSipPhone(cfg: SoftphoneConfig | null) {
+export type SipLifecycle =
+  | { type: "inbound_ring"; from: string }
+  | { type: "answered"; direction: "inbound" | "outbound"; from: string }
+  | { type: "declined"; from: string }
+  | { type: "ended" };
+
+export function useSipPhone(
+  cfg: SoftphoneConfig | null,
+  onEvent?: (e: SipLifecycle) => void,
+) {
   const [state, setState] = useState<SipState>("idle");
-  const [inbound, setInbound] = useState<string | null>(null);
+  const [incoming, setIncoming] = useState<string | null>(null);
+  const incomingRef = useRef<string | null>(null);
   const phoneRef = useRef<SipPhone | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const onEventRef = useRef(onEvent);
+
+  // keep the "latest value" refs current without touching them during render
+  useEffect(() => {
+    onEventRef.current = onEvent;
+    incomingRef.current = incoming;
+  });
 
   const enabled = !!cfg?.configured;
 
@@ -36,11 +54,20 @@ export function useSipPhone(cfg: SoftphoneConfig | null) {
     const phone = new SipPhone(cfg, audio, {
       onState: setState,
       onInbound: (from) => {
-        setInbound(from);
-        // Auto-answer the PBX-originated leg for click-to-dial.
-        phone.answer().catch(() => undefined);
+        setIncoming(from);
+        onEventRef.current?.({ type: "inbound_ring", from });
       },
-      onEnded: () => setInbound(null),
+      onAnswered: (direction) => {
+        onEventRef.current?.({
+          type: "answered",
+          direction,
+          from: phone.inboundFrom,
+        });
+      },
+      onEnded: () => {
+        setIncoming(null);
+        onEventRef.current?.({ type: "ended" });
+      },
       onError: (m) => toast.err(`Softphone: ${m}`),
     });
     phoneRef.current = phone;
@@ -52,13 +79,23 @@ export function useSipPhone(cfg: SoftphoneConfig | null) {
       audio.remove();
       audioRef.current = null;
       setState("idle");
-      setInbound(null);
+      setIncoming(null);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enabled, cfg?.extension, cfg?.ws_url, cfg?.domain]);
 
   const dial = useCallback(async (target: string) => {
     await phoneRef.current?.call(target);
+  }, []);
+  const answer = useCallback(async () => {
+    setIncoming(null);
+    await phoneRef.current?.answer();
+  }, []);
+  const decline = useCallback(async () => {
+    const from = incomingRef.current ?? "";
+    setIncoming(null);
+    await phoneRef.current?.decline();
+    onEventRef.current?.({ type: "declined", from });
   }, []);
   const hangup = useCallback(async () => {
     await phoneRef.current?.hangup();
@@ -70,5 +107,5 @@ export function useSipPhone(cfg: SoftphoneConfig | null) {
     await phoneRef.current?.setHold(h);
   }, []);
 
-  return { enabled, state, inbound, dial, hangup, setMuted, setHold };
+  return { enabled, state, incoming, dial, answer, decline, hangup, setMuted, setHold };
 }

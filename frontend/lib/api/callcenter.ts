@@ -29,9 +29,18 @@ export interface ActiveCall {
   number: string;
   direction: CallDirection;
   startedAt: string;
+  /** dialled/ringing — no talk timer yet */
+  ringing?: boolean;
   muted: boolean;
   onHold: boolean;
 }
+
+export type SoftphoneEventKind =
+  | "inbound_ring"
+  | "inbound_answered"
+  | "outbound_answered"
+  | "ended"
+  | "declined";
 
 export interface AgentRow {
   id: string;
@@ -158,6 +167,8 @@ export const callCenterApi = {
     http.post<CallOverview>("/call-center/presence", { status }),
   simulateInbound: () => http.post<CallOverview>("/call-center/simulate-inbound"),
   softphoneConfig: () => http.get<SoftphoneConfig>("/call-center/softphone"),
+  softphoneEvent: (kind: SoftphoneEventKind, number?: string, name?: string) =>
+    http.post<CallOverview>("/call-center/softphone/event", { kind, number, name }),
   setAgentSip: (agentId: string, sip_extension: string, sip_password: string) =>
     http.patch<CallOverview>(`/call-center/agents/${agentId}/sip`, { sip_extension, sip_password }),
 

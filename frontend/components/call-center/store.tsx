@@ -14,6 +14,7 @@ import {
   type QueuedCall,
   type RecentCall,
   type SoftphoneConfig,
+  type SoftphoneEventKind,
   type VolumePoint,
 } from "@/lib/api/callcenter";
 import { feedBus } from "@/components/om/feed-bus";
@@ -39,6 +40,8 @@ interface CallCenterValue {
   ivrCalls: IvrCall[];
   softphone: SoftphoneConfig | null;
   setAgentSip: (agentId: string, ext: string, password: string) => void;
+  /** browser softphone reporting its own SIP session lifecycle */
+  softphoneEvent: (kind: SoftphoneEventKind, number?: string, name?: string) => void;
   busy: boolean;
 }
 
@@ -95,6 +98,13 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
     onError,
   });
   const inboundM = useMutation({ mutationFn: () => callCenterApi.simulateInbound(), onSuccess, onError });
+  const sipEventM = useMutation({
+    mutationFn: (v: { kind: SoftphoneEventKind; number?: string; name?: string }) =>
+      callCenterApi.softphoneEvent(v.kind, v.number, v.name),
+    onSuccess,
+    // a stale/again event isn't worth a toast
+    onError: () => undefined,
+  });
   const agentSipM = useMutation({
     mutationFn: (v: { agentId: string; ext: string; password: string }) =>
       callCenterApi.setAgentSip(v.agentId, v.ext, v.password),
@@ -156,6 +166,7 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
       ivrCalls: data?.ivrCalls ?? [],
       softphone: softphone ?? null,
       setAgentSip: (agentId, ext, password) => agentSipM.mutate({ agentId, ext, password }),
+      softphoneEvent: (kind, number, name) => sipEventM.mutate({ kind, number, name }),
       busy,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps

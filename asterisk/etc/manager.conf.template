@@ -1,0 +1,24 @@
+;======================================================================
+; AMI (Asterisk Manager Interface) — localhost only.
+; Consumed by the host event bridge (asterisk/ami-bridge.py), which
+; forwards ring / answered / hangup to the Tolkyn backend so the Call
+; Center shows real call state (timer, missed calls, card clears on
+; remote hangup). Rendered from manager.conf.template by install-on-host.sh.
+;======================================================================
+[general]
+enabled = yes
+webenabled = no
+bindaddr = 127.0.0.1
+port = 5038
+; don't stream every channel var — the bridge only needs call/cdr/system
+displayconnects = no
+
+[${PBX_AMI_USER}]
+secret = ${PBX_AMI_PASSWORD}
+deny = 0.0.0.0/0.0.0.0
+permit = 127.0.0.1/255.255.255.255
+; read: call+cdr channel/bridge/hangup events; system for connectivity.
+; write: 'call' only, reserved for server-side originate later — no config,
+; no command, no system-exec.
+read = call,cdr,dialplan,system
+write = call

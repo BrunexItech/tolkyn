@@ -20,6 +20,7 @@ export type SipState =
 export interface SipEvents {
   onState?: (s: SipState) => void;
   onInbound?: (from: string) => void;
+  onAnswered?: (direction: "inbound" | "outbound") => void;
   onEnded?: () => void;
   onError?: (message: string) => void;
 }
@@ -30,6 +31,8 @@ export class SipPhone {
   private cfg: SoftphoneConfig;
   private events: SipEvents;
   private _state: SipState = "idle";
+  private _dir: "inbound" | "outbound" | null = null;
+  private _inboundFrom = "";
 
   constructor(cfg: SoftphoneConfig, audio: HTMLAudioElement, events: SipEvents = {}) {
     this.cfg = cfg;
@@ -90,12 +93,18 @@ export class SipPhone {
       },
       delegate: {
         onCallReceived: async () => {
+          this._dir = "inbound";
+          this._inboundFrom = this.remoteNumber();
           this.setState("ringing");
-          this.events.onInbound?.("Incoming call");
+          this.events.onInbound?.(this._inboundFrom || "Incoming call");
         },
-        onCallAnswered: () => this.setState("in-call"),
+        onCallAnswered: () => {
+          this.setState("in-call");
+          this.events.onAnswered?.(this._dir ?? "outbound");
+        },
         onCallHangup: () => {
           this.setState(this.user ? "registered" : "idle");
+          this._dir = null;
           this.events.onEnded?.();
         },
         onRegistered: () => this.setState("registered"),
@@ -116,22 +125,51 @@ export class SipPhone {
     }
   }
 
+  /** Best-effort caller number/name for the current inbound INVITE. */
+  remoteNumber(): string {
+    try {
+      const s = (this.user as unknown as { session?: { remoteIdentity?: { uri?: { user?: string }; displayName?: string } } })
+        .session;
+      return s?.remoteIdentity?.displayName || s?.remoteIdentity?.uri?.user || "";
+    } catch {
+      return "";
+    }
+  }
+
+  get inboundFrom(): string {
+    return this._inboundFrom;
+  }
+
   async call(target: string): Promise<void> {
     if (!this.user) throw new Error("SIP phone not started");
     const dest = target.includes("@") ? `sip:${target}` : `sip:${target}@${this.cfg.domain}`;
+    this._dir = "outbound";
     this.setState("calling");
     try {
       await this.user.call(dest);
     } catch (e) {
       this.setState("registered");
+      this._dir = null;
       this.events.onError?.(e instanceof Error ? e.message : "Call failed");
       throw e;
     }
   }
 
   async answer(): Promise<void> {
+    this._dir = "inbound";
     await this.user?.answer();
     this.setState("in-call");
+    // onAnswered is emitted from the onCallAnswered delegate when the session
+    // reaches Established.
+  }
+
+  async decline(): Promise<void> {
+    try {
+      await this.user?.decline();
+    } catch {
+      /* already gone */
+    }
+    this._dir = null;
   }
 
   async hangup(): Promise<void> {

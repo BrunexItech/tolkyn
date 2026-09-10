@@ -49,7 +49,25 @@ docker-compose exec asterisk asterisk -rx "pjsip show contacts"        # softpho
 docker-compose exec asterisk asterisk -rx "dialplan show from-internal"
 ```
 
+## Live call state — the AMI bridge
+`ami-bridge.py` (host systemd service `tolkyn-ami-bridge`, installed by
+`install-on-host.sh`) reads Asterisk's Manager socket (`manager.conf`, localhost
+only) and POSTs `ring` / `dialing` / `answered` / `hangup` to the backend
+webhook (`POST /call-center/webhook/<ws>/event`, signed with
+`PBX_EVENT_WEBHOOK_SECRET`). That's what makes the Call Center's active-call
+card clear when the far end hangs up, starts the talk timer only on answer, and
+records missed calls. Pure observation — no dialplan changes.
+
+```bash
+journalctl -u tolkyn-ami-bridge -f
+sudo asterisk -rx "manager show connected"
+```
+
+The browser softphone also self-reports its SIP lifecycle
+(`POST /call-center/softphone/event`) so the UI stays correct even if the bridge
+is down while the agent's tab is open.
+
 ## POC scope
 One trunk, one extension (`1001`), one DID. Multi-tenant (per-workspace trunks,
-DID→workspace routing, PJSIP realtime from the DB, ARI call control/CDR) is the
-production phase — see `DEPLOYMENT.md`.
+DID→workspace routing, PJSIP realtime from the DB, ARI call control/CDR, IVR
+over the real trunk) is the production phase — see `DEPLOYMENT.md`.

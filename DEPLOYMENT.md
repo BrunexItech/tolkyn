@@ -85,11 +85,18 @@ single shared Cloud One SIP trunk (Tolkyn is the reseller — it owns the trunk
 and its pool of DIDs, and assigns one DID per client). See `asterisk/README.md`
 for the internals.
 
+Asterisk runs **natively on the host** (not Docker — Docker's network layer
+breaks WebRTC media). One script does everything: install Asterisk, render the
+config, install + start coturn (the media relay) and the AMI call-event bridge.
+
 **Enable it:**
 
 1. Root `.env` — fill in the `CLOUDONE_*` / `PBX_*` / `SOFTPHONE_*` block
-   (see `.env.example`). `CLOUDONE_SIP_PASSWORD` and `SOFTPHONE_EXT_PASSWORD`
-   are required; `PBX_PUBLIC_IP` is this server's public IP.
+   (see `.env.example`). Required: `CLOUDONE_SIP_PASSWORD`,
+   `SOFTPHONE_EXT_PASSWORD`, `PBX_PUBLIC_IP` (this server's public IP),
+   `PBX_TURN_PASSWORD` (call audio), and `PBX_AMI_PASSWORD` +
+   `PBX_EVENT_WEBHOOK_SECRET` (live call state in the UI). Generate secrets with
+   `openssl rand -hex 20`.
 
 2. DNS — a `pbx.<domain>` A record at the server IP (Cloudflare: Proxied is
    fine; it's covered by a `*.<domain>` origin cert).
@@ -101,13 +108,20 @@ for the internals.
    sudo nginx -t && sudo systemctl reload nginx
    ```
 
-4. `docker-compose up -d asterisk` (it uses `network_mode: host` — no firewall
-   changes needed if the host has no `ufw`/cloud firewall; otherwise open
-   `udp/10000-20000` and confirm outbound `udp/5060` to the trunk host).
-
-5. Check the trunk registered:
+4. Rebuild the app so the backend gets `PBX_EVENT_WEBHOOK_SECRET`, then run the
+   installer:
    ```bash
-   docker-compose exec asterisk asterisk -rx "pjsip show registrations"
+   docker-compose up -d --build backend frontend
+   sudo bash asterisk/install-on-host.sh
+   ```
+   The installer opens the firewall it needs (SIP from the trunk only, coturn
+   `udp/3478` + `udp/49152-49200` to the world, AMI localhost-only).
+
+5. Check trunk + relay + bridge:
+   ```bash
+   sudo asterisk -rx "pjsip show registrations"      # trunk Registered
+   systemctl is-active coturn tolkyn-ami-bridge      # both active
+   journalctl -u tolkyn-ami-bridge -f               # call events as they fire
    ```
 
 **Per client:** Super Admin → Telephony → set provider **Tolkyn PBX**, tick

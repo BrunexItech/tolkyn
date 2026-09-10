@@ -27,14 +27,80 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"] as con
 const SUBS: Record<string, string> = { "2": "ABC", "3": "DEF", "4": "GHI", "5": "JKL", "6": "MNO", "7": "PQRS", "8": "TUV", "9": "WXYZ" };
 
 export function Softphone() {
-  const { active, dial, softphone } = useCallCenter();
-  const sip = useSipPhone(softphone);
+  const { active, dial, softphone, softphoneEvent } = useCallCenter();
+  const sip = useSipPhone(softphone, (e) => {
+    if (e.type === "inbound_ring") {
+      softphoneEvent("inbound_ring", e.from || undefined);
+    } else if (e.type === "answered") {
+      softphoneEvent(
+        e.direction === "inbound" ? "inbound_answered" : "outbound_answered",
+        e.from || undefined,
+      );
+    } else if (e.type === "declined") {
+      softphoneEvent("declined", e.from || undefined);
+    } else if (e.type === "ended") {
+      softphoneEvent("ended");
+    }
+  });
 
   return (
     <div className="space-y-2">
-      {active ? <ActiveCallCard sip={sip} /> : <DialerCard onDial={dial} sip={sip} />}
+      {sip.incoming && !active ? (
+        <IncomingCallCard
+          from={sip.incoming}
+          onAnswer={() => sip.answer().catch(() => undefined)}
+          onDecline={() => sip.decline().catch(() => undefined)}
+        />
+      ) : active ? (
+        <ActiveCallCard sip={sip} />
+      ) : (
+        <DialerCard onDial={dial} sip={sip} />
+      )}
       <TrunkStatus softphone={softphone} sipState={sip.state} />
     </div>
+  );
+}
+
+function IncomingCallCard({
+  from,
+  onAnswer,
+  onDecline,
+}: {
+  from: string;
+  onAnswer: () => void;
+  onDecline: () => void;
+}) {
+  return (
+    <Card accent="amber">
+      <CardTitle icon={<PhoneIncoming />}>Incoming call</CardTitle>
+
+      <div className="flex flex-col items-center py-3">
+        <span className="grid size-14 place-items-center rounded-full bg-om-amber/15 text-om-amber">
+          <PhoneIncoming className="size-6" />
+        </span>
+        <div className="mt-2 font-mono text-[14px] font-semibold text-om-text">
+          {from || "Unknown caller"}
+        </div>
+        <div className="mt-0.5 flex items-center gap-1 text-[11px] text-om-muted">
+          <CircleDot className="size-3 om-live-dot text-om-amber" /> ringing…
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2">
+        <button
+          onClick={onDecline}
+          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-om-red font-semibold text-white shadow-[inset_0_1px_0_rgba(255,255,255,.18)] transition-colors hover:brightness-110"
+        >
+          <PhoneOff className="size-4" /> Decline
+        </button>
+        <button
+          onClick={onAnswer}
+          className="flex h-11 items-center justify-center gap-2 rounded-xl bg-om-green font-semibold text-black shadow-[inset_0_1px_0_rgba(255,255,255,.2)] transition-colors hover:brightness-105"
+        >
+          <Phone className="size-4" /> Answer
+        </button>
+      </div>
+    </Card>
   );
 }
 
@@ -144,6 +210,7 @@ function DialerCard({
 function ActiveCallCard({ sip }: { sip: ReturnType<typeof useSipPhone> }) {
   const { active, hangup, toggleMute, toggleHold } = useCallCenter();
   const [elapsed, setElapsed] = useState(0);
+  const ringing = !!active?.ringing;
 
   const wrapMute = () => {
     if (active && sip.enabled) sip.setMuted(!active.muted).catch(() => undefined);
@@ -159,13 +226,13 @@ function ActiveCallCard({ sip }: { sip: ReturnType<typeof useSipPhone> }) {
   };
 
   useEffect(() => {
-    if (!active) return;
+    if (!active || ringing) return;
     const startedMs = new Date(active.startedAt).getTime();
     const tick = () => setElapsed(Math.max(0, Math.round((Date.now() - startedMs) / 1000)));
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [active]);
+  }, [active, ringing]);
 
   if (!active) return null;
   const Dir = active.direction === "inbound" ? PhoneIncoming : PhoneOutgoing;
@@ -195,12 +262,16 @@ function ActiveCallCard({ sip }: { sip: ReturnType<typeof useSipPhone> }) {
         <div className="mt-2 text-[14px] font-semibold">{active.name}</div>
         <div className="font-mono text-[11.5px] text-om-muted">{active.number}</div>
         <div className="mt-1 font-mono text-[20px] font-bold tracking-wide text-om-green">
-          {formatDuration(elapsed)}
+          {ringing
+            ? active.direction === "inbound"
+              ? "Connecting…"
+              : "Calling…"
+            : formatDuration(elapsed)}
         </div>
       </div>
 
       <div className="my-2">
-        <CallWaveform paused={active.onHold} />
+        <CallWaveform paused={active.onHold || ringing} />
       </div>
 
       <div className="mt-3 grid grid-cols-3 gap-2">

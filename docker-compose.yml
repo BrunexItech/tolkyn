@@ -90,6 +90,8 @@ services:
       PBX_TURN_URL: ${PBX_TURN_URL:-}
       PBX_TURN_USER: ${PBX_TURN_USER:-tolkyn}
       PBX_TURN_PASSWORD: ${PBX_TURN_PASSWORD:-}
+      # shared secret the host AMI->webhook bridge signs call events with
+      PBX_EVENT_WEBHOOK_SECRET: ${PBX_EVENT_WEBHOOK_SECRET:-}
     volumes:
       - backend_media:/app/media
     depends_on:

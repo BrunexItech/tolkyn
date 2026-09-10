@@ -135,6 +135,11 @@ class Settings(BaseSettings):
     PBX_TURN_URL: str = Field(default="", description="e.g. turn:38.242.200.152:3478 — blank disables")
     PBX_TURN_USER: str = Field(default="tolkyn", description="coturn long-term username")
     PBX_TURN_PASSWORD: str = Field(default="", description="coturn long-term credential (matches turnserver.conf)")
+    # Shared secret the host AMI->webhook bridge (asterisk/ami-bridge.py) signs
+    # its call-event POSTs with. Accepted in addition to a workspace's own
+    # telephony_configs.webhook_secret, so the single-tenant POC works without a
+    # DB round-trip. Blank => only per-workspace secrets are accepted.
+    PBX_EVENT_WEBHOOK_SECRET: str = Field(default="", description="shared secret for POST /call-center/webhook/<ws>/event")
 
     # Video generation — Google Veo 3.1 via the Gemini API
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Gemini API key (Veo 3.1 video generation)")

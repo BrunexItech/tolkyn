@@ -28,8 +28,15 @@ set -a; . "$ENV_FILE"; set +a
 : "${SOFTPHONE_EXT:?set in .env}"
 : "${SOFTPHONE_EXT_PASSWORD:?set in .env}"
 : "${PBX_WS_PORT:=8188}"
+: "${PBX_AMI_USER:=tolkyn-bridge}"
+: "${PBX_AMI_PASSWORD:=}"
+: "${PBX_EVENT_BACKEND_URL:=http://127.0.0.1:8090/api/v1}"
+: "${PBX_EVENT_WORKSPACE_ID:=_default}"
+: "${PBX_EVENT_WEBHOOK_SECRET:=}"
 export CLOUDONE_SIP_HOST CLOUDONE_SIP_USER CLOUDONE_SIP_PASSWORD CLOUDONE_DID \
-       PBX_PUBLIC_IP SOFTPHONE_EXT SOFTPHONE_EXT_PASSWORD PBX_WS_PORT
+       PBX_PUBLIC_IP SOFTPHONE_EXT SOFTPHONE_EXT_PASSWORD PBX_WS_PORT \
+       PBX_AMI_USER PBX_AMI_PASSWORD PBX_EVENT_BACKEND_URL PBX_EVENT_WORKSPACE_ID \
+       PBX_EVENT_WEBHOOK_SECRET
 
 # --- 1. stop the container PBX so it can't fight over :5060 ----------------
 echo "==> stopping the Asterisk container (if running)"
@@ -45,9 +52,11 @@ fi
 
 # --- 3. render our config over the stock config -------------------------
 echo "==> writing /etc/asterisk config"
-SUBST='${CLOUDONE_SIP_HOST} ${CLOUDONE_SIP_USER} ${CLOUDONE_SIP_PASSWORD} ${CLOUDONE_DID} ${PBX_PUBLIC_IP} ${SOFTPHONE_EXT} ${SOFTPHONE_EXT_PASSWORD} ${PBX_WS_PORT}'
+SUBST='${CLOUDONE_SIP_HOST} ${CLOUDONE_SIP_USER} ${CLOUDONE_SIP_PASSWORD} ${CLOUDONE_DID} ${PBX_PUBLIC_IP} ${SOFTPHONE_EXT} ${SOFTPHONE_EXT_PASSWORD} ${PBX_WS_PORT} ${PBX_AMI_USER} ${PBX_AMI_PASSWORD}'
 for f in "$TPL"/*.template; do
   name="$(basename "$f" .template)"
+  # manager.conf is handled in step 4c (only when AMI creds are set)
+  [ "$name" = "manager.conf" ] && continue
   envsubst "$SUBST" < "$f" > "/etc/asterisk/$name"
 done
 for f in "$TPL"/*.conf; do
@@ -121,6 +130,44 @@ else
   echo "==> PBX_TURN_PASSWORD not set — skipping coturn (call audio will not work)"
 fi
 
+# --- 4c. AMI event bridge: real call state in the Call Center ---------
+# A tiny host service reads Asterisk's manager socket and POSTs
+# ring/answered/hangup to the backend, so the active-call card clears when
+# the far end hangs up and talk-time / missed calls are recorded.
+if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
+  echo "==> configuring AMI + the call-event bridge"
+  envsubst '${PBX_AMI_USER} ${PBX_AMI_PASSWORD}' < "$TPL/manager.conf.template" > /etc/asterisk/manager.conf
+  chown asterisk:asterisk /etc/asterisk/manager.conf
+  chmod 640 /etc/asterisk/manager.conf
+
+  install -d -o asterisk -g asterisk /opt/tolkyn
+  install -m 0644 -o asterisk -g asterisk "$HERE/ami-bridge.py" /opt/tolkyn/ami-bridge.py
+
+  install -d /etc/tolkyn
+  umask 077
+  cat > /etc/tolkyn/ami-bridge.env <<EOF
+PBX_AMI_HOST=127.0.0.1
+PBX_AMI_PORT=5038
+PBX_AMI_USER=${PBX_AMI_USER}
+PBX_AMI_PASSWORD=${PBX_AMI_PASSWORD}
+PBX_EVENT_BACKEND_URL=${PBX_EVENT_BACKEND_URL}
+PBX_EVENT_WORKSPACE_ID=${PBX_EVENT_WORKSPACE_ID}
+PBX_EVENT_WEBHOOK_SECRET=${PBX_EVENT_WEBHOOK_SECRET}
+SOFTPHONE_EXT=${SOFTPHONE_EXT}
+EOF
+  umask 022
+  chown root:asterisk /etc/tolkyn/ami-bridge.env
+  chmod 640 /etc/tolkyn/ami-bridge.env
+
+  install -m 0644 "$HERE/tolkyn-ami-bridge.service" /etc/systemd/system/tolkyn-ami-bridge.service
+  systemctl daemon-reload
+  systemctl enable tolkyn-ami-bridge >/dev/null 2>&1 || true
+else
+  echo "==> PBX_AMI_PASSWORD / PBX_EVENT_WEBHOOK_SECRET not set — skipping the call-event bridge"
+  # make sure a half-configured AMI isn't left enabled
+  [ -f /etc/asterisk/manager.conf ] && sed -i 's/^enabled = yes/enabled = no/' /etc/asterisk/manager.conf || true
+fi
+
 command -v netfilter-persistent >/dev/null && netfilter-persistent save || \
   { mkdir -p /etc/iptables && iptables-save > /etc/iptables/rules.v4; }
 
@@ -130,6 +177,11 @@ systemctl enable asterisk >/dev/null 2>&1 || true
 systemctl restart asterisk
 sleep 4
 
+if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
+  echo "==> starting the call-event bridge"
+  systemctl restart tolkyn-ami-bridge || true
+fi
+
 echo
 echo "================= done ================="
 asterisk -rx "core show version" | head -1
@@ -137,6 +189,11 @@ asterisk -rx "pjsip show registrations"
 if [ -n "${PBX_TURN_PASSWORD:-}" ]; then
   echo
   systemctl is-active --quiet coturn && echo "coturn: active on ${PBX_PUBLIC_IP}:3478" || echo "coturn: NOT running — check: journalctl -u coturn -n40"
+fi
+if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
+  systemctl is-active --quiet tolkyn-ami-bridge \
+    && echo "ami-bridge: active — journalctl -u tolkyn-ami-bridge -f" \
+    || echo "ami-bridge: NOT running — check: journalctl -u tolkyn-ami-bridge -n40"
 fi
 echo
 echo "check:  asterisk -rx 'pjsip show contacts'     # softphone + trunk"
