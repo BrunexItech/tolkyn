@@ -2,11 +2,20 @@
 rtpstart = 10000
 rtpend = 20000
 
+; Accept RTP even if it arrives from a source ICE hasn't fully validated.
+; Asterisk's ICE connectivity checks error out in this host-networked
+; container ("Error sending STUN request: Invalid argument"), so with the
+; default strictrtp=yes it silently drops the browser's audio. TURN gives the
+; media a fixed relayed path; strictrtp=no lets Asterisk actually use it.
+strictrtp = no
+
 ; WebRTC (browser) legs use ICE. With network_mode: host Asterisk sees every
-; Docker bridge (172.x) — advertising those as ICE candidates stalls
-; negotiation, so blacklist the private ranges.
+; Docker bridge (172.x) / LAN address — advertising those as ICE candidates
+; just stalls negotiation, so blacklist all private ranges.
 icesupport = yes
 ice_blacklist = 172.16.0.0/12
+ice_blacklist = 10.0.0.0/8
+ice_blacklist = 192.168.0.0/16
 ice_blacklist = 169.254.0.0/16
 
 ; TURN — the reliable media path. Asterisk allocates a relay on coturn (same
