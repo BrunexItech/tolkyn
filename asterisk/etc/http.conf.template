@@ -5,7 +5,9 @@
 ; pbx.tolkyn.co.ke and proxies  wss://…/ws  ->  ws://127.0.0.1:${PBX_WS_PORT}/ws
 [general]
 enabled = yes
-bindaddr = 127.0.0.1
+; 0.0.0.0 so Docker's port publish can reach it — the compose file only
+; exposes this on the host's 127.0.0.1:8188, so it is not internet-facing.
+bindaddr = 0.0.0.0
 bindport = ${PBX_WS_PORT}
 sessionlimit = 200
 session_inactivity = 30000
