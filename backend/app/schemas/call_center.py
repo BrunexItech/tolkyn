@@ -111,6 +111,11 @@ class SoftphoneConfig(BaseModel):
     extension: Optional[str] = None
     password: Optional[str] = None
     display_name: Optional[str] = None
+    # TURN relay so the browser's audio reaches the PBX even when direct
+    # ICE fails (agent behind carrier-grade NAT, etc.)
+    turn_url: Optional[str] = None
+    turn_user: Optional[str] = None
+    turn_password: Optional[str] = None
 
 
 class AgentSipUpdate(BaseModel):

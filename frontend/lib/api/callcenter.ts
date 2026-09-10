@@ -138,6 +138,9 @@ export interface SoftphoneConfig {
   extension: string | null;
   password: string | null;
   display_name: string | null;
+  turn_url: string | null;
+  turn_user: string | null;
+  turn_password: string | null;
 }
 
 export const callCenterApi = {

@@ -86,6 +86,10 @@ services:
       REDIS_PORT: 6379
       WHATSAPP_WORKER_URL: http://whatsapp-worker:4001
       INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:?set INTERNAL_SHARED_SECRET in .env}
+      # call-centre TURN — handed to the browser softphone via /call-center/softphone
+      PBX_TURN_URL: ${PBX_TURN_URL:-}
+      PBX_TURN_USER: ${PBX_TURN_USER:-tolkyn}
+      PBX_TURN_PASSWORD: ${PBX_TURN_PASSWORD:-}
     volumes:
       - backend_media:/app/media
     depends_on:
@@ -115,6 +119,27 @@ services:
         condition: service_healthy
     networks: [internal]
 
+  # TURN relay — carries WebRTC audio between the agent browser and Asterisk
+  # when a direct path can't be negotiated (agent behind CGNAT, etc).
+  coturn:
+    image: coturn/coturn:4.6-alpine
+    restart: unless-stopped
+    network_mode: host
+    command:
+      - "-n"
+      - "--log-file=stdout"
+      - "--listening-port=3478"
+      - "--min-port=49152"
+      - "--max-port=49252"
+      - "--realm=tolkyn"
+      - "--lt-cred-mech"
+      - "--user=${PBX_TURN_USER:-tolkyn}:${PBX_TURN_PASSWORD:?set PBX_TURN_PASSWORD in .env}"
+      - "--external-ip=${PBX_PUBLIC_IP:?set PBX_PUBLIC_IP in .env}"
+      - "--no-tls"
+      - "--no-dtls"
+      - "--no-cli"
+      - "--no-multicast-peers"
+
   # PBX for the Cloud One SIP trunk. Host networking is deliberate — RTP audio
   # (UDP) does not survive Docker's bridge NAT. See asterisk/README.md.
   asterisk:
@@ -131,6 +156,8 @@ services:
       SOFTPHONE_EXT: ${SOFTPHONE_EXT:-1001}
       SOFTPHONE_EXT_PASSWORD: ${SOFTPHONE_EXT_PASSWORD:?set SOFTPHONE_EXT_PASSWORD in .env}
       PBX_WS_PORT: ${PBX_WS_PORT:-8188}
+      PBX_TURN_USER: ${PBX_TURN_USER:-tolkyn}
+      PBX_TURN_PASSWORD: ${PBX_TURN_PASSWORD:?set PBX_TURN_PASSWORD in .env}
     volumes:
       # voicemail + call recordings survive a container rebuild; a Docker named
       # volume is seeded from the image on first use so the default spool tree

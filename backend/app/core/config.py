@@ -131,6 +131,10 @@ class Settings(BaseSettings):
     # call_agents. These just tell the backend where the softphone connects.
     PBX_WS_URL: str = Field(default="wss://pbx.tolkyn.co.ke/ws", description="SIP-over-WebSocket URL the browser softphone dials")
     PBX_SIP_DOMAIN: str = Field(default="pbx.tolkyn.co.ke", description="SIP realm/domain for softphone registration")
+    # coturn — relays WebRTC media when direct browser<->PBX ICE fails.
+    PBX_TURN_URL: str = Field(default="", description="e.g. turn:38.242.200.152:3478 — blank disables")
+    PBX_TURN_USER: str = Field(default="tolkyn", description="coturn long-term username")
+    PBX_TURN_PASSWORD: str = Field(default="", description="coturn long-term credential (matches turnserver.conf)")
 
     # Video generation — Google Veo 3.1 via the Gemini API
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Gemini API key (Veo 3.1 video generation)")

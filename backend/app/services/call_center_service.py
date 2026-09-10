@@ -502,6 +502,9 @@ class CallCenterService:
             "extension": creds.extension,
             "password": creds.password,
             "display_name": creds.display_name,
+            "turn_url": creds.turn_url,
+            "turn_user": creds.turn_user,
+            "turn_password": creds.turn_password,
         }
 
     async def set_agent_sip(self, agent_id: str, extension: Optional[str], password: Optional[str]) -> CallAgent:

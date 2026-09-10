@@ -54,4 +54,7 @@ class AsteriskProvider:
             extension=extension,
             password=decrypt(password) if password else None,
             display_name=display_name,
+            turn_url=settings.PBX_TURN_URL or None,
+            turn_user=settings.PBX_TURN_USER if settings.PBX_TURN_URL else None,
+            turn_password=settings.PBX_TURN_PASSWORD or None if settings.PBX_TURN_URL else None,
         )

@@ -54,6 +54,22 @@ export class SipPhone {
     this.setState("connecting");
 
     const aor = `sip:${this.cfg.extension}@${this.cfg.domain}`;
+
+    // ICE: public STUN so a NAT'd agent can discover its own address, plus the
+    // PBX's TURN relay when one is configured — TURN is the guaranteed media
+    // path when a direct browser<->PBX route can't be negotiated.
+    const iceServers: RTCIceServer[] = [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+    ];
+    if (this.cfg.turn_url && this.cfg.turn_user && this.cfg.turn_password) {
+      iceServers.push({
+        urls: this.cfg.turn_url,
+        username: this.cfg.turn_user,
+        credential: this.cfg.turn_password,
+      });
+    }
+
     this.user = new SimpleUser(this.cfg.ws_url, {
       aor,
       media: { remote: { audio: this.audio } },
@@ -61,17 +77,8 @@ export class SipPhone {
         authorizationUsername: this.cfg.extension,
         authorizationPassword: this.cfg.password ?? "",
         displayName: this.cfg.display_name ?? this.cfg.extension,
-        // Without a STUN server the browser only offers its LAN address as an
-        // ICE candidate, so the PBX can't send audio back to an agent behind
-        // NAT — the call connects but is silent. Public STUN lets the browser
-        // discover its own public address.
         sessionDescriptionHandlerFactoryOptions: {
-          peerConnectionConfiguration: {
-            iceServers: [
-              { urls: "stun:stun.l.google.com:19302" },
-              { urls: "stun:stun1.l.google.com:19302" },
-            ],
-          },
+          peerConnectionConfiguration: { iceServers },
           iceGatheringTimeout: 3000,
         },
       },

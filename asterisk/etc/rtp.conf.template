@@ -5,13 +5,17 @@ rtpend = 20000
 ; WebRTC (browser) legs use ICE. With network_mode: host Asterisk sees every
 ; Docker bridge (172.x) — advertising those as ICE candidates stalls
 ; negotiation, so blacklist the private ranges.
-;
-; No stunaddr: this server's public IP is directly on eth0, so Asterisk offers
-; it as a host candidate with no STUN lookup needed — and the STUN send from a
-; host-networked container was failing ("Invalid argument").
 icesupport = yes
 ice_blacklist = 172.16.0.0/12
 ice_blacklist = 169.254.0.0/16
+
+; TURN — the reliable media path. Asterisk allocates a relay on coturn (same
+; box, public IP) and offers that as a candidate, so the browser's audio has a
+; guaranteed route regardless of ICE. No stunaddr: the host STUN send was
+; failing ("Invalid argument") and TURN covers the same need.
+turnaddr = ${PBX_PUBLIC_IP}:3478
+turnusername = ${PBX_TURN_USER}
+turnpassword = ${PBX_TURN_PASSWORD}
 
 ; The trunk leg (plain SIP/UDP to Cloud One) uses the external_media_address
 ; set on transport-udp in pjsip.conf, not ICE.
