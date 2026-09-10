@@ -19,11 +19,19 @@ local_net = 127.0.0.0/8
 
 ; the browser softphone connects here. nginx terminates TLS on
 ; pbx.tolkyn.co.ke and proxies to Asterisk's plain-ws HTTP server (http.conf),
-; so this transport is 'ws', not 'wss'. The listening socket is http.conf's.
+; so this transport is 'ws', not 'wss'. The real listening socket is
+; http.conf's (127.0.0.1:${PBX_WS_PORT}) — a 'ws'/'wss' pjsip transport never
+; opens its own socket. 'bind' here is NOT a listener; Asterisk copies it onto
+; the RTP media socket for calls on this transport, so it MUST be 0.0.0.0 —
+; 127.0.0.1 binds the audio socket to loopback while SDP still advertises the
+; public IP, and every call is silent (browser media hits a dead port).
 [transport-ws]
 type = transport
 protocol = ws
-bind = 127.0.0.1
+bind = 0.0.0.0
+external_media_address = ${PBX_PUBLIC_IP}
+external_signaling_address = ${PBX_PUBLIC_IP}
+local_net = 127.0.0.0/8
 
 ;--- Cloud One trunk -------------------------------------------------
 [cloudone_auth]
