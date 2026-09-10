@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SoftphoneConfig } from "@/lib/api/callcenter";
 import { SipPhone, type SipState } from "./sip";
+import { Ringtone } from "./ringtone";
 import { toast } from "@/lib/om/toast";
 
 /**
@@ -31,6 +32,7 @@ export function useSipPhone(
   const incomingRef = useRef<string | null>(null);
   const phoneRef = useRef<SipPhone | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const ringRef = useRef<Ringtone | null>(null);
   const onEventRef = useRef(onEvent);
 
   // keep the "latest value" refs current without touching them during render
@@ -50,14 +52,17 @@ export function useSipPhone(
     audio.setAttribute("data-sip", "remote");
     document.body.appendChild(audio);
     audioRef.current = audio;
+    const ring = (ringRef.current ??= new Ringtone());
 
     const phone = new SipPhone(cfg, audio, {
       onState: setState,
       onInbound: (from) => {
         setIncoming(from);
+        ring.start();
         onEventRef.current?.({ type: "inbound_ring", from });
       },
       onAnswered: (direction) => {
+        ring.stop();
         onEventRef.current?.({
           type: "answered",
           direction,
@@ -65,6 +70,7 @@ export function useSipPhone(
         });
       },
       onEnded: () => {
+        ring.stop();
         setIncoming(null);
         onEventRef.current?.({ type: "ended" });
       },
@@ -74,6 +80,7 @@ export function useSipPhone(
     phone.start().catch(() => undefined);
 
     return () => {
+      ring.stop();
       phone.stop().catch(() => undefined);
       phoneRef.current = null;
       audio.remove();
@@ -88,11 +95,13 @@ export function useSipPhone(
     await phoneRef.current?.call(target);
   }, []);
   const answer = useCallback(async () => {
+    ringRef.current?.stop();
     setIncoming(null);
     await phoneRef.current?.answer();
   }, []);
   const decline = useCallback(async () => {
     const from = incomingRef.current ?? "";
+    ringRef.current?.stop();
     setIncoming(null);
     await phoneRef.current?.decline();
     onEventRef.current?.({ type: "declined", from });

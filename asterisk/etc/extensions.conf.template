@@ -30,6 +30,9 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)})
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
  same => n,Dial(${AGENT},${RINGTIME},rtT)
+ ; if the call actually connected (agent answered, then either side hung up)
+ ; end it — don't dump the caller into voicemail.
+ same => n,ExecIf($["${DIALSTATUS}" = "ANSWER"]?Hangup())
  same => n,VoiceMail(${SOFTPHONE_EXT}@default,u)
  same => n,Hangup()
 
