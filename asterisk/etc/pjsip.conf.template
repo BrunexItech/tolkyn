@@ -90,7 +90,8 @@ type = endpoint
 transport = transport-ws
 context = from-internal
 disallow = all
-allow = opus
+; G.711 only — the base Asterisk package has no Opus codec, so an Opus
+; browser leg can't be transcoded to the G.711 trunk and the call is silent.
 allow = ulaw
 allow = alaw
 auth = ${SOFTPHONE_EXT}_auth
