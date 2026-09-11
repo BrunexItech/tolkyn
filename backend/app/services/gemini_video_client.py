@@ -62,9 +62,6 @@ async def start_generation(
         "aspectRatio": aspect_ratio,
         "resolution": resolution,
         "durationSeconds": duration_seconds,
-        # "allow_adult" 400s on this account/region; "allow_all" is the value
-        # that's actually accepted right now.
-        "personGeneration": "allow_all",
     }
     # NOTE: `generateAudio` is not an accepted parameter on this API version —
     # every model we tested (Standard, Fast, Lite) 400s if it's present at
@@ -73,16 +70,32 @@ async def start_generation(
     if negative_prompt:
         parameters["negativePrompt"] = negative_prompt
 
+    # Which personGeneration value the API actually accepts keeps changing on
+    # Google's end without notice ("allow_adult" 400d, then "allow_all" 400d
+    # too) — so try candidates in order instead of hardcoding one that will
+    # eventually break generation again. Omitting the field entirely is the
+    # last resort, letting Veo apply its own default.
     url = f"{settings.GEMINI_API_BASE}/models/{model_id}:predictLongRunning"
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, headers=_headers(), json={"instances": [instance], "parameters": parameters})
-    if resp.status_code >= 400:
-        raise GeminiVideoError(f"Veo generation failed to start ({resp.status_code}): {resp.text[:500]}")
-    data = resp.json()
-    name = data.get("name")
-    if not name:
-        raise GeminiVideoError(f"Veo did not return an operation name: {data}")
-    return name
+    last_resp: Optional[httpx.Response] = None
+    for person_generation in ("allow_all", "allow_adult", None):
+        call_params = dict(parameters)
+        if person_generation:
+            call_params["personGeneration"] = person_generation
+        async with httpx.AsyncClient(timeout=60) as client:
+            resp = await client.post(
+                url, headers=_headers(), json={"instances": [instance], "parameters": call_params}
+            )
+        if resp.status_code < 400:
+            data = resp.json()
+            name = data.get("name")
+            if not name:
+                raise GeminiVideoError(f"Veo did not return an operation name: {data}")
+            return name
+        last_resp = resp
+        if "persongeneration" not in resp.text.lower():
+            break  # a different failure — retrying with another value won't help
+    assert last_resp is not None
+    raise GeminiVideoError(f"Veo generation failed to start ({last_resp.status_code}): {last_resp.text[:500]}")
 
 
 async def poll_operation(operation_name: str) -> Dict[str, Any]:
