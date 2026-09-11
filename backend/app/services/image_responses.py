@@ -6,12 +6,18 @@ generate a fresh image or edit one already in the conversation, and calls the
 GPT Image 2.5 tool. This is the same pipeline ChatGPT uses — so we no longer
 hand-write a planner/architect of our own.
 
-Two things we still do ourselves, on purpose:
-  * run it inside a background job — a tool call still takes 1-2 min, which
-    would blow an HTTP / Cloudflare timeout;
-  * composite the real brand logo afterwards — OpenAI's own docs say the model
-    "may struggle to maintain visual consistency for brand elements", so we
-    never trust it to draw the mark.
+One thing we still do ourselves, on purpose: run it inside a background job —
+a tool call still takes 1-2 min, which would blow an HTTP / Cloudflare
+timeout.
+
+Brand logo: like ChatGPT, we hand the model the real logo file as an extra
+input image and let it blend the exact mark into the scene it's generating
+(see `logo_path` below, and `_BLEND_LOGO_DIRECTIVE`) — this is what makes a
+"translation booth with our logo on it" actually carry the logo, rather than
+a disconnected corner sticker. The one case we still paste deterministically
+with Pillow is an explicit flat placement ("logo in the bottom-right") —
+that's a watermark ask, not a scene-blending one. See
+image_job_service._resolve_logo_request.
 """
 from __future__ import annotations
 
@@ -64,15 +70,36 @@ _INSTRUCTIONS = (
     "- Describe any on-screen interface as if it already exists and is well designed, not as "
     "'a mockup of'. Only render text the user explicitly asked to appear, in the exact words "
     "they gave, once.\n"
-    "- NEVER invent, draw or place a company logo, brand name, wordmark or made-up UI brand. "
-    "Leave the natural spot for it clean and unobstructed — the real brand logo is composited "
-    "onto the image afterwards by the platform.\n"
+    "{branding}\n"
     "{brand}\n"
     "For an edit: change only what the user asked; keep the subject, identity, framing, "
     "colours and every other detail exactly as they are.\n\n"
     "You MUST end every turn with ONE short, friendly plain-text sentence describing what "
     "you made or changed (e.g. 'Here's your market scene with the phone showing all five "
     "channels.'). No markdown, no emojis, no lists."
+)
+
+_NO_LOGO_DIRECTIVE = (
+    "- NEVER invent, draw or place a company logo, brand name, wordmark or made-up UI brand. "
+    "Leave the natural spot for one clean and unobstructed."
+)
+
+# Used whenever the workspace has a real logo on file: it rides along as an
+# extra input image (see run_turn) and the model blends it into the scene
+# itself — the same thing ChatGPT does when you attach a logo — instead of us
+# guessing a placement from the words and pasting it on afterwards.
+_BLEND_LOGO_DIRECTIVE = (
+    "- BRANDING: one of the attached images, labelled 'brand logo', is this workspace's real "
+    "logo on a transparent background. When the scene you're asked for would naturally carry "
+    "it — a sign, booth or stall panel, banner, screen, packaging, apparel, vehicle, badge, or "
+    "wherever fits what the user described — work that EXACT logo into the image as part of "
+    "this same generation, matching that surface's perspective, lighting, scale, curvature and "
+    "material like a real photo or render would. Reproduce its exact shape, colours and any "
+    "lettering faithfully — do not redraw, restyle, recolour, simplify or invent a different "
+    "mark, and never invent a second logo of your own. Size it so it reads clearly but stays "
+    "proportionate to the scene — it is the brand mark, not the subject, unless the user asked "
+    "for a close-up of the logo itself. If nothing in the scene would realistically carry a "
+    "logo, place it small and clean in a bottom corner instead of forcing it in somewhere odd."
 )
 
 
@@ -108,6 +135,7 @@ async def run_turn(
     previous_path: Optional[str] = None,
     previous_response_id: Optional[str] = None,
     brand_colors: Optional[List[str]] = None,
+    logo_path: Optional[str] = None,
     style: Optional[str] = None,
     size: Optional[str] = None,
     draft: bool = False,
@@ -121,7 +149,9 @@ async def run_turn(
         if brand_colors
         else "The user has not set brand colours."
     )
-    instructions = _INSTRUCTIONS.format(brand=brand_line)
+    instructions = _INSTRUCTIONS.format(
+        branding=_BLEND_LOGO_DIRECTIVE if logo_path else _NO_LOGO_DIRECTIVE, brand=brand_line
+    )
     directive = _STYLE_DIRECTIVES.get((style or "").strip().lower())
     if directive:
         instructions += (
@@ -146,6 +176,11 @@ async def run_turn(
             used_base = "previous"
     if previous_response_id and used_base == "none":
         used_base = "previous"
+    if logo_path:
+        du = _data_url(logo_path)
+        if du:
+            content.append({"type": "input_text", "text": "brand logo (use this exact logo, see instructions):"})
+            content.append({"type": "input_image", "image_url": du})
 
     tool: Dict[str, Any] = {
         "type": "image_generation",

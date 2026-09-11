@@ -299,7 +299,8 @@ export function ImageStudio() {
                 {m.text && <div className="text-[12px] leading-relaxed text-om-dim">{m.text}</div>}
                 {m.logo && (
                   <div className="inline-flex items-center gap-1 rounded-md border border-om-green/25 bg-om-green/10 px-1.5 py-0.5 text-[10px] font-medium text-om-green">
-                    <ImageIcon className="size-2.5" /> Brand logo · {m.logo.replace("-", " ")}
+                    <ImageIcon className="size-2.5" /> Brand logo ·{" "}
+                    {m.logo === "blended" ? "blended into the scene" : m.logo.replace("-", " ")}
                   </div>
                 )}
                 <div className="group relative w-fit max-w-full overflow-hidden rounded-xl border border-om-border">

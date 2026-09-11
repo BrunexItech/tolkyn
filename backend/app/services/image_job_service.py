@@ -24,13 +24,7 @@ from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.user import User
 from app.services.content_ai import generate_image
 from app.services.image_responses import run_turn
-from app.services.logo_overlay import (
-    composite_logo,
-    detect_logo_request,
-    normalize_position,
-    pick_scene_surface,
-)
-from app.services.logo_scene import place_logo_in_scene
+from app.services.logo_overlay import composite_logo, detect_logo_placement, normalize_position
 from app.services.studio_service import StudioService
 
 _MEDIA_ROOT = Path(__file__).resolve().parents[2] / "media"
@@ -55,31 +49,37 @@ def resolve_media(url: Optional[str]) -> Optional[str]:
 
 # --- brand-logo helpers (shared by both modes) ---------------------------
 def _resolve_logo_request(
-    brand_logo: Optional[str], prompt: str, prior: Optional[dict] = None
+    brand_logo: Optional[str],
+    prompt: str,
+    prior: Optional[dict] = None,
+    *,
+    allow_blend: bool = True,
 ) -> Optional[dict]:
     """Where the workspace brand logo should go on this image.
 
-    - "off" / None              -> nowhere
-    - an explicit position       -> flat corner overlay there (the user chose it)
-    - "auto"                     -> the user's own instruction if they gave one;
-                                    else, on a refine, wherever it was last time
-                                    (`prior`); else onto a real branded surface
-                                    in the scene (sign, cup, packaging…); else a
-                                    small, discreet bottom-right corner mark.
-                                    Never a big centred paste.
+    - "off" / None        -> nowhere
+    - an explicit position -> flat corner overlay there (the user chose it;
+                               also what a refine keeps reusing once set)
+    - "auto"               -> the model blends the real logo into the scene
+                               itself, like ChatGPT (mode "blend") — unless the
+                               prompt names a flat corner placement, or a prior
+                               turn in this refine already put it in one.
+
+    `allow_blend=False` is for the legacy non-chat /studio/image generate path
+    (`content_ai.generate_image`), which can't take a second reference image —
+    it falls back to the old discreet-corner default instead of blending.
     """
     opt = (brand_logo or "").strip().lower()
     if not opt or opt == "off":
         return None
     if opt == "auto":
-        explicit = detect_logo_request(prompt)
-        if explicit:
-            return explicit
-        if prior:  # a refine — keep the mark where it already was
+        corner = detect_logo_placement(prompt)
+        if corner:
+            return {"mode": "corner", "value": corner}
+        if prior and prior.get("mode") == "corner":  # a refine — keep it where it was
             return prior
-        surface = pick_scene_surface(prompt)
-        if surface:
-            return {"mode": "scene", "value": surface}
+        if allow_blend:
+            return {"mode": "blend"}
         return {"mode": "corner", "value": "bottom-right", "auto": True}
     return {"mode": "corner", "value": normalize_position(opt) or "bottom-right"}
 
@@ -87,16 +87,9 @@ def _resolve_logo_request(
 def reserve_directive(req: dict) -> str:
     """Just the branding instruction (no prompt prefix) — appended to a
     generation prompt so the model leaves room for the real logo and draws
-    none of its own."""
-    if req["mode"] == "scene":
-        where = req["value"]
-        return (
-            "IMPORTANT — branding: do NOT draw, invent or include ANY logo, emblem, "
-            "wordmark, brand name or invented text anywhere in this image. In "
-            f"particular render {where} completely plain and blank — no logo, no "
-            "text, no markings — because the real brand logo will be added onto it "
-            "afterwards. Keep that surface clearly visible and well lit."
-        )
+    none of its own. Only ever called for a "corner" request (see
+    `allow_blend` above) — the flat spot it reserves is where Pillow will
+    paste the real logo afterwards."""
     spot = str(req["value"]).replace("-", " ")
     return (
         "IMPORTANT — branding: do NOT draw, invent or include ANY logo, emblem, "
@@ -120,10 +113,12 @@ async def apply_brand_logo(
     source_prompt: str,
     prior: Optional[dict] = None,
 ) -> tuple[Optional[str], Optional[str]]:
-    """corner -> deterministic Pillow overlay; scene -> a gpt-image-1 edit.
-    `prior` is the previous turn's placement, reused on a refine so the mark
-    doesn't jump around. Returns (what_was_applied, note). Never raises."""
-    req = _resolve_logo_request(brand_logo, source_prompt, prior)
+    """Deterministic Pillow corner overlay for a flat placement request. The
+    default "blend" case never reaches this — the image model is given the
+    real logo directly and blends it into the scene as part of generation
+    (see run_job's chat branch / image_responses.run_turn). Returns
+    (what_was_applied, note). Never raises."""
+    req = _resolve_logo_request(brand_logo, source_prompt, prior, allow_blend=False)
     if not req:
         return None, None
     logo_path = resolve_media(getattr(owner, "brand_logo_url", None))
@@ -132,21 +127,6 @@ async def apply_brand_logo(
     img_path = resolve_media(result.get("url"))
     if not img_path:
         return None, None
-
-    if req["mode"] == "scene":
-        placed = await place_logo_in_scene(img_path, logo_path, req["value"])
-        if placed:
-            new_path = resolve_media(placed)
-            if new_path:
-                Path(new_path).replace(img_path)
-            return f"on {req['value']}", None
-        # the in-scene edit (a second AI call) failed — don't leave the user
-        # with no logo at all; fall back to a clean, restrained corner mark.
-        tmp = Path(img_path).with_suffix(".logo.png")
-        if composite_logo(Path(img_path), Path(logo_path), tmp, position="bottom-right", scale=0.11):
-            tmp.replace(img_path)
-            return "bottom-right", None
-        return None, "Couldn't place the logo on this image — the image is unchanged."
 
     tmp = Path(img_path).with_suffix(".logo.png")
     # 'auto' corner = a restrained brand mark (≈11% width); an explicit choice
@@ -184,14 +164,20 @@ async def _prev_turn(
 
 
 def _placement_from_prior(prior: Optional[str]) -> Optional[dict]:
-    """Turn a stored logo_applied string back into a placement dict."""
+    """Turn a stored logo_applied string back into a placement dict, so a
+    refine keeps the mark the same way (blended into the scene, or a fixed
+    corner) as the turn before it."""
     if not prior:
         return None
     p = prior.strip()
-    if p.startswith("on "):
-        return {"mode": "scene", "value": p[3:].strip()}
+    if p == "blended":
+        return {"mode": "blend"}
     pos = normalize_position(p)
-    return {"mode": "corner", "value": pos} if pos else None
+    if pos:
+        return {"mode": "corner", "value": pos}
+    if p.startswith("on "):  # from the old scene-edit pipeline — treat as blend now
+        return {"mode": "blend"}
+    return None
 
 
 # --- the service -------------------------------------------------------
@@ -285,21 +271,31 @@ async def run_job(job_id: str) -> None:
                     else (None, None)
                 )
                 colors = getattr(owner, "brand_colors", None) or None
+                prior_placement = _placement_from_prior(prev_logo)
+                logo_req = _resolve_logo_request(brand_logo, job.prompt, prior_placement)
+                blend_logo_path = None
+                if logo_req and logo_req.get("mode") == "blend":
+                    blend_logo_path = resolve_media(getattr(owner, "brand_logo_url", None))
                 result = await run_turn(
                     job.prompt.strip(),
                     attachment_path=attachment,
                     previous_path=previous,
                     previous_response_id=prev_response_id,
                     brand_colors=colors if isinstance(colors, list) else None,
+                    logo_path=blend_logo_path,
                     style=p.get("style"),
                     size=p.get("size"),
                     draft=bool(p.get("draft")),
                 )
                 job.openai_response_id = result.get("response_id")
-                logo_applied, logo_note = await apply_brand_logo(
-                    owner, result, brand_logo, job.prompt,
-                    prior=_placement_from_prior(prev_logo),
-                )
+                if blend_logo_path:
+                    logo_applied, logo_note = "blended", None
+                elif logo_req:
+                    logo_applied, logo_note = await apply_brand_logo(
+                        owner, result, brand_logo, job.prompt, prior=prior_placement,
+                    )
+                else:
+                    logo_applied, logo_note = None, None
                 asset = await StudioService(db, job.workspace_id).save(
                     AssetKind.IMAGE,
                     result["prompt"],
@@ -316,7 +312,7 @@ async def run_job(job_id: str) -> None:
                 job.operation = result.get("operation")
                 job.used_base = result.get("used_base")
             else:
-                req = _resolve_logo_request(brand_logo, job.prompt)
+                req = _resolve_logo_request(brand_logo, job.prompt, allow_blend=False)
                 gen_prompt = job.prompt
                 if req and resolve_media(getattr(owner, "brand_logo_url", None)):
                     gen_prompt = reserve_space_hint(job.prompt, req)

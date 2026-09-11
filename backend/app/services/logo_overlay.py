@@ -196,90 +196,11 @@ def _pos_near_logo(prompt: str) -> Optional[str]:
 
 def detect_logo_placement(prompt: str) -> Optional[str]:
     """Explicit corner instruction for the logo, or None. (No default — a bare
-    mention of a logo is not a placement.)"""
+    mention of a logo is not a placement.) This is the ONLY text-guessing left
+    in this module: it exists solely to catch a deliberate flat watermark ask
+    ("logo in the bottom-right"), which is a Pillow overlay job. Any other
+    placement — "on the laptop lid", "on her apron", or nothing explicit at
+    all — is handled by the image model itself, which is given the real logo
+    as a reference image and reads the user's own words directly. See
+    image_job_service._resolve_logo_request."""
     return _pos_near_logo(prompt)
-
-
-_ON_SURFACE_RE = re.compile(
-    r"\b(?:on|onto|across|over)\s+"
-    r"(?:the\s+|a\s+|an\s+|his\s+|her\s+|their\s+|its\s+|my\s+|our\s+)?"
-    r"([a-z][a-z' \-]{2,40}?)"
-    r"(?=[.,;!?]|\s+(?:and|with|in|at|for|so|then|that|which|while)\b|$)",
-    re.I,
-)
-
-_NOT_A_SURFACE = {
-    "screen", "frame", "image", "picture", "background", "right", "left",
-    "top", "bottom", "side", "corner", "logo", "brand", "brand identity",
-    "everything", "it", "them", "product", "products",
-    # photo / camera boilerplate that trails many prompts ("...logo. Shot on a
-    # full-frame camera...") — never a real surface for the mark
-    "full-frame camera", "full frame camera", "camera", "a full-frame camera",
-    "dslr", "mirrorless camera", "lens", "prime lens", "tripod", "location",
-    "set", "shoot", "shot", "display", "canvas",
-}
-
-# Real, printable surfaces to look for in a described scene, most-preferred
-# first. Screens (laptop/phone/monitor) are deliberately absent — a logo
-# fighting live UI reads worse than a clean image corner, which is what real
-# ad campaigns use anyway.
-_SCENE_SURFACES = [
-    ("the storefront sign", r"store\s?front|shop\s?front|shop sign|store sign|\bsignage\b|"
-                            r"sign\s?board|\bstorefront\b|\bawning\b|shop window|fa[cç]ade|marquee"),
-    ("the billboard", r"\bbillboard\b|\bhoarding\b"),
-    ("the banner behind them", r"\bbanner\b|\bbackdrop\b|step[\s-]and[\s-]repeat|press wall|"
-                               r"pop[\s-]?up stand|exhibition stand|trade[\s-]?show booth"),
-    ("the poster on the wall", r"\bposter\b|framed print|wall art"),
-    ("the feature wall behind them", r"feature wall|accent wall|wall behind|brand(?:ed)? wall|"
-                                     r"lobby wall|reception wall|\bmural\b"),
-    ("the coffee cup", r"coffee cup|paper cup|take\s?away cup|to-go cup|disposable cup|\bmug\b"),
-    ("the t-shirt", r"t-?shirt|\btee\b|polo shirt|\bhoodie\b|\bjersey\b|staff (?:shirt|uniform)|\bapron\b"),
-    ("the tote bag", r"tote bag|shopping bag|paper bag|gift bag|canvas bag|carrier bag"),
-    ("the packaging", r"\bpackaging\b|product box|shipping box|\bcarton\b|gift box|\bpackage\b|pouch"),
-    ("the bottle", r"water bottle|\bbottle\b|\bflask\b|\btumbler\b"),
-    ("the can", r"soda can|beverage can|drink can|alumin[iu]m can"),
-    ("the cap", r"baseball cap|\bsnapback\b|\bbeanie\b|trucker cap"),
-    ("the delivery van", r"delivery van|company van|box truck|delivery truck|company car|branded vehicle"),
-    ("the business card", r"business card|name card|calling card"),
-]
-
-
-def pick_scene_surface(prompt: str) -> Optional[str]:
-    """For 'auto' mode with no explicit instruction: the most natural real
-    surface in the described scene to carry the brand mark, or None when the
-    scene has no obvious spot (portrait, landscape, screen-only) — the caller
-    then falls back to a small, discreet corner mark."""
-    low = (prompt or "").lower()
-    for where, pat in _SCENE_SURFACES:
-        if re.search(pat, low):
-            return where
-    return None
-
-
-def detect_logo_request(prompt: str) -> Optional[dict]:
-    """The user's EXPLICIT logo direction, if there is one:
-        {"mode": "scene",  "value": "the laptop lid"}   ("... logo on the laptop lid")
-        {"mode": "corner", "value": "top-right"}        ("... logo in the top-right")
-    Returns None when the prompt only *describes* a brand rather than directing
-    where its mark goes."""
-    if not prompt:
-        return None
-    low = prompt.lower()
-    if not any(w in low for w in _LOGO_WORDS):
-        return None
-    idx = min((low.find(w) for w in _LOGO_WORDS if w in low), default=-1)
-    # only the SAME clause as the logo word — stop at the first sentence break so
-    # trailing camera/lighting boilerplate ("...logo. Shot on a full-frame
-    # camera...") can never be read as "put the logo on the camera".
-    tail = prompt[idx: idx + 160] if idx >= 0 else prompt
-    tail = re.split(r"[.!?;\n]", tail, maxsplit=1)[0]
-    m = _ON_SURFACE_RE.search(tail)
-    if m:
-        surface = m.group(1).strip(" -'").lower()
-        if surface and not normalize_position(surface) and surface not in _NOT_A_SURFACE:
-            article = "" if surface.startswith(("the ", "a ", "an ")) else "the "
-            return {"mode": "scene", "value": f"{article}{surface}".strip()}
-    pos = _pos_near_logo(prompt)
-    if pos:
-        return {"mode": "corner", "value": pos}
-    return None
