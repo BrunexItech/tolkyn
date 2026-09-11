@@ -38,13 +38,13 @@ type Msg =
   | { id: string; role: "assistant"; pending: true; editing: boolean };
 
 const LOGO_OPTS: { value: LogoPlacement; label: string }[] = [
-  { value: "auto", label: "Auto — on a surface in the scene, or a clean corner" },
+  { value: "auto", label: "Auto — blend into the scene (recommended)" },
   { value: "off", label: "No logo" },
-  { value: "top-left", label: "Always top-left" },
-  { value: "top-right", label: "Always top-right" },
-  { value: "bottom-left", label: "Always bottom-left" },
-  { value: "bottom-right", label: "Always bottom-right" },
-  { value: "center", label: "Always centered" },
+  { value: "top-left", label: "Flat overlay · top-left" },
+  { value: "top-right", label: "Flat overlay · top-right" },
+  { value: "bottom-left", label: "Flat overlay · bottom-left" },
+  { value: "bottom-right", label: "Flat overlay · bottom-right" },
+  { value: "center", label: "Flat overlay · centered" },
 ];
 
 const STYLE_OPTS: { value: ImageStylePreset; label: string }[] = [
