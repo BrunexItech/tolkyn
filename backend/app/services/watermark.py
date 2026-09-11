@@ -1,13 +1,14 @@
 """Composites a brand logo onto a finished video as a bottom-right corner
-watermark, via ffmpeg. This is deliberately a post-processing step, not
-something asked of Veo itself — Google's video model doesn't reliably render
-an exact logo even where the feature exists (confirmed unavailable on this
-account anyway, see gemini_video_client.py), so a real image composite is
-the only way to guarantee the mark actually looks like the logo."""
+watermark, via ffmpeg — the fallback for whatever portion of a video couldn't
+carry the logo through Veo's own reference-image ("ingredients") branding
+(see video_service._segment_uses_logo_asset): Veo 3.1 Lite, and any segment
+shorter than the 8s Veo requires for reference images. Pixel-exact, so it's
+also the right tool when the real logo must be guaranteed correct."""
 import asyncio
 import logging
 import shutil
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
@@ -23,24 +24,34 @@ async def apply_watermark(
     *,
     video_width: int,
     video_height: int = 0,
+    time_windows: Optional[List[Tuple[float, float]]] = None,
 ) -> bool:
     """Writes `out_path` with the logo composited bottom-right. Returns True
     on success; False (with the original left untouched) on any failure —
-    a broken watermark step should never break the whole generation."""
+    a broken watermark step should never break the whole generation.
+
+    `time_windows` — [(start, end), ...] in seconds — restricts the overlay to
+    those spans of the video (e.g. only the segment(s) that couldn't carry the
+    logo through Veo's own reference-image branding); omit for the whole clip."""
     if not shutil.which("ffmpeg"):
         logger.warning("ffmpeg not found on PATH — skipping watermark")
         return False
 
     box_w = max(24, round(video_width * _LOGO_WIDTH_FRACTION))
     box_h = round((video_height or round(video_width * 9 / 16)) * 0.25)
+    overlay_pos = (
+        f"x='max(0\\,main_w-overlay_w-{_MARGIN_PX})':"
+        f"y='max(0\\,main_h-overlay_h-{_MARGIN_PX})'"
+    )
+    if time_windows:
+        enable_expr = "+".join(f"between(t\\,{s:.2f}\\,{e:.2f})" for s, e in time_windows)
+        overlay_pos += f":enable='{enable_expr}'"
     # Fit the logo inside box_w x box_h keeping aspect, so a wide OR tall logo
     # can never overflow the frame; overlay math is clamped on-frame too.
     filter_complex = (
         f"[1:v]scale=w={box_w}:h={box_h}:force_original_aspect_ratio=decrease,"
         f"format=rgba,colorchannelmixer=aa={_OPACITY}[wm];"
-        f"[0:v][wm]overlay="
-        f"x='max(0\\,main_w-overlay_w-{_MARGIN_PX})':"
-        f"y='max(0\\,main_h-overlay_h-{_MARGIN_PX})'[out]"
+        f"[0:v][wm]overlay={overlay_pos}[out]"
     )
     cmd = [
         "ffmpeg", "-y",

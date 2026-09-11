@@ -15,8 +15,10 @@ from app.core.limits import enforce_daily_limit
 from app.core.video_models import (
     ALLOWED_ASPECT_RATIOS,
     DEFAULT_DURATIONS,
+    NATIVE_MAX_DURATION,
     SELECTABLE_DURATIONS,
     VEO_MODELS,
+    VeoModel,
     catalog_payload,
     duration_plan,
     estimate_cost_usd,
@@ -222,29 +224,60 @@ _NO_INVENTED_BRANDING = (
 )
 _NEG_BRANDING = "logos, wordmarks, brand names, invented signage, text on products, watermarks"
 
+# Used instead of _NO_INVENTED_BRANDING whenever this segment carries the real
+# logo as a Veo reference image ("ingredient") — see _segment_uses_logo_asset.
+# Here the goal flips: get Veo to actually feature the provided asset, the way
+# it's meant to be used, rather than forbidding all branding.
+_FEATURE_LOGO_ASSET = (
+    "One of the attached reference images is this brand's real logo. Feature it naturally "
+    "wherever it would really appear in this shot — a sign, screen, package, banner, "
+    "garment or similar surface — matching that surface's lighting, angle and material. Do "
+    "not invent any OTHER logo, wordmark or brand name anywhere in the shot."
+)
 
-def _prompt_with_brand(prompt: str, brand_colors: Optional[List[str]], has_logo: bool) -> str:
-    """Veo has no colour-palette parameter and can't reliably paint an exact
-    logo into a scene, so: (1) fold the brand colours into the prompt text —
-    the part that's guaranteed to work — and (2) when a brand logo exists,
-    explicitly forbid Veo from inventing its own logos, so the real one (the
-    corner watermark, or a branded first frame) is the only mark in the clip."""
+
+def _prompt_with_brand(
+    prompt: str, brand_colors: Optional[List[str]], has_logo: bool, using_logo_asset: bool = False
+) -> str:
+    """Veo has no colour-palette parameter, so (1) fold the brand colours into
+    the prompt text — the part that's guaranteed to work. Branding text then
+    depends on whether this segment is passing the real logo as a Veo
+    reference image: if so, ask Veo to feature it; if not (Lite, or a segment
+    too short for reference images — see _segment_uses_logo_asset), forbid
+    Veo from inventing its own logo so the corner watermark is the only mark."""
     parts = [prompt]
     if brand_colors:
         parts.append(
             f"Colour palette to reflect in lighting, props and colour grading: "
             f"{', '.join(brand_colors)}."
         )
-    if has_logo:
+    if using_logo_asset:
+        parts.append(_FEATURE_LOGO_ASSET)
+    elif has_logo:
         parts.append(_NO_INVENTED_BRANDING)
     return " ".join(parts)
 
 
-def _negative_with_brand(negative_prompt: Optional[str], has_logo: bool) -> Optional[str]:
-    if not has_logo:
+def _negative_with_brand(
+    negative_prompt: Optional[str], has_logo: bool, using_logo_asset: bool = False
+) -> Optional[str]:
+    if using_logo_asset or not has_logo:
         return negative_prompt
     base = (negative_prompt or "").strip()
     return f"{base}, {_NEG_BRANDING}".strip(" ,") if base else _NEG_BRANDING
+
+
+def _segment_uses_logo_asset(model: VeoModel, seg_seconds: int, has_logo: bool) -> bool:
+    """Whether a segment of this length can carry the logo through Veo's own
+    reference-image branding: needs a logo, a model that supports it (not
+    Lite), and — per Google's API — an 8-second segment exactly. Shared by
+    _start_segment (to decide what to send Veo) and _finish_job (to decide
+    what the fallback watermark still needs to cover) so the two can't drift."""
+    return has_logo and model.supports_reference_images and seg_seconds == NATIVE_MAX_DURATION
+
+
+def _image_mime(path: Path) -> str:
+    return "image/jpeg" if path.suffix.lower() in (".jpg", ".jpeg") else "image/png"
 
 
 _HERO_SIZE = {"16:9": "1536x1024", "9:16": "1024x1536", "1:1": "1024x1024"}
@@ -278,7 +311,8 @@ async def _build_hero_frame(job: VideoJob) -> Optional[str]:
 async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
     """Kick off the Veo generation for job.segment_index."""
     model = get_model(job.model_key)
-    has_logo = bool(_resolve_media_path(job.brand_logo_url))
+    logo_path = _resolve_media_path(job.brand_logo_url)
+    has_logo = bool(logo_path)
     plan = job.segment_plan or [job.duration_seconds]
     seg_seconds = plan[job.segment_index]
 
@@ -288,14 +322,18 @@ async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
     ref_path = _resolve_media_path(ref_url)
     ref_bytes = ref_path.read_bytes() if ref_path else None
 
+    using_logo_asset = _segment_uses_logo_asset(model, seg_seconds, has_logo)
+    asset_images = [{"bytes": logo_path.read_bytes(), "mime": _image_mime(logo_path)}] if using_logo_asset else None
+
     job.operation_name = await gemini.start_generation(
         model_id=model.model_id,
-        prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo),
+        prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo, using_logo_asset),
         aspect_ratio=job.aspect_ratio,
         resolution=job.resolution,
         duration_seconds=seg_seconds,
-        negative_prompt=_negative_with_brand(job.negative_prompt, has_logo),
+        negative_prompt=_negative_with_brand(job.negative_prompt, has_logo, using_logo_asset),
         reference_image_bytes=ref_bytes,
+        asset_images=asset_images,
     )
     job.status = VideoJobStatus.RUNNING
     await db.commit()
@@ -344,10 +382,27 @@ async def _finish_job(db: AsyncSession, job: VideoJob) -> None:
     logo_path = _resolve_media_path(job.brand_logo_url)
     watermarked = False
     if logo_path:
-        width, height = video_pixel_width(job.resolution, job.aspect_ratio)
-        watermarked = await apply_watermark(
-            raw_path, logo_path, final_path, video_width=width, video_height=height
-        )
+        # Only the segment(s) that couldn't carry the logo through Veo's own
+        # reference-image branding (see _segment_uses_logo_asset) still need
+        # the flat corner watermark — segments that already got the real logo
+        # woven into the scene must not also get a sticker slapped over them.
+        model = get_model(job.model_key)
+        plan = job.segment_plan or [job.duration_seconds]
+        unbranded_windows: list[tuple[float, float]] = []
+        cursor = 0.0
+        for seg_seconds in plan:
+            if not _segment_uses_logo_asset(model, seg_seconds, True):
+                unbranded_windows.append((cursor, cursor + seg_seconds))
+            cursor += seg_seconds
+
+        if unbranded_windows:
+            width, height = video_pixel_width(job.resolution, job.aspect_ratio)
+            full_video = len(unbranded_windows) == len(plan)
+            watermarked = await apply_watermark(
+                raw_path, logo_path, final_path,
+                video_width=width, video_height=height,
+                time_windows=None if full_video else unbranded_windows,
+            )
     if not watermarked:
         raw_path.replace(final_path)
     else:

@@ -16,6 +16,7 @@ class VeoModel:
     price_per_second: Dict[str, Optional[float]] = field(default_factory=dict)  # resolution -> USD/sec
     max_resolution: str = "1080p"
     supports_audio: bool = True  # Lite's API rejects the generateAudio param outright
+    supports_reference_images: bool = True  # Lite has no referenceImages ("ingredients") support
 
 
 VEO_MODELS: Dict[str, VeoModel] = {
@@ -43,6 +44,7 @@ VEO_MODELS: Dict[str, VeoModel] = {
         price_per_second={"720p": 0.05, "1080p": 0.08},
         max_resolution="1080p",
         supports_audio=False,
+        supports_reference_images=False,
     ),
 }
 
@@ -117,6 +119,7 @@ def catalog_payload() -> list[dict]:
             "max_resolution": m.max_resolution,
             "price_per_second": m.price_per_second,
             "supports_audio": m.supports_audio,
+            "supports_reference_images": m.supports_reference_images,
         }
         for m in VEO_MODELS.values()
     ]
