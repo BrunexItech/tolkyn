@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import JSON, Column, DateTime, Enum, ForeignKey, String, Text
+from sqlalchemy import JSON, Column, DateTime, Enum, Float, ForeignKey, String, Text
 from sqlalchemy.orm import relationship
 
 from app.db.base import BaseModel
@@ -37,6 +37,11 @@ class ImageJob(BaseModel):
     logo_applied = Column(String(160), nullable=True)
     logo_note = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
+    # A flat calibrated estimate, not an exact billed amount — see
+    # app/core/image_pricing.py for why (OpenAI's Responses API, which the
+    # chat composer uses, returns no per-call token usage for the image
+    # tool). Set once a job succeeds.
+    cost_usd = Column(Float, nullable=True)
     # chat mode via the Responses API: the OpenAI response id, so the next turn
     # can continue the conversation with previous_response_id (true multi-turn).
     openai_response_id = Column(String(80), nullable=True)

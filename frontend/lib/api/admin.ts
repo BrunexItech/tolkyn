@@ -265,6 +265,16 @@ export interface VideoUsageRow {
   allowed_video_models: string[];
 }
 
+// spend_usd is an estimate, not an exact billed figure — see the backend's
+// core/image_pricing.py for why images can't be metered exactly like video.
+export interface ImageUsageRow {
+  user_id: string;
+  name: string;
+  email: string;
+  jobs_count: number;
+  spend_usd: number;
+}
+
 export interface PlatformUserList {
   items: PlatformUser[];
   total: number;
@@ -283,6 +293,8 @@ export interface UserUsageSummary {
   video_jobs: number;
   video_seconds_generated: number;
   video_spend_usd: number;
+  image_jobs: number;
+  image_spend_usd: number;
   last_login_at: string | null;
   member_since: string;
 }
@@ -317,6 +329,8 @@ export interface PlatformOverview {
   requests_7d: number;
   video_jobs_total: number;
   video_spend_usd_total: number;
+  image_jobs_total: number;
+  image_spend_usd_total: number;
 }
 
 // -------------------------------------------------------------------- api
@@ -389,6 +403,7 @@ export const adminApi = {
 
   videoModels: () => request<VideoModelInfo[]>("GET", "/admin/video-models"),
   videoUsage: () => request<{ items: VideoUsageRow[] }>("GET", "/admin/video-usage"),
+  imageUsage: () => request<{ items: ImageUsageRow[] }>("GET", "/admin/image-usage"),
 
   listActivity: (
     filters: { user_id?: string; workspace_id?: string; action?: string; limit?: number; offset?: number } = {},

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Building2, Users, Activity, TrendingUp, ArrowRight, Clapperboard } from "lucide-react";
+import { Building2, Users, Activity, TrendingUp, ArrowRight, Clapperboard, Sparkles } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Grid } from "@/components/om/primitives/Grid";
 import { StatTile } from "@/components/om/primitives/StatTile";
@@ -86,6 +86,30 @@ export default function AdminOverviewPage() {
             className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-om-violet hover:underline"
           >
             Manage model access &amp; spend <ArrowRight className="size-3.5" />
+          </Link>
+        </Card>
+
+        <Card>
+          <CardTitle icon={<Sparkles />} color="var(--om-green)">
+            AI image generation
+          </CardTitle>
+          <div className="flex items-end gap-6">
+            <div>
+              <div className="font-mono text-[22px] font-bold text-om-text">{s?.image_jobs_total ?? "—"}</div>
+              <div className="text-[10.5px] text-om-muted">images generated</div>
+            </div>
+            <div>
+              <div className="font-mono text-[22px] font-bold text-om-text">
+                ${s?.image_spend_usd_total?.toFixed(2) ?? "0.00"}
+              </div>
+              <div className="text-[10.5px] text-om-muted">est. spend</div>
+            </div>
+          </div>
+          <Link
+            href="/admin/images"
+            className="mt-3 inline-flex items-center gap-1 text-[12px] font-medium text-om-green hover:underline"
+          >
+            View spend by user <ArrowRight className="size-3.5" />
           </Link>
         </Card>
       </Grid>

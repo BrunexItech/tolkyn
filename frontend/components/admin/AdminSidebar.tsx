@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, Users, Activity, ShieldAlert, LogOut, Clapperboard, Package, Phone, Megaphone } from "lucide-react";
+import { LayoutDashboard, Building2, Users, Activity, ShieldAlert, LogOut, Clapperboard, Package, Phone, Megaphone, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAdminSession } from "./AdminSession";
 
@@ -13,6 +13,7 @@ const NAV = [
   { label: "Packages", href: "/admin/packages", icon: Package },
   { label: "Telephony", href: "/admin/telephony", icon: Phone },
   { label: "AI Video", href: "/admin/video", icon: Clapperboard },
+  { label: "AI Images", href: "/admin/images", icon: Sparkles },
   { label: "Announcements", href: "/admin/announcements", icon: Megaphone },
   { label: "Activity", href: "/admin/activity", icon: Activity },
 ];

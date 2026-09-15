@@ -16,6 +16,8 @@ from app.schemas.admin import (
     ActivityLogRow,
     AnnouncementPreview,
     AnnouncementRow,
+    ImageUsageList,
+    ImageUsageRow,
     ModuleInfo,
     SendAnnouncementRequest,
     OrganizationCreate,
@@ -367,3 +369,13 @@ async def video_usage(
 ):
     rows = await SuperAdminService(db).video_usage_overview()
     return VideoUsageList(items=[VideoUsageRow(**r) for r in rows])
+
+
+# ---------------------------------------------------------- image usage
+@router.get("/image-usage", response_model=ImageUsageList)
+async def image_usage(
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    rows = await SuperAdminService(db).image_usage_overview()
+    return ImageUsageList(items=[ImageUsageRow(**r) for r in rows])

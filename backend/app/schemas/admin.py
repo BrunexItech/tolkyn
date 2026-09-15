@@ -257,6 +257,8 @@ class UserUsageSummary(BaseModel):
     video_jobs: int = 0
     video_seconds_generated: int = 0
     video_spend_usd: float = 0.0
+    image_jobs: int = 0
+    image_spend_usd: float = 0.0  # estimate, not exact billed cost — see core/image_pricing.py
     last_login_at: Optional[datetime] = None
     member_since: datetime
 
@@ -275,6 +277,19 @@ class VideoUsageRow(BaseModel):
 
 class VideoUsageList(BaseModel):
     items: List[VideoUsageRow]
+
+
+# --------------------------------------------------------------- image usage
+class ImageUsageRow(BaseModel):
+    user_id: str
+    name: str
+    email: str
+    jobs_count: int
+    spend_usd: float  # estimate, not exact billed cost — see core/image_pricing.py
+
+
+class ImageUsageList(BaseModel):
+    items: List[ImageUsageRow]
 
 
 # ---------------------------------------------------------------- activity
@@ -311,3 +326,5 @@ class PlatformOverview(BaseModel):
     requests_7d: int
     video_jobs_total: int = 0
     video_spend_usd_total: float = 0.0
+    image_jobs_total: int = 0
+    image_spend_usd_total: float = 0.0  # estimate, not exact billed cost

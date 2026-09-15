@@ -136,6 +136,10 @@ export function useVideoUsage() {
   return useQuery({ queryKey: [...KEY, "video-usage"], queryFn: adminApi.videoUsage });
 }
 
+export function useImageUsage() {
+  return useQuery({ queryKey: [...KEY, "image-usage"], queryFn: adminApi.imageUsage });
+}
+
 export function useUpdateUser() {
   const qc = useQueryClient();
   return useMutation({

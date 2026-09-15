@@ -16,6 +16,7 @@ from app.models.activity_log import ActivityLog
 from app.models.automation import Automation
 from app.models.broadcast import Broadcast
 from app.models.customer import Customer
+from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.lead import Lead
 import secrets as _secrets
 
@@ -464,6 +465,14 @@ class SuperAdminService:
                 ).where(VideoJob.workspace_id == workspace_id)
             )
         ).first()
+        image_row = (
+            await self.db.execute(
+                select(
+                    func.count(ImageJob.id),
+                    func.coalesce(func.sum(ImageJob.cost_usd).filter(ImageJob.status == ImageJobStatus.SUCCEEDED), 0.0),
+                ).where(ImageJob.workspace_id == workspace_id)
+            )
+        ).first()
 
         return {
             "user_id": user_id,
@@ -476,6 +485,8 @@ class SuperAdminService:
             "video_jobs": video_row[0] or 0,
             "video_seconds_generated": video_row[1] or 0,
             "video_spend_usd": float(video_row[2] or 0.0),
+            "image_jobs": image_row[0] or 0,
+            "image_spend_usd": float(image_row[1] or 0.0),
             "last_login_at": user.last_login_at,
             "member_since": user.created_at,
         }
@@ -613,6 +624,45 @@ class SuperAdminService:
             )
         return out
 
+    # ------------------------------------------------------- image usage
+    async def image_usage_overview(self) -> List[Dict[str, Any]]:
+        """Per-user image spend/usage, for the platform-wide governance view.
+        spend_usd is an estimate, not an exact billed figure — see
+        core/image_pricing.py."""
+        rows = (
+            await self.db.execute(
+                select(
+                    ImageJob.workspace_id,
+                    func.count(ImageJob.id),
+                    func.coalesce(func.sum(ImageJob.cost_usd).filter(ImageJob.status == ImageJobStatus.SUCCEEDED), 0.0),
+                )
+                .group_by(ImageJob.workspace_id)
+                .order_by(func.sum(ImageJob.cost_usd).desc())
+            )
+        ).all()
+        if not rows:
+            return []
+
+        user_ids = [r[0] for r in rows]
+        users = {
+            u.id: u
+            for u in (await self.db.execute(select(User).where(User.id.in_(user_ids)))).scalars().all()
+        }
+
+        out = []
+        for workspace_id, jobs_count, spend in rows:
+            user = users.get(workspace_id)
+            out.append(
+                {
+                    "user_id": workspace_id,
+                    "name": user.name if user else "(deleted account)",
+                    "email": user.email if user else "—",
+                    "jobs_count": jobs_count or 0,
+                    "spend_usd": float(spend or 0.0),
+                }
+            )
+        return out
+
     # ----------------------------------------------------------- activity
     async def list_activity(
         self,
@@ -701,6 +751,12 @@ class SuperAdminService:
                 select(func.coalesce(func.sum(VideoJob.cost_usd), 0.0)).where(VideoJob.status != VideoJobStatus.FAILED)
             )
         ).scalar() or 0.0
+        image_jobs_total = (await self.db.execute(select(func.count()).select_from(ImageJob))).scalar() or 0
+        image_spend_total = (
+            await self.db.execute(
+                select(func.coalesce(func.sum(ImageJob.cost_usd), 0.0)).where(ImageJob.status == ImageJobStatus.SUCCEEDED)
+            )
+        ).scalar() or 0.0
 
         return {
             "organizations": orgs,
@@ -711,4 +767,6 @@ class SuperAdminService:
             "requests_7d": req_7d,
             "video_jobs_total": video_jobs_total,
             "video_spend_usd_total": float(video_spend_total),
+            "image_jobs_total": image_jobs_total,
+            "image_spend_usd_total": float(image_spend_total),
         }

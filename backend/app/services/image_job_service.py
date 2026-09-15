@@ -17,6 +17,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.image_pricing import IMAGE_COST_ESTIMATE_USD
 from app.core.limits import enforce_daily_limit
 from app.db.base import AsyncSessionLocal
 from app.models.generated_asset import AssetKind
@@ -346,6 +347,7 @@ async def run_job(job_id: str) -> None:
             job.result_url = result["url"]
             job.logo_applied = logo_applied
             job.logo_note = logo_note
+            job.cost_usd = IMAGE_COST_ESTIMATE_USD
             job.status = ImageJobStatus.SUCCEEDED
             job.finished_at = _now()
             await db.commit()
