@@ -2,6 +2,14 @@
 rtpstart = 10000
 rtpend = 20000
 
+; Cloud One's QoS guideline: tag voice RTP as DSCP EF (46) so any router that
+; honours DSCP along the path gives it priority over other traffic. Doesn't
+; help within Contabo's own network (they don't act on it either way), but
+; it's the one piece of their firewall/QoS checklist that's actually a config
+; line on OUR box rather than a customer-premises router we don't have.
+tos_audio = ef
+cos_audio = 5
+
 ; Accept RTP even from a source ICE hasn't fully validated (NAT hole-punch race).
 strictrtp = no
 
