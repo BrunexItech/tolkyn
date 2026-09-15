@@ -144,6 +144,7 @@ export interface PlatformUser {
   video_budget_usd: number | null;
   daily_image_limit: number | null;
   daily_video_limit: number | null;
+  sms_sender_id: string | null;
   module_overrides: Record<string, boolean>;
   effective_image_limit: number | null;
   effective_video_limit: number | null;
@@ -377,6 +378,7 @@ export const adminApi = {
       video_budget_usd: number | null;
       daily_image_limit: number | null;
       daily_video_limit: number | null;
+      sms_sender_id: string | null;
       module_overrides: Record<string, boolean>;
       package_id: string | null;
     }>,

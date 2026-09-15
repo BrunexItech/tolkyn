@@ -80,7 +80,22 @@ def whatsapp_ready() -> bool:
 
 
 # --------------------------------------------------------------------- SMS
-async def _send_sms_mobilesasa(to: str, body: str) -> SendResult:
+async def _workspace_sms_sender_id(workspace_id: str) -> Optional[str]:
+    """A workspace's own registered sender name, if it's paid for one —
+    else None, meaning "use the platform's shared default sender"."""
+    from sqlalchemy import select
+
+    from app.db.base import AsyncSessionLocal
+    from app.models.user import User
+
+    async with AsyncSessionLocal() as db:
+        raw = (
+            await db.execute(select(User.sms_sender_id).where(User.id == workspace_id))
+        ).scalar_one_or_none()
+        return (raw or "").strip() or None
+
+
+async def _send_sms_mobilesasa(to: str, body: str, sender_id: Optional[str] = None) -> SendResult:
     url = f"{settings.MOBILESASA_BASE_URL.rstrip('/')}/v1/send/message"
     headers = {
         "Authorization": f"Bearer {settings.MOBILESASA_TOKEN}",
@@ -88,7 +103,7 @@ async def _send_sms_mobilesasa(to: str, body: str) -> SendResult:
         "Accept": "application/json",
     }
     payload = {
-        "senderID": settings.MOBILESASA_SENDER_ID,
+        "senderID": sender_id or settings.MOBILESASA_SENDER_ID,
         "phone": _mobilesasa_phone(to),
         "message": body,
     }
@@ -139,9 +154,10 @@ async def _send_sms_twilio(to: str, body: str) -> SendResult:
         return SendResult(to, False, "twilio", error=str(exc))
 
 
-async def send_sms(to: str, body: str) -> SendResult:
+async def send_sms(to: str, body: str, workspace_id: Optional[str] = None) -> SendResult:
     if mobilesasa_ready():
-        return await _send_sms_mobilesasa(to, body)
+        sender_id = await _workspace_sms_sender_id(workspace_id) if workspace_id else None
+        return await _send_sms_mobilesasa(to, body, sender_id=sender_id)
     if twilio_ready():
         return await _send_sms_twilio(to, body)
     return SendResult(to, True, "simulated", id=f"sim_{uuid.uuid4().hex[:12]}", simulated=True)
@@ -211,7 +227,7 @@ async def send_many(
             # that pacing instead of respecting it.
             concurrency = 1
     else:
-        fn = lambda phone: send_sms(phone, body)  # noqa: E731
+        fn = lambda phone: send_sms(phone, body, workspace_id=workspace_id)  # noqa: E731
 
     sem = asyncio.Semaphore(max(1, concurrency))
 

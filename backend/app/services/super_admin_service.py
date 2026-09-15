@@ -267,6 +267,9 @@ class SuperAdminService:
         if "daily_video_limit" in patch:
             v = patch["daily_video_limit"]
             user.daily_video_limit = None if v is None else max(0, int(v))
+        if "sms_sender_id" in patch:
+            v = (patch["sms_sender_id"] or "").strip()
+            user.sms_sender_id = v[:20] or None
         if "module_overrides" in patch:
             raw = patch["module_overrides"] or {}
             user.module_overrides = {

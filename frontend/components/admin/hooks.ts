@@ -154,6 +154,7 @@ export function useUpdateUser() {
         video_budget_usd?: number | null;
         daily_image_limit?: number | null;
         daily_video_limit?: number | null;
+        sms_sender_id?: string | null;
         module_overrides?: Record<string, boolean>;
         package_id?: string | null;
       },

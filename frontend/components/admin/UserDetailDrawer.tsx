@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Clapperboard, ImageIcon, LayoutGrid } from "lucide-react";
+import { Check, Clapperboard, ImageIcon, LayoutGrid, MessageSquare } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
 import { LoadingState, Spinner } from "@/components/om/primitives/Spinner";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
@@ -45,11 +45,13 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
   const [budgetInput, setBudgetInput] = useState("");
   const [imgLimit, setImgLimit] = useState("");
   const [vidLimit, setVidLimit] = useState("");
+  const [senderId, setSenderId] = useState("");
   useEffect(() => {
     setBudgetInput(user?.video_budget_usd != null ? String(user.video_budget_usd) : "");
     setImgLimit(user?.daily_image_limit != null ? String(user.daily_image_limit) : "");
     setVidLimit(user?.daily_video_limit != null ? String(user.daily_video_limit) : "");
-  }, [user?.id, user?.video_budget_usd, user?.daily_image_limit, user?.daily_video_limit]);
+    setSenderId(user?.sms_sender_id ?? "");
+  }, [user?.id, user?.video_budget_usd, user?.daily_image_limit, user?.daily_video_limit, user?.sms_sender_id]);
 
   const commitLimit = (kind: "image" | "video", raw: string) => {
     if (!user) return;
@@ -83,6 +85,13 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
     if (value !== null && (Number.isNaN(value) || value < 0)) return;
     if (value === user.video_budget_usd) return;
     update.mutate({ id: user.id, video_budget_usd: value });
+  };
+
+  const commitSenderId = () => {
+    if (!user) return;
+    const value = senderId.trim().slice(0, 20) || null;
+    if (value === (user.sms_sender_id ?? null)) return;
+    update.mutate({ id: user.id, sms_sender_id: value });
   };
 
   return (
@@ -250,6 +259,28 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
           </div>
 
           <div>
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1">
+                <MessageSquare className="size-3" /> Bulk SMS sender ID
+              </span>
+            </SectionLabel>
+            <input
+              type="text"
+              value={senderId}
+              onChange={(e) => setSenderId(e.target.value)}
+              onBlur={commitSenderId}
+              onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+              placeholder="Shared default sender"
+              maxLength={20}
+              className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-violet/60"
+            />
+            <p className="mt-1.5 text-[10px] text-om-faint">
+              Only set this once the client has paid for their own registered sender name with the SMS provider.
+              Blank = every SMS from this account sends under the platform&apos;s shared default sender.
+            </p>
+          </div>
+
+          <div>
             <SectionLabel>Usage on the platform</SectionLabel>
             {!usage ? (
               <div className="flex justify-center py-3">
@@ -266,6 +297,8 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
                   ["Connected", usage.connected_accounts],
                   ["Videos made", usage.video_jobs],
                   ["Video spend", `$${usage.video_spend_usd.toFixed(2)}`],
+                  ["Images made", usage.image_jobs],
+                  ["Image spend (est.)", `$${usage.image_spend_usd.toFixed(2)}`],
                 ].map(([label, val]) => (
                   <div key={label as string} className="rounded-lg border border-om-border bg-white/[0.02] p-2 text-center">
                     <div className="font-mono text-[15px] font-bold text-om-text">

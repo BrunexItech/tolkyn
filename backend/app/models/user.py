@@ -67,6 +67,12 @@ class User(BaseModel):
     daily_image_limit = Column(Integer, nullable=True)
     daily_video_limit = Column(Integer, nullable=True)
 
+    # Custom bulk-SMS sender name (super admin controlled, paid add-on). NULL
+    # = this workspace's SMS sends use the platform's shared default sender
+    # (MOBILESASA_SENDER_ID) — set this only once the workspace has paid for
+    # their own registered sender ID with the SMS provider.
+    sms_sender_id = Column(String(20), nullable=True)
+
     # Per-module access overrides on top of the package. {"crm": true} force-
     # grants a module the package doesn't include; {"video": false} removes one
     # it does. Everything else follows the package. See app.core.actor.

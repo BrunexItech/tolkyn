@@ -201,7 +201,7 @@ async def _run_action(db: AsyncSession, workspace_id: str, a: Automation, contex
         if not phone:
             raise _Skip("No phone number to text")
         body = (cfg.get("template") or "Hi — thanks for reaching out, we'll be in touch shortly.")[:600]
-        res = await send_sms(phone, body)
+        res = await send_sms(phone, body, workspace_id=workspace_id)
         if not res.ok:
             raise RuntimeError(res.error or "SMS failed")
         return f"Texted {phone}" + (" (test mode)" if res.simulated else "")
