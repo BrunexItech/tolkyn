@@ -68,7 +68,13 @@ allow = alaw
 allow = g729
 outbound_auth = cloudone_auth
 aors = cloudone_aor
-from_user = ${CLOUDONE_DID}
+; No from_user here — that would hardcode ONE static DID as the From-header
+; identity for every outbound call through this trunk, regardless of which
+; workspace placed it. Leaving it unset makes Asterisk use the channel's own
+; CALLERID(num) instead, which [from-internal] already sets per-workspace
+; (via each agent endpoint's set_var=DID=... in pjsip_workspaces.conf) right
+; before Dial(). from_domain stays — that's just Cloud One's own SIP host,
+; the same for every workspace.
 from_domain = ${CLOUDONE_SIP_HOST}
 dtmf_mode = rfc4733
 rtp_symmetric = yes
