@@ -33,6 +33,20 @@ external_media_address = ${PBX_PUBLIC_IP}
 external_signaling_address = ${PBX_PUBLIC_IP}
 local_net = 127.0.0.0/8
 
+; TCP, for the ElevenLabs trunk below — their "Allowed Source IP Addresses"
+; restriction only takes effect over TCP/TLS, not UDP, so this is what makes
+; that IP allowlist actually mean something.
+[transport-tcp]
+type = transport
+protocol = tcp
+bind = 0.0.0.0:5060
+external_media_address = ${PBX_PUBLIC_IP}
+external_signaling_address = ${PBX_PUBLIC_IP}
+local_net = 10.0.0.0/8
+local_net = 172.16.0.0/12
+local_net = 192.168.0.0/16
+local_net = 127.0.0.0/8
+
 ;--- Cloud One trunk -------------------------------------------------
 [cloudone_auth]
 type = auth
@@ -86,6 +100,41 @@ direct_media = no
 type = identify
 endpoint = cloudone
 match = ${CLOUDONE_SIP_HOST}
+
+;--- ElevenLabs Conversational AI agent -------------------------------
+; Outbound-only for now (us -> them): a call reaches the agent by dialing
+; PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs from the dialplan. No registration
+; (their SIP trunk doesn't use one) — outbound_auth answers their digest
+; challenge with the username/password entered as this phone number's
+; "Authentication" on their side. Calls FROM ElevenLabs back to us (needed
+; for the agent to place outbound calls) are a separate piece, not wired
+; yet — see asterisk/README.md before building that direction.
+[elevenlabs_auth]
+type = auth
+auth_type = userpass
+username = ${ELEVENLABS_SIP_AUTH_USER}
+password = ${ELEVENLABS_SIP_AUTH_PASSWORD}
+
+[elevenlabs_aor]
+type = aor
+contact = sip:${ELEVENLABS_SIP_HOST}:5060
+
+[elevenlabs]
+type = endpoint
+transport = transport-tcp
+context = from-internal
+disallow = all
+allow = ulaw
+allow = alaw
+outbound_auth = elevenlabs_auth
+aors = elevenlabs_aor
+from_user = ${ELEVENLABS_SIP_USER}
+from_domain = ${ELEVENLABS_SIP_HOST}
+dtmf_mode = rfc4733
+rtp_symmetric = yes
+force_rport = yes
+rewrite_contact = yes
+direct_media = no
 
 ;--- Agent softphones (WebRTC), one per workspace ----------------------
 ; Multi-tenant: every agent's endpoint/aor/auth block lives in

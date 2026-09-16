@@ -33,10 +33,17 @@ set -a; . "$ENV_FILE"; set +a
 : "${PBX_EVENT_BACKEND_URL:=http://127.0.0.1:8090/api/v1}"
 : "${PBX_EVENT_WORKSPACE_ID:=_default}"
 : "${PBX_EVENT_WEBHOOK_SECRET:=}"
+# ElevenLabs Conversational AI agent trunk — optional, blank until you've
+# created the agent + imported its SIP trunk phone number on their side.
+: "${ELEVENLABS_SIP_HOST:=sip.rtc.elevenlabs.io}"
+: "${ELEVENLABS_SIP_USER:=}"
+: "${ELEVENLABS_SIP_AUTH_USER:=}"
+: "${ELEVENLABS_SIP_AUTH_PASSWORD:=}"
 export CLOUDONE_SIP_HOST CLOUDONE_SIP_USER CLOUDONE_SIP_PASSWORD CLOUDONE_DID \
        PBX_PUBLIC_IP SOFTPHONE_EXT SOFTPHONE_EXT_PASSWORD PBX_WS_PORT \
        PBX_AMI_USER PBX_AMI_PASSWORD PBX_EVENT_BACKEND_URL PBX_EVENT_WORKSPACE_ID \
-       PBX_EVENT_WEBHOOK_SECRET
+       PBX_EVENT_WEBHOOK_SECRET ELEVENLABS_SIP_HOST ELEVENLABS_SIP_USER \
+       ELEVENLABS_SIP_AUTH_USER ELEVENLABS_SIP_AUTH_PASSWORD
 
 # --- 1. stop the container PBX so it can't fight over :5060 ----------------
 echo "==> stopping the Asterisk container (if running)"
@@ -80,7 +87,7 @@ fi
 
 # --- 3. render our config over the stock config -------------------------
 echo "==> writing /etc/asterisk config"
-SUBST='${CLOUDONE_SIP_HOST} ${CLOUDONE_SIP_USER} ${CLOUDONE_SIP_PASSWORD} ${CLOUDONE_DID} ${PBX_PUBLIC_IP} ${SOFTPHONE_EXT} ${SOFTPHONE_EXT_PASSWORD} ${PBX_WS_PORT} ${PBX_AMI_USER} ${PBX_AMI_PASSWORD}'
+SUBST='${CLOUDONE_SIP_HOST} ${CLOUDONE_SIP_USER} ${CLOUDONE_SIP_PASSWORD} ${CLOUDONE_DID} ${PBX_PUBLIC_IP} ${SOFTPHONE_EXT} ${SOFTPHONE_EXT_PASSWORD} ${PBX_WS_PORT} ${PBX_AMI_USER} ${PBX_AMI_PASSWORD} ${ELEVENLABS_SIP_HOST} ${ELEVENLABS_SIP_USER} ${ELEVENLABS_SIP_AUTH_USER} ${ELEVENLABS_SIP_AUTH_PASSWORD}'
 for f in "$TPL"/*.template; do
   name="$(basename "$f" .template)"
   # manager.conf is handled in step 4c (only when AMI creds are set)

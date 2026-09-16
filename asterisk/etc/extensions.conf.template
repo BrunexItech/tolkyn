@@ -121,4 +121,10 @@ exten => _+X.,1,Set(CALLERID(num)=${DID})
 exten => *97,1,VoiceMailMain(${MYEXT}@default)
  same => n,Hangup()
 
+; manual test line for the ElevenLabs AI agent — dial *80 from any agent
+; softphone to talk to it directly. Temporary, for proving the SIP trunk
+; connection works before it's wired into any workspace's IVR.
+exten => *80,1,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtT)
+ same => n,Hangup()
+
 exten => h,1,Hangup()
