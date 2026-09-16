@@ -167,6 +167,7 @@ def _user_resp(u) -> PlatformUserResponse:
     d["module_overrides"] = u.module_overrides or {}
     d["effective_image_limit"] = effective_daily_limit(u, "image")
     d["effective_video_limit"] = effective_daily_limit(u, "video")
+    d["sms_provider_token_set"] = bool(getattr(u, "sms_provider_token_enc", None))
     return PlatformUserResponse(**d)
 
 

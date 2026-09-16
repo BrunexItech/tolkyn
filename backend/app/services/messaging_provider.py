@@ -3,6 +3,12 @@
 SMS routes through Mobile Sasa when ``MOBILESASA_TOKEN`` is set, else Twilio when
 its keys are set, else a *simulated* send (logged, marked ``simulated`` in the
 result) so the product is fully usable before real credentials are wired.
+
+A workspace can override the platform's shared MobileSasa sender and/or
+token (super admin only, see User.sms_sender_id / sms_provider_token_enc) —
+sender alone for a paid custom sender ID on the platform's own account,
+sender + token together when that sender is approved on an entirely
+separate MobileSasa account. See _workspace_sms_override.
 """
 from __future__ import annotations
 
@@ -80,25 +86,38 @@ def whatsapp_ready() -> bool:
 
 
 # --------------------------------------------------------------------- SMS
-async def _workspace_sms_sender_id(workspace_id: str) -> Optional[str]:
-    """A workspace's own registered sender name, if it's paid for one —
-    else None, meaning "use the platform's shared default sender"."""
+async def _workspace_sms_override(workspace_id: str) -> tuple[Optional[str], Optional[str]]:
+    """(sender_id, api_token) this workspace should send SMS with, if it has
+    its own — else (None, None), meaning "use the platform's shared default
+    sender and token". A custom sender ID alone still sends through the
+    platform's MobileSasa account; a token too means it's approved on a
+    SEPARATE MobileSasa account entirely, so sending under it needs that
+    account's own credential."""
     from sqlalchemy import select
 
+    from app.core.crypto import decrypt
     from app.db.base import AsyncSessionLocal
     from app.models.user import User
 
     async with AsyncSessionLocal() as db:
-        raw = (
-            await db.execute(select(User.sms_sender_id).where(User.id == workspace_id))
-        ).scalar_one_or_none()
-        return (raw or "").strip() or None
+        row = (
+            await db.execute(
+                select(User.sms_sender_id, User.sms_provider_token_enc).where(User.id == workspace_id)
+            )
+        ).first()
+    if not row:
+        return None, None
+    sender_id = (row[0] or "").strip() or None
+    token = decrypt(row[1]) if row[1] else None
+    return sender_id, token
 
 
-async def _send_sms_mobilesasa(to: str, body: str, sender_id: Optional[str] = None) -> SendResult:
+async def _send_sms_mobilesasa(
+    to: str, body: str, sender_id: Optional[str] = None, token: Optional[str] = None
+) -> SendResult:
     url = f"{settings.MOBILESASA_BASE_URL.rstrip('/')}/v1/send/message"
     headers = {
-        "Authorization": f"Bearer {settings.MOBILESASA_TOKEN}",
+        "Authorization": f"Bearer {token or settings.MOBILESASA_TOKEN}",
         "Content-Type": "application/json",
         "Accept": "application/json",
     }
@@ -155,9 +174,13 @@ async def _send_sms_twilio(to: str, body: str) -> SendResult:
 
 
 async def send_sms(to: str, body: str, workspace_id: Optional[str] = None) -> SendResult:
-    if mobilesasa_ready():
-        sender_id = await _workspace_sms_sender_id(workspace_id) if workspace_id else None
-        return await _send_sms_mobilesasa(to, body, sender_id=sender_id)
+    sender_id = token = None
+    if workspace_id:
+        sender_id, token = await _workspace_sms_override(workspace_id)
+    # a workspace with its own token is self-sufficient even if the
+    # platform's own MobileSasa isn't configured at all
+    if token or mobilesasa_ready():
+        return await _send_sms_mobilesasa(to, body, sender_id=sender_id, token=token)
     if twilio_ready():
         return await _send_sms_twilio(to, body)
     return SendResult(to, True, "simulated", id=f"sim_{uuid.uuid4().hex[:12]}", simulated=True)

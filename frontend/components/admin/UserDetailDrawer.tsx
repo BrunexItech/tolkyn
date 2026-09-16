@@ -46,11 +46,13 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
   const [imgLimit, setImgLimit] = useState("");
   const [vidLimit, setVidLimit] = useState("");
   const [senderId, setSenderId] = useState("");
+  const [providerToken, setProviderToken] = useState("");
   useEffect(() => {
     setBudgetInput(user?.video_budget_usd != null ? String(user.video_budget_usd) : "");
     setImgLimit(user?.daily_image_limit != null ? String(user.daily_image_limit) : "");
     setVidLimit(user?.daily_video_limit != null ? String(user.daily_video_limit) : "");
     setSenderId(user?.sms_sender_id ?? "");
+    setProviderToken(""); // write-only — never pre-filled, and cleared when switching users
   }, [user?.id, user?.video_budget_usd, user?.daily_image_limit, user?.daily_video_limit, user?.sms_sender_id]);
 
   const commitLimit = (kind: "image" | "video", raw: string) => {
@@ -92,6 +94,17 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
     const value = senderId.trim().slice(0, 20) || null;
     if (value === (user.sms_sender_id ?? null)) return;
     update.mutate({ id: user.id, sms_sender_id: value });
+  };
+
+  const commitProviderToken = () => {
+    if (!user || !providerToken.trim()) return; // write-only — never clear on an empty blur
+    update.mutate({ id: user.id, sms_provider_token: providerToken.trim() });
+    setProviderToken("");
+  };
+  const clearProviderToken = () => {
+    if (!user) return;
+    update.mutate({ id: user.id, sms_provider_token: "" });
+    setProviderToken("");
   };
 
   return (
@@ -278,6 +291,35 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
               Only set this once the client has paid for their own registered sender name with the SMS provider.
               Blank = every SMS from this account sends under the platform&apos;s shared default sender.
             </p>
+
+            <div className="mt-2.5">
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[10px] text-om-muted">MobileSasa API token (only if a different account)</span>
+                {user.sms_provider_token_set && (
+                  <button
+                    type="button"
+                    onClick={clearProviderToken}
+                    className="text-[10px] font-medium text-om-red hover:underline"
+                  >
+                    Clear
+                  </button>
+                )}
+              </div>
+              <input
+                type="password"
+                value={providerToken}
+                onChange={(e) => setProviderToken(e.target.value)}
+                onBlur={commitProviderToken}
+                onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+                placeholder={user.sms_provider_token_set ? "•••••••• stored — type to replace" : "Same MobileSasa account as everyone else"}
+                autoComplete="new-password"
+                className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-violet/60"
+              />
+              <p className="mt-1.5 text-[10px] text-om-faint">
+                Only needed if the sender ID above is approved on a separate MobileSasa account — otherwise leave
+                blank and it sends through the platform&apos;s own account. Write-only: never shown again once saved.
+              </p>
+            </div>
           </div>
 
           <div>

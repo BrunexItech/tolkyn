@@ -102,6 +102,7 @@ class PlatformUserResponse(BaseModel):
     daily_image_limit: Optional[int] = None
     daily_video_limit: Optional[int] = None
     sms_sender_id: Optional[str] = None  # null = platform's shared default sender
+    sms_provider_token_set: bool = False  # never return the token itself
     module_overrides: Dict[str, bool] = {}
     package_id: Optional[str] = None
     package_name: Optional[str] = None
@@ -133,6 +134,7 @@ class PlatformUserUpdate(BaseModel):
     daily_image_limit: Optional[int] = None  # null = inherit package; 0 = blocked
     daily_video_limit: Optional[int] = None
     sms_sender_id: Optional[str] = None  # "" or null to clear (back to the shared default sender)
+    sms_provider_token: Optional[str] = None  # write-only; "" clears; unset key leaves it untouched
     module_overrides: Optional[Dict[str, bool]] = None  # {module: grant?}
     package_id: Optional[str] = None  # "" or null to clear (grandfathered to full access)
 

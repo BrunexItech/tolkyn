@@ -160,6 +160,7 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_image_limit INTEGER",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_video_limit INTEGER",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_sender_id VARCHAR(20)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_provider_token_enc VARCHAR(600)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS module_overrides JSON NOT NULL DEFAULT '{}'",
     # De-dupe team_members: a check-then-insert race in TeamService.ensure_owner()
     # (fixed with ON CONFLICT) could leave two identical rows for the same

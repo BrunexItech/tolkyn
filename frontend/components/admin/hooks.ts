@@ -155,6 +155,7 @@ export function useUpdateUser() {
         daily_image_limit?: number | null;
         daily_video_limit?: number | null;
         sms_sender_id?: string | null;
+        sms_provider_token?: string | null;
         module_overrides?: Record<string, boolean>;
         package_id?: string | null;
       },

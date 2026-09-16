@@ -145,6 +145,7 @@ export interface PlatformUser {
   daily_image_limit: number | null;
   daily_video_limit: number | null;
   sms_sender_id: string | null;
+  sms_provider_token_set: boolean;
   module_overrides: Record<string, boolean>;
   effective_image_limit: number | null;
   effective_video_limit: number | null;
@@ -379,6 +380,7 @@ export const adminApi = {
       daily_image_limit: number | null;
       daily_video_limit: number | null;
       sms_sender_id: string | null;
+      sms_provider_token: string | null;
       module_overrides: Record<string, boolean>;
       package_id: string | null;
     }>,

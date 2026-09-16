@@ -72,6 +72,12 @@ class User(BaseModel):
     # (MOBILESASA_SENDER_ID) — set this only once the workspace has paid for
     # their own registered sender ID with the SMS provider.
     sms_sender_id = Column(String(20), nullable=True)
+    # A dedicated MobileSasa API token for this workspace (encrypted at rest,
+    # like TelephonyConfig.api_client_secret_enc) — only needed when the
+    # custom sender above is approved on a DIFFERENT MobileSasa account than
+    # the platform's own, so sending under it needs that account's token too.
+    # NULL = send with the platform's shared MOBILESASA_TOKEN as usual.
+    sms_provider_token_enc = Column(String(600), nullable=True)
 
     # Per-module access overrides on top of the package. {"crm": true} force-
     # grants a module the package doesn't include; {"video": false} removes one

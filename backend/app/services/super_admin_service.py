@@ -270,6 +270,9 @@ class SuperAdminService:
         if "sms_sender_id" in patch:
             v = (patch["sms_sender_id"] or "").strip()
             user.sms_sender_id = v[:20] or None
+        if "sms_provider_token" in patch:
+            v = patch["sms_provider_token"]
+            user.sms_provider_token_enc = _encrypt(v) if v else None
         if "module_overrides" in patch:
             raw = patch["module_overrides"] or {}
             user.module_overrides = {
