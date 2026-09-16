@@ -386,16 +386,27 @@ class SuperAdminService:
             other.is_default = False
 
     # -------------------------------------------------------- telephony
+    async def _agent_sip_status(self, workspace_id: str) -> Dict[str, Any]:
+        from app.services.call_center_service import CallCenterService
+
+        agent = await CallCenterService(self.db, workspace_id).get_self_agent()
+        return {
+            "agent_sip_extension": agent.sip_extension,
+            "agent_sip_configured": bool(agent.sip_extension and agent.sip_password_enc),
+        }
+
     async def get_telephony(self, workspace_id: str) -> Dict[str, Any]:
         cfg = (
             await self.db.execute(select(TelephonyConfig).where(TelephonyConfig.workspace_id == workspace_id))
         ).scalar_one_or_none()
         base = (_settings.BACKEND_PUBLIC_URL or "").rstrip("/")
         webhook_url = f"{base}{_settings.API_V1_PREFIX}/call-center/webhook/{workspace_id}/event"
+        agent_sip = await self._agent_sip_status(workspace_id)
         if not cfg:
             return {
                 "workspace_id": workspace_id, "provider": "simulated", "is_active": False,
                 "api_client_secret_set": False, "record_calls": True, "webhook_url": webhook_url,
+                **agent_sip,
             }
         return {
             "workspace_id": workspace_id,
@@ -410,6 +421,7 @@ class SuperAdminService:
             "record_calls": cfg.record_calls,
             "webhook_secret": cfg.webhook_secret,
             "webhook_url": webhook_url,
+            **agent_sip,
         }
 
     async def update_telephony(self, workspace_id: str, patch: Dict[str, Any]) -> Dict[str, Any]:
@@ -440,6 +452,14 @@ class SuperAdminService:
         if not cfg.webhook_secret:
             cfg.webhook_secret = _secrets.token_hex(24)
         await self.db.commit()
+
+        if "agent_sip_extension" in patch or "agent_sip_password" in patch:
+            from app.services.call_center_service import CallCenterService
+
+            await CallCenterService(self.db, workspace_id).set_self_agent_sip(
+                patch.get("agent_sip_extension"), patch.get("agent_sip_password")
+            )
+
         return await self.get_telephony(workspace_id)
 
     async def approve_user(self, user_id: str) -> User:

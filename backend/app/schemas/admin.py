@@ -236,6 +236,11 @@ class TelephonyConfigResponse(BaseModel):
     record_calls: bool = True
     webhook_secret: Optional[str] = None
     webhook_url: Optional[str] = None  # computed: where the PBX should POST events
+    # The workspace's own call-centre line — provisioned here so a Tolkyn
+    # operator never has to open the client's own dashboard to get their
+    # softphone working. See CallCenterService.set_self_agent_sip.
+    agent_sip_extension: Optional[str] = None
+    agent_sip_configured: bool = False  # extension AND a password are both set
 
 
 class TelephonyConfigUpdate(BaseModel):
@@ -248,6 +253,8 @@ class TelephonyConfigUpdate(BaseModel):
     sip_ws_url: Optional[str] = None
     outbound_caller_id: Optional[str] = None
     record_calls: Optional[bool] = None
+    agent_sip_extension: Optional[str] = None  # "" clears
+    agent_sip_password: Optional[str] = None  # write-only; "" clears
 
 
 class UserUsageSummary(BaseModel):

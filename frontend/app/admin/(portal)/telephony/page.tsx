@@ -71,6 +71,7 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
   const save = useUpdateTelephony(workspaceId);
   const [form, setForm] = useState<TelephonyConfigInput>({});
   const [secret, setSecret] = useState("");
+  const [agentPassword, setAgentPassword] = useState("");
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -84,8 +85,10 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
       sip_ws_url: data.sip_ws_url ?? "",
       outbound_caller_id: data.outbound_caller_id ?? "",
       record_calls: data.record_calls,
+      agent_sip_extension: data.agent_sip_extension ?? "",
     });
     setSecret("");
+    setAgentPassword("");
   }, [data]);
 
   const set = <K extends keyof TelephonyConfigInput>(k: K, v: TelephonyConfigInput[K]) =>
@@ -94,7 +97,13 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
   const onSave = () => {
     const body: TelephonyConfigInput = { ...form };
     if (secret.trim()) body.api_client_secret = secret.trim();
-    save.mutate(body, { onSuccess: () => setSecret("") });
+    if (agentPassword.trim()) body.agent_sip_password = agentPassword.trim();
+    save.mutate(body, {
+      onSuccess: () => {
+        setSecret("");
+        setAgentPassword("");
+      },
+    });
   };
 
   const copyWebhook = async () => {
@@ -177,20 +186,47 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
       </Card>
 
       {isAsterisk && (
-        <Card className="flex flex-col gap-1.5 text-[11.5px] text-om-muted">
-          <div className="text-[13px] font-semibold text-om-text">Tolkyn PBX</div>
-          <p>
+        <Card className="flex flex-col gap-2">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-[13px] font-semibold">Tolkyn PBX — softphone line</div>
+            <StatusBadge tone={data.agent_sip_configured ? "green" : "muted"}>
+              {data.agent_sip_configured ? "Configured" : "Not set up"}
+            </StatusBadge>
+          </div>
+          <p className="text-[11.5px] text-om-muted">
             Calls route through Tolkyn&apos;s shared Asterisk PBX and the Cloud One SIP trunk — no
-            per-client trunk credentials needed here.
+            per-client trunk credentials needed. Set their <strong>Assigned DID</strong> above, tick{" "}
+            <strong>Active</strong>, and provision their browser-softphone line below — the client never
+            needs to touch their own Call Center settings for this.
           </p>
-          <p>To finish provisioning this client:</p>
-          <ol className="ml-4 list-decimal space-y-0.5">
-            <li>Set their <strong>Assigned DID</strong> above and tick <strong>Active</strong>.</li>
-            <li>
-              In the client&apos;s <strong>Call Center → Agent lines</strong>, give each agent a SIP
-              extension + password (these must also exist in the PBX config).
-            </li>
-          </ol>
+          <Field label="SIP extension">
+            <OmInput
+              value={form.agent_sip_extension ?? ""}
+              onChange={(e) => set("agent_sip_extension", e.target.value)}
+              placeholder="1001"
+            />
+          </Field>
+          <Field
+            label="SIP password"
+            hint={
+              data.agent_sip_configured
+                ? "A password is stored. Leave blank to keep it, type a new one to replace, or type a space then save to clear."
+                : "Not set yet."
+            }
+          >
+            <OmInput
+              type="password"
+              value={agentPassword}
+              onChange={(e) => setAgentPassword(e.target.value)}
+              placeholder={data.agent_sip_configured ? "••••••••  (stored)" : "generate: openssl rand -hex 16"}
+              autoComplete="new-password"
+            />
+          </Field>
+          <p className="text-[10.5px] text-om-faint">
+            This extension must also exist in the PBX config on the server
+            (<code>asterisk/etc/pjsip.conf.template</code>) — multi-tenant PJSIP-from-DB is the next phase; for
+            now it needs to match the one softphone extension the server already knows about.
+          </p>
         </Card>
       )}
 

@@ -526,6 +526,20 @@ class CallCenterService:
             "turn_password": creds.turn_password,
         }
 
+    async def get_self_agent(self) -> CallAgent:
+        """Public wrapper for super admin — seeds if this workspace has never
+        opened its Call Center before, then returns its own (`is_self`) line."""
+        await self._ensure_seed()
+        return await self._self_agent()
+
+    async def set_self_agent_sip(self, extension: Optional[str], password: Optional[str]) -> CallAgent:
+        """Provision this workspace's own line (its `is_self` CallAgent) —
+        used by super admin so a client's call-centre softphone can be fully
+        set up (DID, provider, and now the extension) without a Tolkyn
+        operator ever needing to open that client's own dashboard."""
+        agent = await self.get_self_agent()
+        return await self.set_agent_sip(agent.id, extension, password)
+
     async def set_agent_sip(self, agent_id: str, extension: Optional[str], password: Optional[str]) -> CallAgent:
         res = await self.db.execute(
             select(CallAgent).where(CallAgent.id == agent_id, CallAgent.workspace_id == self.workspace_id)
