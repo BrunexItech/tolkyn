@@ -33,11 +33,16 @@ RINGTIME = 25
 ;--- agent, else that workspace's voicemail. Unknown DID -> hang up: we   ---
 ;--- never guess which workspace an unmapped number belongs to.          ---
 [from-cloudone]
-exten => _X.,1,Goto(route,1)
-exten => s,1,Goto(route,1)
+; Goto(route,1) makes "route" the CURRENT extension, so ${EXTEN} inside it
+; would read back as the literal string "route", not the number that was
+; actually dialled — save it to a channel var first, before jumping away.
+exten => _X.,1,Set(DIALED_DID=${EXTEN})
+ same => n,Goto(route,1)
+exten => s,1,Set(DIALED_DID=${EXTEN})
+ same => n,Goto(route,1)
 
-exten => route,1,NoOp(Inbound to ${EXTEN})
- same => n,Set(DNUM=${FILTER(0-9,${EXTEN})})
+exten => route,1,NoOp(Inbound to ${DIALED_DID})
+ same => n,Set(DNUM=${FILTER(0-9,${DIALED_DID})})
  same => n,Set(DNUM=${DNUM:-9})
  same => n,Set(WS_EXT=${DB(tolkyn/did/${DNUM})})
  same => n,GotoIf($["${WS_EXT}" = ""]?nodid,1)
