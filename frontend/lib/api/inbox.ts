@@ -31,6 +31,9 @@ export interface ThreadSummary {
   last_message_at: string | null;
   preview: string;
   like_count: number | null;
+  /** False when this thread's platform is currently disconnected — replying
+   * is blocked (backend returns 409) and the UI should say so up front. */
+  channel_connected: boolean;
 }
 
 export interface ThreadDetail extends ThreadSummary {
@@ -61,6 +64,11 @@ export interface InboxFilters {
   search?: string;
 }
 
+export interface DeleteHistoryResult {
+  platform: string;
+  deleted: number;
+}
+
 export const inboxApi = {
   list: (f: InboxFilters = {}) => http.get<{ items: ThreadSummary[] }>(`/inbox${qs({ ...f })}`),
   summary: () => http.get<InboxSummary>("/inbox/summary"),
@@ -70,4 +78,8 @@ export const inboxApi = {
     http.post<ThreadDetail>(`/inbox/${id}/reply`, { body, via }),
   setStatus: (id: string, status: ThreadStatus) =>
     http.post<ThreadSummary>(`/inbox/${id}/status`, { status }),
+  /** Owner-only, and only while `platform` is disconnected (backend 409s
+   * otherwise) — permanently deletes every thread/message for it. */
+  deleteHistory: (platform: string) =>
+    http.del<DeleteHistoryResult>(`/inbox/history/${platform}`),
 };

@@ -1,12 +1,14 @@
-from typing import Optional
+from typing import Iterable, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.actor import get_workspace_id
+from app.core.actor import Actor, get_actor, get_workspace_id
 from app.db import get_db
+from app.models.team_member import TeamRole
 from app.schemas.inbox import (
     AssignRequest,
+    DeleteHistoryResult,
     InboxSummary,
     ReplyRequest,
     StatusRequest,
@@ -31,10 +33,11 @@ def _like_count(t) -> Optional[int]:
     return None
 
 
-def _summary(t) -> ThreadSummary:
+def _summary(t, connected: Iterable[str]) -> ThreadSummary:
     d = ThreadSummary.model_validate(t)
     d.preview = _preview(t)
     d.like_count = _like_count(t)
+    d.channel_connected = t.platform in connected
     return d
 
 
@@ -52,7 +55,8 @@ async def list_threads(
     threads = await svc.list_threads(
         platform=platform, kind=kind, status_filter=status, search=search, assigned=assigned
     )
-    return ThreadList(items=[_summary(t) for t in threads])
+    connected = await svc.connected_platform_set()
+    return ThreadList(items=[_summary(t, connected) for t in threads])
 
 
 @router.get("/summary", response_model=InboxSummary)
@@ -70,7 +74,9 @@ async def refresh_inbox(
 ):
     svc = InboxService(db, user_id)
     await svc.refresh()
-    return ThreadList(items=[_summary(t) for t in await svc.list_threads()])
+    threads = await svc.list_threads()
+    connected = await svc.connected_platform_set()
+    return ThreadList(items=[_summary(t, connected) for t in threads])
 
 
 @router.get("/{thread_id}", response_model=ThreadDetail)
@@ -82,9 +88,11 @@ async def get_thread(
     svc = InboxService(db, user_id)
     t = await svc.mark_read(thread_id)
     t = await svc.get_thread(thread_id)
+    connected = await svc.connected_platform_set()
     d = ThreadDetail.model_validate(t)
     d.preview = _preview(t)
     d.like_count = _like_count(t)
+    d.channel_connected = t.platform in connected
     return d
 
 
@@ -95,10 +103,13 @@ async def reply(
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    t = await InboxService(db, user_id).reply(thread_id, body.body, body.via)
+    svc = InboxService(db, user_id)
+    t = await svc.reply(thread_id, body.body, body.via)
+    connected = await svc.connected_platform_set()
     d = ThreadDetail.model_validate(t)
     d.preview = _preview(t)
     d.like_count = _like_count(t)
+    d.channel_connected = t.platform in connected
     return d
 
 
@@ -109,8 +120,10 @@ async def set_status(
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    t = await InboxService(db, user_id).set_status(thread_id, body.status.value)
-    return _summary(await InboxService(db, user_id).get_thread(thread_id))
+    svc = InboxService(db, user_id)
+    await svc.set_status(thread_id, body.status.value)
+    t = await svc.get_thread(thread_id)
+    return _summary(t, await svc.connected_platform_set())
 
 
 @router.post("/{thread_id}/assign", response_model=ThreadSummary)
@@ -120,5 +133,22 @@ async def assign(
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    await InboxService(db, user_id).assign(thread_id, body.assignee)
-    return _summary(await InboxService(db, user_id).get_thread(thread_id))
+    svc = InboxService(db, user_id)
+    await svc.assign(thread_id, body.assignee)
+    t = await svc.get_thread(thread_id)
+    return _summary(t, await svc.connected_platform_set())
+
+
+@router.delete("/history/{platform}", response_model=DeleteHistoryResult)
+async def delete_channel_history(
+    platform: str,
+    actor: Actor = Depends(get_actor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently deletes every thread + message this workspace has for
+    `platform`. Owner-only, and only while that platform is disconnected
+    (enforced in the service) — this is real, irreversible deletion."""
+    if actor.role != TeamRole.OWNER:
+        raise HTTPException(http_status.HTTP_403_FORBIDDEN, "Only the workspace owner can delete channel history.")
+    deleted = await InboxService(db, actor.workspace_id).delete_channel_history(platform)
+    return DeleteHistoryResult(platform=platform, deleted=deleted)

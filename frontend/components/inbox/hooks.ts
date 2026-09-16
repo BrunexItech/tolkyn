@@ -72,3 +72,21 @@ export function useSetStatus() {
     onError: (e: Error) => toast.err(e.message),
   });
 }
+
+/** Owner-only, permanent — only works while the platform is disconnected
+ * (backend 409s otherwise). See the "Connected Accounts" / WhatsApp cards. */
+export function useDeleteChannelHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (platform: string) => inboxApi.deleteHistory(platform),
+    onSuccess: (res) => {
+      qc.invalidateQueries({ queryKey: KEY });
+      toast.ok(
+        res.deleted > 0
+          ? `Deleted ${res.deleted} conversation${res.deleted === 1 ? "" : "s"} from ${res.platform}`
+          : `No saved conversations for ${res.platform}`,
+      );
+    },
+    onError: (e: Error) => toast.err(e.message),
+  });
+}

@@ -2,10 +2,12 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { CircleCheck, Loader2, ShieldAlert, Smartphone, Unplug } from "lucide-react";
+import { CircleCheck, Loader2, ShieldAlert, Smartphone, Trash2, Unplug } from "lucide-react";
 import { FaWhatsapp } from "react-icons/fa6";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { OmButton } from "@/components/om/primitives/OmButton";
+import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
+import { useDeleteChannelHistory } from "@/components/inbox/hooks";
 import {
   useConnectWhatsAppWeb,
   useDisconnectWhatsAppWeb,
@@ -39,7 +41,19 @@ export function WhatsAppSessionCard() {
   const { data, isLoading } = useWhatsAppWebStatus();
   const connect = useConnectWhatsAppWeb();
   const disconnect = useDisconnectWhatsAppWeb();
+  const deleteHistory = useDeleteChannelHistory();
+  const { confirm, dialog } = useConfirm();
   const [acknowledged, setAcknowledged] = useState(false);
+
+  const confirmDeleteHistory = async () => {
+    const ok = await confirm({
+      title: "Delete WhatsApp conversation history?",
+      message: "This permanently deletes every past WhatsApp conversation stored in your Inbox. This can't be undone.",
+      confirmLabel: "Delete history",
+      danger: true,
+    });
+    if (ok) deleteHistory.mutate("whatsapp");
+  };
 
   const status = data?.status ?? "disconnected";
   // Any moment where a connection is being established but there's nothing
@@ -140,8 +154,17 @@ export function WhatsAppSessionCard() {
           >
             {connect.isPending && <Loader2 className="animate-spin" />} Connect a number
           </OmButton>
+          <button
+            type="button"
+            onClick={confirmDeleteHistory}
+            disabled={deleteHistory.isPending}
+            className="inline-flex w-full items-center justify-center gap-1 rounded-lg py-1 text-[10.5px] font-medium text-om-muted hover:text-om-red disabled:opacity-50"
+          >
+            <Trash2 className="size-3" /> Delete conversation history
+          </button>
         </>
       )}
+      {dialog}
     </Card>
   );
 }

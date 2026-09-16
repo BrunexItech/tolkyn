@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -8,11 +10,13 @@ from fastapi import (
     UploadFile,
     status,
 )
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
 from app.core.internal_auth import verify_internal_secret
 from app.db import get_db
+from app.models.social_connection import ConnectionStatus, SocialConnection
 from app.schemas.messaging import (
     BroadcastCreate,
     BroadcastList,
@@ -146,7 +150,33 @@ async def send_broadcast(
 # --------------------------------------------------------------------------
 # Self-hosted WhatsApp Web (Baileys worker) — unofficial, at-your-own-risk
 # path while waiting on real Cloud API access. One session per workspace.
+#
+# Unlike the Upload-Post-backed channels, WhatsApp's own "is this session
+# live" truth lives entirely on the worker (GET /status asks it directly).
+# We still mirror a connected/disconnected flag into SocialConnection here —
+# not as the source of truth for the QR/status UI, but so the Inbox can
+# know, without calling the worker on every request, whether a thread's
+# channel is currently live: gates replying to a disconnected WhatsApp
+# thread and stops a stray webhook from creating messages after disconnect.
 # --------------------------------------------------------------------------
+
+
+async def _set_whatsapp_connection_status(db: AsyncSession, workspace_id: str, connected: bool) -> None:
+    res = await db.execute(
+        select(SocialConnection).where(
+            SocialConnection.workspace_id == workspace_id, SocialConnection.platform == "whatsapp"
+        )
+    )
+    conn = res.scalar_one_or_none()
+    if conn is None:
+        conn = SocialConnection(workspace_id=workspace_id, platform="whatsapp")
+        db.add(conn)
+    conn.status = ConnectionStatus.CONNECTED if connected else ConnectionStatus.DISCONNECTED
+    now = datetime.now(timezone.utc)
+    conn.last_synced_at = now
+    if connected:
+        conn.connected_at = conn.connected_at or now
+    await db.commit()
 
 
 @router.post("/whatsapp-web/connect", response_model=WhatsAppWebStatus)
@@ -168,8 +198,9 @@ async def whatsapp_web_status(user_id: str = Depends(get_workspace_id)):
 
 
 @router.delete("/whatsapp-web/disconnect", status_code=status.HTTP_204_NO_CONTENT)
-async def disconnect_whatsapp_web(user_id: str = Depends(get_workspace_id)):
+async def disconnect_whatsapp_web(user_id: str = Depends(get_workspace_id), db: AsyncSession = Depends(get_db)):
     await whatsapp_web_service.disconnect(user_id)
+    await _set_whatsapp_connection_status(db, user_id, connected=False)
 
 
 @webhook_router.post("/whatsapp-web/webhook/message", status_code=status.HTTP_204_NO_CONTENT)
@@ -179,6 +210,20 @@ async def whatsapp_web_message_webhook(
     db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_internal_secret),
 ):
+    # A stray/replayed event after the workspace disconnected WhatsApp must
+    # not create new inbox data. Fail OPEN when there's no connection row at
+    # all (nothing has ever recorded a status for this workspace, e.g. right
+    # after this feature first deploys) — only skip when it's explicitly
+    # marked disconnected.
+    conn_res = await db.execute(
+        select(SocialConnection).where(
+            SocialConnection.workspace_id == body.workspace_id, SocialConnection.platform == "whatsapp"
+        )
+    )
+    conn = conn_res.scalar_one_or_none()
+    if conn is not None and conn.status == ConnectionStatus.DISCONNECTED:
+        return
+
     # Always lands in the real Inbox/CRM for the admin, regardless of
     # whether it's also a campaign-group reply — full visibility is exactly
     # what the admin gets that other participants don't.
@@ -209,12 +254,17 @@ async def whatsapp_web_message_webhook(
 @webhook_router.post("/whatsapp-web/webhook/status", status_code=status.HTTP_204_NO_CONTENT)
 async def whatsapp_web_status_webhook(
     body: WhatsAppWebStatusWebhook,
+    db: AsyncSession = Depends(get_db),
     _: None = Depends(verify_internal_secret),
 ):
-    # Nothing to persist — GET /whatsapp-web/status asks the worker directly
-    # for real-time truth. This exists so the worker always has somewhere to
-    # report to, and so a future "notify the owner when disconnected" email
-    # has a single place to hook in.
+    # GET /whatsapp-web/status still asks the worker directly for the QR/
+    # linking UI's real-time truth — this mirrors just the connected/not
+    # flag into SocialConnection so the Inbox can gate replies and inbound
+    # webhooks without a live worker round trip on every request. Any
+    # non-"connected" status (connecting/qr/linking/disconnected/
+    # logged_out) is treated as not-safely-connected — the conservative
+    # side to fail on while a session is mid-transition.
+    await _set_whatsapp_connection_status(db, body.workspace_id, connected=body.status == "connected")
     print(f"[whatsapp-web] workspace={body.workspace_id} status={body.status}")
 
 

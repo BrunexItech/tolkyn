@@ -1,6 +1,6 @@
 "use client";
 
-import { Search, MessageCircle, AtSign, Send, Star, Heart } from "lucide-react";
+import { Search, MessageCircle, AtSign, Send, Star, Heart, Unplug } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
 import { platform as findPlatform } from "@/lib/om/platforms";
@@ -91,15 +91,20 @@ export function ThreadList({
                 )}
               >
                 <div className="relative shrink-0">
-                  <span className="grid size-8 place-items-center rounded-full bg-white/[0.05] text-[11px] font-bold text-om-dim">
+                  <span
+                    className={cn(
+                      "grid size-8 place-items-center rounded-full bg-white/[0.05] text-[11px] font-bold text-om-dim",
+                      !t.channel_connected && "opacity-50",
+                    )}
+                  >
                     {t.author_name.slice(0, 2).toUpperCase()}
                   </span>
                   {p && (
                     <span
                       className="absolute -bottom-0.5 -right-0.5 grid size-3.5 place-items-center rounded-full border border-om-card"
-                      style={{ background: `${p.color}` }}
+                      style={{ background: t.channel_connected ? p.color : "var(--om-muted)" }}
                     >
-                      <p.Icon className="size-2 text-white" />
+                      {t.channel_connected ? <p.Icon className="size-2 text-white" /> : <Unplug className="size-2 text-white" />}
                     </span>
                   )}
                 </div>
@@ -116,8 +121,16 @@ export function ThreadList({
                     </span>
                   </div>
                   <div className="flex items-center gap-1 text-[10px] text-om-muted">
-                    <KindIcon className="size-2.5" />
-                    <span className="truncate">{t.context}</span>
+                    {t.channel_connected ? (
+                      <>
+                        <KindIcon className="size-2.5" />
+                        <span className="truncate">{t.context}</span>
+                      </>
+                    ) : (
+                      <span className="flex items-center gap-1 text-om-amber">
+                        <Unplug className="size-2.5" /> Channel disconnected
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <div className={cn("min-w-0 flex-1 truncate text-[11px]", t.unread ? "text-om-text" : "text-om-muted")}>

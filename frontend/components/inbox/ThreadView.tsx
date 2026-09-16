@@ -10,6 +10,7 @@ import {
   MessageCircle,
   Heart,
   Phone,
+  Unplug,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
@@ -136,6 +137,13 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
 
       {/* reply */}
       <div className="border-t border-om-border p-2.5">
+        {!t.channel_connected && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-om-amber/30 bg-om-amber/[0.08] px-2.5 py-2 text-[11px] text-om-amber">
+            <Unplug className="size-3.5 shrink-0" />
+            This {t.platform} channel is disconnected — replies won&apos;t be delivered. Reconnect it in
+            Connected Accounts to reply here.
+          </div>
+        )}
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -143,8 +151,13 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
             if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) send();
           }}
           rows={2}
-          placeholder={`Reply as your ${t.platform} account…  (⌘↵ to send)`}
-          className="w-full resize-none rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-2 text-[12px] text-om-text outline-none focus:border-om-blue/60"
+          disabled={!t.channel_connected}
+          placeholder={
+            t.channel_connected
+              ? `Reply as your ${t.platform} account…  (⌘↵ to send)`
+              : "Channel disconnected — reconnect to reply"
+          }
+          className="w-full resize-none rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-2 text-[12px] text-om-text outline-none focus:border-om-blue/60 disabled:cursor-not-allowed disabled:opacity-50"
         />
         <div className="mt-1.5 flex items-center gap-2">
           {t.permalink && (
@@ -165,7 +178,7 @@ export function ThreadView({ threadId }: { threadId: string | null }) {
             size="sm"
             className="ml-auto"
             onClick={send}
-            disabled={reply.isPending || !text.trim()}
+            disabled={reply.isPending || !text.trim() || !t.channel_connected}
           >
             {reply.isPending ? <Loader2 className="animate-spin" /> : <SendHorizontal />}
             Send reply

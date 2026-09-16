@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.inbox import InboxMessage, InboxThread, ThreadKind, ThreadStatus
 from app.models.provider_profile import ProviderProfile
+from app.models.social_connection import ConnectionStatus
 from app.services import whatsapp_web_service
 from app.services.inbox_provider import fetch_threads
 from app.services.inbox_seed import build_threads
@@ -277,6 +278,16 @@ class InboxService:
                 print(f"[automations] {trigger} emit failed: {exc}")
 
     # ------------------------------------------------------------- reads
+    async def connected_platform_set(self) -> set:
+        """Every platform this workspace currently has CONNECTED — including
+        whatsapp, unlike SocialService.connected_platforms() which filters to
+        the Upload-Post-manageable set only. `_skip_sync=True`: this just
+        annotates thread rows for display, it shouldn't trigger an extra
+        remote Upload-Post sync on top of the one list_threads() already does
+        via self.sync()."""
+        rows = await self.social.list(_skip_sync=True)
+        return {c.platform for c in rows if c.status == ConnectionStatus.CONNECTED}
+
     async def list_threads(
         self,
         *,
@@ -331,6 +342,18 @@ class InboxService:
         body = body.strip()
         if not body:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, "Reply is empty")
+
+        # A disconnected channel must fail loudly and up front — not silently
+        # (the remote API call below would eventually reject it, or worse,
+        # for WhatsApp specifically, might briefly still be reachable even
+        # after the workspace disconnected it here).
+        if t.source in ("upload_post", "whatsapp_web"):
+            connected = await self.connected_platform_set()
+            if t.platform not in connected:
+                raise HTTPException(
+                    status.HTTP_409_CONFLICT,
+                    f"{t.platform.capitalize()} is disconnected — reconnect it to reply here.",
+                )
 
         ext_message_id: Optional[str] = None
         if t.source == "upload_post" and t.ref:
@@ -391,6 +414,30 @@ class InboxService:
         t.assignee = assignee
         await self.db.commit()
         return t
+
+    async def delete_channel_history(self, platform: str) -> int:
+        """Permanently deletes every thread (and, via cascade, every
+        message) this workspace has for `platform`. Only allowed while that
+        platform is disconnected — deleting a live channel's history out
+        from under an active integration is exactly the kind of accident
+        this guard exists to prevent."""
+        conn = await self.social.get(platform)
+        if conn and conn.status == ConnectionStatus.CONNECTED:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{platform.capitalize()} is still connected — disconnect it first.",
+            )
+        res = await self.db.execute(
+            select(InboxThread).where(
+                InboxThread.workspace_id == self.workspace_id,
+                InboxThread.platform == platform,
+            )
+        )
+        threads = list(res.scalars().all())
+        for t in threads:
+            await self.db.delete(t)
+        await self.db.commit()
+        return len(threads)
 
     async def summary(self) -> Dict[str, Any]:
         threads = await self.list_threads()

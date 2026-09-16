@@ -11,6 +11,7 @@ import {
   RefreshCw,
   ExternalLink,
   Circle,
+  Trash2,
 } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Grid } from "@/components/om/primitives/Grid";
@@ -18,6 +19,7 @@ import { StatTile } from "@/components/om/primitives/StatTile";
 import { Card } from "@/components/om/primitives/Card";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { PlatformGlyph } from "@/components/om/primitives/PlatformChip";
+import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
 import { PLATFORMS, platform as findPlatform } from "@/lib/om/platforms";
 import { compact, relativeTime } from "@/lib/om/format";
 import { toast } from "@/lib/om/toast";
@@ -29,6 +31,7 @@ import {
   useConnectPage,
   useSyncConnections,
 } from "@/components/accounts/hooks";
+import { useDeleteChannelHistory } from "@/components/inbox/hooks";
 import { SUPPORTED_PLATFORMS } from "@/lib/api/social";
 import type { SocialConnection } from "@/lib/api/social";
 
@@ -39,7 +42,19 @@ export default function AccountsPage() {
   const disconnect = useDisconnect();
   const connectPage = useConnectPage();
   const sync = useSyncConnections();
+  const deleteHistory = useDeleteChannelHistory();
+  const { confirm, dialog } = useConfirm();
   const [connecting, setConnecting] = useState<string | null>(null);
+
+  const confirmDeleteHistory = async (platformId: string, label: string) => {
+    const ok = await confirm({
+      title: `Delete ${label} conversation history?`,
+      message: `This permanently deletes every past ${label} comment, DM and message stored in your Inbox. This can't be undone.`,
+      confirmLabel: "Delete history",
+      danger: true,
+    });
+    if (ok) deleteHistory.mutate(platformId);
+  };
 
   // Always pull fresh connection state when landing here (covers returning from
   // a connect flow, where the passive list may be within its sync throttle).
@@ -155,13 +170,17 @@ export default function AccountsPage() {
           <AvailableCard
             key={p.id}
             platformId={p.id}
+            conn={byPlatform.get(p.id)}
             onConnect={() => setConnecting(p.id)}
+            onDeleteHistory={() => confirmDeleteHistory(p.id, p.name)}
+            deletingHistory={deleteHistory.isPending}
             disabled={!configured}
           />
         ))}
       </Section>
 
       <ConnectDialog platformId={connecting} onOpenChange={(v) => !v && setConnecting(null)} />
+      {dialog}
     </div>
   );
 }
@@ -297,14 +316,24 @@ function ReconnectCard({
 
 function AvailableCard({
   platformId,
+  conn,
   onConnect,
+  onDeleteHistory,
+  deletingHistory,
   disabled,
 }: {
   platformId: string;
+  conn: SocialConnection | undefined;
   onConnect: () => void;
+  onDeleteHistory: () => void;
+  deletingHistory: boolean;
   disabled: boolean;
 }) {
   const p = findPlatform(platformId)!;
+  // A row exists only once this workspace has connected (and since
+  // disconnected) this platform before — that's the only case where there
+  // could be conversation history worth offering to delete.
+  const hasHistory = !!conn;
   return (
     <div className="rounded-xl border border-om-border bg-om-card/40 px-3.5 py-3">
       <div className="flex items-start gap-2.5">
@@ -322,6 +351,16 @@ function AvailableCard({
       <OmButton variant="solid" size="sm" className="mt-2.5 w-full" onClick={onConnect} disabled={disabled}>
         <Plug /> Connect
       </OmButton>
+      {hasHistory && (
+        <button
+          type="button"
+          onClick={onDeleteHistory}
+          disabled={deletingHistory}
+          className="mt-1.5 inline-flex w-full items-center justify-center gap-1 rounded-lg py-1 text-[10.5px] font-medium text-om-muted hover:text-om-red disabled:opacity-50"
+        >
+          <Trash2 className="size-3" /> Delete conversation history
+        </button>
+      )}
     </div>
   );
 }

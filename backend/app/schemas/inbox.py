@@ -48,6 +48,10 @@ class ThreadSummary(BaseModel):
     last_message_at: Optional[datetime] = None
     preview: str = ""
     like_count: Optional[int] = None
+    # False when this thread's platform is currently disconnected — the
+    # frontend uses it to flag the thread and disable replying. Computed at
+    # the endpoint layer (see inbox.py), never a real column.
+    channel_connected: bool = True
 
     model_config = {"from_attributes": True}
 
@@ -76,6 +80,11 @@ class AssignRequest(BaseModel):
 class SyncNote(BaseModel):
     platform: str
     message: str
+
+
+class DeleteHistoryResult(BaseModel):
+    platform: str
+    deleted: int
 
 
 class InboxSummary(BaseModel):
