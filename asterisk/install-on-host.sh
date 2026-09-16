@@ -142,6 +142,10 @@ if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; the
 
   install -d -o asterisk -g asterisk /opt/tolkyn
   install -m 0644 -o asterisk -g asterisk "$HERE/ami-bridge.py" /opt/tolkyn/ami-bridge.py
+  # voicemail.conf.template's externnotify — asterisk (the user, not the
+  # shell) executes this directly, so it needs +x.
+  install -m 0755 -o asterisk -g asterisk "$HERE/voicemail-notify.sh" /opt/tolkyn/voicemail-notify.sh
+  install -d -o asterisk -g asterisk /var/lib/tolkyn
 
   install -d /etc/tolkyn
   umask 077

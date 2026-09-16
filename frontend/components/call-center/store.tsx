@@ -141,7 +141,10 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
       volume: data?.volume ?? [],
       dial: (name, number) => {
         if (active) return toast.warn("End the current call first");
-        dialM.mutate({ name: name || "Unknown", number });
+        // leave name blank when the caller didn't type one — the backend
+        // tries to resolve it from CRM/phone book/leads before falling
+        // back to "Unknown caller"; hardcoding it here would skip that.
+        dialM.mutate({ name: name || "", number });
         feedBus.emit(`Dialing ${name || "Unknown"} · ${number}`, "ok");
       },
       answer: (id) => {

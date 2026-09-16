@@ -21,6 +21,7 @@ export interface RecentCall {
   durationSec: number;
   at: string;
   recorded: boolean;
+  recordingUrl?: string | null;
 }
 
 export interface ActiveCall {

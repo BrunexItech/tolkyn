@@ -46,6 +46,9 @@ class Call(BaseModel):
     muted = Column(Boolean, default=False, nullable=False)
     on_hold = Column(Boolean, default=False, nullable=False)
     recorded = Column(Boolean, default=False, nullable=False)
+    # A voicemail message (outcome=VOICEMAIL) or, later, a full call
+    # recording — a /media/... URL the frontend can play directly.
+    recording_url = Column(String(500), nullable=True)
     notes = Column(Text, nullable=True)
 
     queued_at = Column(DateTime(timezone=True), nullable=True)

@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useState } from "react";
 import {
   History,
   PhoneIncoming,
@@ -8,6 +9,8 @@ import {
   Voicemail,
   PhoneForwarded,
   Play,
+  Pause,
+  PhoneCall,
 } from "lucide-react";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { TableWrap } from "@/components/om/primitives/Table";
@@ -15,6 +18,7 @@ import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBa
 import { useCallCenter } from "./store";
 import { formatDuration, type CallOutcome } from "@/lib/om/call-center";
 import { relativeTime } from "@/lib/om/format";
+import { mediaUrl } from "@/lib/api/video";
 
 const OUTCOME: Record<CallOutcome, { tone: BadgeTone; label: string; Icon: typeof PhoneMissed }> = {
   completed: { tone: "green", label: "Completed", Icon: PhoneIncoming },
@@ -24,11 +28,27 @@ const OUTCOME: Record<CallOutcome, { tone: BadgeTone; label: string; Icon: typeo
 };
 
 export function RecentCalls() {
-  const { recent } = useCallCenter();
+  const { recent, dial, active } = useCallCenter();
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playingId, setPlayingId] = useState<string | null>(null);
+
+  const togglePlay = (id: string, url: string) => {
+    const el = audioRef.current;
+    if (!el) return;
+    if (playingId === id) {
+      el.pause();
+      setPlayingId(null);
+      return;
+    }
+    el.src = mediaUrl(url);
+    el.play().catch(() => undefined);
+    setPlayingId(id);
+  };
 
   return (
     <Card>
       <CardTitle icon={<History />}>Recent calls</CardTitle>
+      <audio ref={audioRef} onEnded={() => setPlayingId(null)} className="hidden" />
       <TableWrap>
         <table>
           <thead>
@@ -39,6 +59,7 @@ export function RecentCalls() {
               <th>Duration</th>
               <th>When</th>
               <th>Rec.</th>
+              <th />
             </tr>
           </thead>
           <tbody>
@@ -71,12 +92,30 @@ export function RecentCalls() {
                   </td>
                   <td className="text-om-muted">{relativeTime(c.at)}</td>
                   <td>
-                    {c.recorded ? (
-                      <button className="grid size-6 place-items-center rounded-md border border-om-border text-om-muted hover:text-om-text">
-                        <Play className="size-3" />
+                    {c.recorded && c.recordingUrl ? (
+                      <button
+                        type="button"
+                        title={c.outcome === "voicemail" ? "Play voicemail" : "Play recording"}
+                        onClick={() => togglePlay(c.id, c.recordingUrl!)}
+                        className="grid size-6 place-items-center rounded-md border border-om-border text-om-muted hover:text-om-text"
+                      >
+                        {playingId === c.id ? <Pause className="size-3" /> : <Play className="size-3" />}
                       </button>
                     ) : (
                       <span className="text-om-faint">—</span>
+                    )}
+                  </td>
+                  <td>
+                    {c.number && c.number.toLowerCase() !== "unknown" && (
+                      <button
+                        type="button"
+                        title={`Call back ${c.number}`}
+                        disabled={!!active}
+                        onClick={() => dial(c.name === "Unknown caller" ? "" : c.name, c.number)}
+                        className="grid size-6 place-items-center rounded-md border border-om-border text-om-muted hover:text-om-green hover:border-om-green/40 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        <PhoneCall className="size-3" />
+                      </button>
                     )}
                   </td>
                 </tr>

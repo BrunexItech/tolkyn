@@ -1,3 +1,4 @@
+import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -139,7 +140,8 @@ class CallCenterService:
             "outcome": (c.outcome or CallOutcome.COMPLETED).value,
             "durationSec": c.duration_sec or 0,
             "at": _aware(c.ended_at or c.started_at or c.queued_at or c.created_at).isoformat(),
-            "recorded": bool(c.recorded),
+            "recorded": bool(c.recorded and c.recording_url),
+            "recordingUrl": c.recording_url,
         }
 
     def _active_row(self, c: Optional[Call]) -> Optional[Dict[str, Any]]:
@@ -339,10 +341,15 @@ class CallCenterService:
             except TelephonyError as exc:
                 raise HTTPException(status.HTTP_502_BAD_GATEWAY, f"Phone system: {exc.message}")
 
+        resolved_name = (name or "").strip()
+        if not resolved_name:
+            from app.services.contact_lookup import resolve_contact_name
+
+            resolved_name = await resolve_contact_name(self.db, self.workspace_id, number) or ""
         c = Call(
             direction=CallDirection.OUTBOUND,
             state=CallState.ACTIVE,
-            contact_name=(name or "").strip() or "Unknown caller",
+            contact_name=resolved_name or "Unknown caller",
             number=number.strip(),
             recorded=True,
             # started_at stays NULL until the far end actually answers — the
@@ -584,7 +591,12 @@ class CallCenterService:
             d.get("caller_number") or d.get("from")
             or d.get("callee_number") or d.get("number") or d.get("to") or ""
         ).strip()
-        name = d.get("caller_name") or d.get("from_name") or "Unknown caller"
+        name = d.get("caller_name") or d.get("from_name")
+        if not name and number:
+            from app.services.contact_lookup import resolve_contact_name
+
+            name = await resolve_contact_name(self.db, self.workspace_id, number)
+        name = name or "Unknown caller"
         direction = str(d.get("direction") or "").lower()
 
         existing = await self._call_by_channel(channel)
@@ -645,6 +657,48 @@ class CallCenterService:
             ).scalars().first()
             if row and channel:
                 row.provider_channel_id = channel
+                await self.db.commit()
+            return
+
+        # --- caller left a voicemail (asterisk/voicemail-notify.sh) --------
+        # Handled before the `not existing` gate below: the dial-timeout that
+        # sends the caller to VoiceMail() may already have ended/missed this
+        # row by the time the message finishes recording, or the channel id
+        # may not line up — either way, a voicemail is worth keeping even if
+        # it can't be matched back to the original ring.
+        if "voicemail" in etype:
+            audio_b64 = str(d.get("audio_b64") or "")
+            call = existing
+            if call is None:
+                call = Call(
+                    direction=CallDirection.INBOUND,
+                    contact_name=name,
+                    number=number or "unknown",
+                    reason="Left a voicemail",
+                    provider_channel_id=channel,
+                    queued_at=_now(),
+                    workspace_id=self.workspace_id,
+                )
+                self.db.add(call)
+            if audio_b64:
+                import base64
+                import uuid
+                from pathlib import Path
+
+                ext = re.sub(r"[^a-z0-9]", "", str(d.get("format") or "wav").lower()) or "wav"
+                media_dir = Path(__file__).resolve().parents[2] / "media" / "voicemail"
+                media_dir.mkdir(parents=True, exist_ok=True)
+                fname = f"{uuid.uuid4().hex}.{ext}"
+                try:
+                    (media_dir / fname).write_bytes(base64.b64decode(audio_b64))
+                    call.recording_url = f"/media/voicemail/{fname}"
+                except Exception:  # noqa: BLE001 — a bad upload shouldn't lose the call record
+                    pass
+            if call.state != CallState.ENDED:
+                await self._end_call(call, "voicemail")
+            else:
+                call.outcome = CallOutcome.VOICEMAIL
+                call.recorded = bool(call.recording_url)
                 await self.db.commit()
             return
 
@@ -709,10 +763,15 @@ class CallCenterService:
             ).scalars().first()
             if hit:
                 return hit
+            resolved_name = (name or "").strip()
+            if not resolved_name and num:
+                from app.services.contact_lookup import resolve_contact_name
+
+                resolved_name = await resolve_contact_name(self.db, self.workspace_id, num) or ""
             c = Call(
                 direction=CallDirection.INBOUND,
                 state=CallState.QUEUED,
-                contact_name=(name or "").strip() or "Unknown caller",
+                contact_name=resolved_name or "Unknown caller",
                 number=num or "unknown",
                 reason="Inbound call",
                 queued_at=_now(),

@@ -156,6 +156,7 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE call_agents ADD COLUMN IF NOT EXISTS sip_password_enc VARCHAR(500)",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS provider_channel_id VARCHAR(128)",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ivr_state JSONB",
+    "ALTER TABLE calls ADD COLUMN IF NOT EXISTS recording_url VARCHAR(500)",
     "ALTER TABLE email_sends ADD COLUMN IF NOT EXISTS email_campaign_id VARCHAR(36)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_image_limit INTEGER",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS daily_video_limit INTEGER",

@@ -20,6 +20,7 @@ class RecentCall(BaseModel):
     durationSec: int
     at: str
     recorded: bool
+    recordingUrl: Optional[str] = None
 
 
 class ActiveCall(BaseModel):

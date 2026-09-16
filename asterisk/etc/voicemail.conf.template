@@ -6,6 +6,10 @@ minsecs = 2
 maxsilence = 5
 sendvoicemail = no
 attach = no
+; posts each new message (audio + caller info) to the Tolkyn backend so it
+; shows up in the Call Center — see voicemail-notify.sh. No-ops safely if the
+; call-event bridge isn't configured.
+externnotify = /opt/tolkyn/voicemail-notify.sh
 
 [default]
 ${SOFTPHONE_EXT} => 0000,Agent,,,attach=no
