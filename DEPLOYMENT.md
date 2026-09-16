@@ -124,11 +124,14 @@ config, install + start coturn (the media relay) and the AMI call-event bridge.
    journalctl -u tolkyn-ami-bridge -f               # call events as they fire
    ```
 
-**Per client:** Super Admin → Telephony → set provider **Tolkyn PBX**, tick
-Active, set their **Assigned DID**. Then in that client's Call Center → Agent
-lines, give each agent a SIP extension + password — and add the matching
-endpoint to `asterisk/etc/pjsip.conf.template` (multi-tenant PJSIP-from-DB and
-ARI call control / CDR is the next phase, not the POC).
+**Per client:** entirely from Super Admin → Telephony — no need to open the
+client's own workspace. Set provider **Tolkyn PBX**, tick Active, set their
+**Assigned DID**, and fill in their softphone line's **SIP extension /
+password** right there on the same page. That extension still has to match
+an endpoint that actually exists in `asterisk/etc/pjsip.conf.template` on the
+server, since PJSIP config is one static file today — multi-tenant
+PJSIP-from-DB (a distinct extension per client, provisioned automatically)
+and ARI call control / CDR are the next phase, not the POC.
 
 ### Moving from a POC trunk to a paid production trunk
 
