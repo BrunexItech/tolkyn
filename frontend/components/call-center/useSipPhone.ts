@@ -55,7 +55,17 @@ export function useSipPhone(
     const ring = (ringRef.current ??= new Ringtone());
 
     const phone = new SipPhone(cfg, audio, {
-      onState: setState,
+      // Outbound ringback: Cloud One/Asterisk early media before answer is
+      // unreliable over WebRTC (it needs ICE+DTLS-SRTP already established,
+      // which often isn't done yet while the far end is still ringing) — so
+      // give the agent a local tone the moment we start dialing, the same
+      // way inbound calls get a locally-generated ring. "ringing" (inbound)
+      // manages its own ring lifecycle via onInbound/answer/decline below.
+      onState: (s) => {
+        if (s === "calling") ring.start();
+        else if (s !== "ringing") ring.stop();
+        setState(s);
+      },
       onInbound: (from) => {
         setIncoming(from);
         ring.start();
