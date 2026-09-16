@@ -16,6 +16,7 @@ from app.schemas.admin import (
     ActivityLogRow,
     AnnouncementPreview,
     AnnouncementRow,
+    DidPoolResponse,
     ImageUsageList,
     ImageUsageRow,
     ModuleInfo,
@@ -40,7 +41,17 @@ from app.schemas.admin import (
     VideoUsageList,
     VideoUsageRow,
 )
+from app.schemas.call_center import (
+    AgentRow,
+    IvrCall,
+    IvrFlowPayload,
+    IvrFlowUpdate,
+    IvrSimulateRequest,
+    IvrSimulateResult,
+)
 from app.schemas.video import VideoModelInfo
+from app.services.call_center_service import CallCenterService
+from app.services.ivr_service import IvrService
 from app.services.super_admin_service import SuperAdminService
 
 router = APIRouter()
@@ -215,6 +226,16 @@ async def delete_package(
 
 
 # --------------------------------------------------------------- telephony
+# Static path — must be declared before /telephony/{workspace_id} or FastAPI
+# would match "did-pool" as a workspace_id.
+@router.get("/telephony/did-pool", response_model=DidPoolResponse)
+async def telephony_did_pool(
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return DidPoolResponse(**await SuperAdminService(db).did_pool())
+
+
 @router.get("/telephony/{workspace_id}", response_model=TelephonyConfigResponse)
 async def get_telephony(
     workspace_id: str,
@@ -234,6 +255,90 @@ async def update_telephony(
     return TelephonyConfigResponse(
         **await SuperAdminService(db).update_telephony(workspace_id, body.model_dump(exclude_unset=True))
     )
+
+
+# ----------------------------------------------- telephony: IVR / call flow
+# The IVR lives here, not in the client's own dashboard — a Tolkyn operator
+# takes the client's requirements and builds/tests their phone menu on their
+# behalf. Every handler just parametrises IvrService / CallCenterService
+# with the chosen workspace_id; the underlying engine is unchanged from the
+# one that actually runs live calls.
+@router.get("/telephony/{workspace_id}/agents", response_model=list[AgentRow])
+async def admin_ivr_agents(
+    workspace_id: str,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """This workspace's call-centre agents — for the 'ring this agent'
+    dropdown in the IVR builder."""
+    return await CallCenterService(db, workspace_id).agents()
+
+
+@router.get("/telephony/{workspace_id}/ivr", response_model=IvrFlowPayload)
+async def admin_get_ivr(
+    workspace_id: str,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return IvrFlowPayload(**await IvrService(db, workspace_id).as_dict())
+
+
+@router.put("/telephony/{workspace_id}/ivr", response_model=IvrFlowPayload)
+async def admin_update_ivr(
+    workspace_id: str,
+    body: IvrFlowUpdate,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    patch = body.model_dump(exclude_unset=True)
+    return IvrFlowPayload(**await IvrService(db, workspace_id).update(patch))
+
+
+@router.post("/telephony/{workspace_id}/ivr/test", response_model=IvrSimulateResult)
+async def admin_test_ivr(
+    workspace_id: str,
+    body: IvrSimulateRequest,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return IvrSimulateResult(**await IvrService(db, workspace_id).simulate(body.digits))
+
+
+@router.get("/telephony/{workspace_id}/ivr-calls", response_model=list[IvrCall])
+async def admin_ivr_calls(
+    workspace_id: str,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Callers currently sitting in this workspace's live phone menu — for
+    watching a 'place a test call' run through to the real end (queue /
+    voicemail / transfer), not just the pure text simulator above."""
+    return await CallCenterService(db, workspace_id).ivr_calls()
+
+
+@router.post("/telephony/{workspace_id}/ivr/simulate-call", response_model=list[IvrCall])
+async def admin_simulate_ivr_call(
+    workspace_id: str,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = CallCenterService(db, workspace_id)
+    await svc.simulate_inbound_ivr()
+    return await svc.ivr_calls()
+
+
+@router.post("/telephony/{workspace_id}/ivr-calls/{call_id}/press", response_model=list[IvrCall])
+async def admin_ivr_press(
+    workspace_id: str,
+    call_id: str,
+    body: IvrSimulateRequest,
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = CallCenterService(db, workspace_id)
+    digit = (body.digits or [""])[0]
+    await svc.ivr_press(call_id, digit)
+    return await svc.ivr_calls()
 
 
 # ---------------------------------------------------------- announcements

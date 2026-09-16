@@ -4,7 +4,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import Actor, get_actor, get_workspace_id
 from app.core.config import settings
+from app.core.crypto import decrypt
 from app.db import get_db
+from app.models.call import CallAgent
 from app.models.team_member import TeamRole
 from app.models.telephony import TelephonyConfig
 from app.schemas.call_center import (
@@ -14,17 +16,12 @@ from app.schemas.call_center import (
     DialRequest,
     FlagsRequest,
     HangupRequest,
-    IvrFlowPayload,
-    IvrFlowUpdate,
-    IvrSimulateRequest,
-    IvrSimulateResult,
     PresenceRequest,
     SaveCallerNameRequest,
     SoftphoneConfig,
     SoftphoneEvent,
 )
 from app.services.call_center_service import CallCenterService
-from app.services.ivr_service import IvrService
 
 router = APIRouter()
 # PBX -> backend call events (per-workspace URL + shared secret). Not
@@ -179,60 +176,62 @@ async def set_agent_sip(
     return await svc.overview()
 
 
-# ---- IVR / inbound call flow --------------------------------------------
-@router.get("/ivr", response_model=IvrFlowPayload)
-async def get_ivr(
-    user_id: str = Depends(get_workspace_id),
-    db: AsyncSession = Depends(get_db),
-):
-    return IvrFlowPayload(**await IvrService(db, user_id).as_dict())
+# IVR / inbound call flow: configuring and testing it now lives entirely in
+# Super Admin -> Telephony -> Call flow (see endpoints/admin.py) — a Tolkyn
+# operator builds it from the client's requirements. The runtime this
+# builds still runs every real call (CallCenterService.handle_pbx_event ->
+# IvrService), and this workspace router still surfaces read-only "who's in
+# the menu right now" via overview()/poll()'s ivrCalls — only the
+# editing/testing HTTP surface moved.
 
 
-@router.put("/ivr", response_model=IvrFlowPayload)
-async def update_ivr(
-    body: IvrFlowUpdate,
-    actor: Actor = Depends(get_actor),
-    db: AsyncSession = Depends(get_db),
-):
-    if actor.role != TeamRole.OWNER and not actor.has("engage"):
-        raise HTTPException(status.HTTP_403_FORBIDDEN, "Only the workspace owner can edit the call flow.")
-    patch = body.model_dump(exclude_unset=True)
-    return IvrFlowPayload(**await IvrService(db, actor.workspace_id).update(patch))
+# ---- PBX routing table (host sync script -> backend) --------------------
+def _check_pbx_secret(request: Request) -> None:
+    supplied = request.headers.get("x-webhook-secret") or request.query_params.get("secret")
+    if not settings.PBX_EVENT_WEBHOOK_SECRET or supplied != settings.PBX_EVENT_WEBHOOK_SECRET:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad webhook secret")
 
 
-@router.post("/ivr/test", response_model=IvrSimulateResult)
-async def test_ivr(
-    body: IvrSimulateRequest,
-    user_id: str = Depends(get_workspace_id),
-    db: AsyncSession = Depends(get_db),
-):
-    return IvrSimulateResult(**await IvrService(db, user_id).simulate(body.digits))
+@webhook_router.get("/pbx-routing")
+async def pbx_routing(request: Request, db: AsyncSession = Depends(get_db)):
+    """Every DID -> SIP extension -> workspace line currently live on the
+    shared Asterisk PBX. The host-side sync script (asterisk/sync_workspaces.py)
+    polls this to keep PJSIP endpoints + the AstDB routing table in sync with
+    what super admin has configured — so adding a client is 'assign a DID and
+    an extension', never a manual dialplan edit.
 
-
-@router.post("/ivr/simulate-call", response_model=CallOverview)
-async def simulate_ivr_call(
-    user_id: str = Depends(get_workspace_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Drop a fresh inbound call straight into the live IVR — for end-to-end
-    testing without a real trunk."""
-    svc = _svc(db, user_id)
-    await svc.simulate_inbound_ivr()
-    return await svc.overview()
-
-
-@router.post("/calls/{call_id}/ivr-press", response_model=CallOverview)
-async def ivr_press(
-    call_id: str,
-    body: IvrSimulateRequest,
-    user_id: str = Depends(get_workspace_id),
-    db: AsyncSession = Depends(get_db),
-):
-    """Send a keypress to a call currently in the IVR menu."""
-    svc = _svc(db, user_id)
-    digit = (body.digits or [""])[0]
-    await svc.ivr_press(call_id, digit)
-    return await svc.overview()
+    Global secret only (not a per-workspace one): this spans every tenant, so
+    only the PBX host itself should ever be able to call it — it returns
+    every agent's SIP password in the clear."""
+    _check_pbx_secret(request)
+    rows = (
+        await db.execute(
+            select(TelephonyConfig, CallAgent)
+            .join(CallAgent, CallAgent.workspace_id == TelephonyConfig.workspace_id)
+            .where(
+                TelephonyConfig.provider == "asterisk",
+                TelephonyConfig.is_active.is_(True),
+                TelephonyConfig.outbound_caller_id.isnot(None),
+                CallAgent.is_self.is_(True),
+            )
+        )
+    ).all()
+    lines = []
+    for cfg, agent in rows:
+        if not (agent.sip_extension and agent.sip_password_enc):
+            continue
+        try:
+            password = decrypt(agent.sip_password_enc)
+        except Exception:  # noqa: BLE001 - a bad/legacy ciphertext shouldn't break every other line
+            continue
+        lines.append({
+            "workspace_id": cfg.workspace_id,
+            "did": cfg.outbound_caller_id,
+            "extension": agent.sip_extension,
+            "password": password,
+            "record_calls": bool(cfg.record_calls),
+        })
+    return {"lines": lines}
 
 
 # ---- PBX event webhook (on webhook_router — not plan-gated) --------------

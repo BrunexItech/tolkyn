@@ -1,0 +1,16 @@
+[Unit]
+Description=Tolkyn PBX -> multi-tenant workspace sync (one-shot, run by the .timer)
+After=network.target asterisk.service
+Wants=asterisk.service
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/tolkyn/ami-bridge.env
+ExecStart=/usr/bin/python3 /opt/tolkyn/sync_workspaces.py
+User=asterisk
+Group=asterisk
+NoNewPrivileges=yes
+ProtectHome=yes
+PrivateTmp=yes
+ReadOnlyPaths=/opt/tolkyn
+ReadWritePaths=/etc/asterisk

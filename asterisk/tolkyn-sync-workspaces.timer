@@ -1,0 +1,11 @@
+[Unit]
+Description=Run tolkyn-sync-workspaces.service every 30s
+
+[Timer]
+OnBootSec=10s
+OnUnitActiveSec=30s
+AccuracySec=5s
+Persistent=false
+
+[Install]
+WantedBy=timers.target

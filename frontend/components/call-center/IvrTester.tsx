@@ -5,7 +5,7 @@ import { Delete, Phone, RotateCcw, Play } from "lucide-react";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { cn } from "@/lib/utils";
-import { callCenterApi, type IvrSimulateResult } from "@/lib/api/callcenter";
+import type { IvrSimulateResult } from "@/lib/api/callcenter";
 
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"] as const;
 
@@ -21,7 +21,13 @@ const KIND_STYLE: Record<string, string> = {
  * off the server's own simulator. No guesswork: what you see here is what a
  * real caller hears.
  */
-export function IvrTester({ dirty }: { dirty: boolean }) {
+export function IvrTester({
+  dirty,
+  onTest,
+}: {
+  dirty: boolean;
+  onTest: (digits: string[]) => Promise<IvrSimulateResult>;
+}) {
   const [digits, setDigits] = useState<string[]>([]);
   const [result, setResult] = useState<IvrSimulateResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -29,14 +35,14 @@ export function IvrTester({ dirty }: { dirty: boolean }) {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    callCenterApi
-      .testIvr(digits)
+    onTest(digits)
       .then((r) => !cancelled && setResult(r))
       .catch(() => !cancelled && setResult(null))
       .finally(() => !cancelled && setLoading(false));
     return () => {
       cancelled = true;
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [digits]);
 
   const press = (k: string) => setDigits((d) => (d.length < 12 ? [...d, k] : d));

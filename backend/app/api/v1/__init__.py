@@ -22,6 +22,7 @@ from app.api.v1.endpoints.team import router as team_router
 from app.api.v1.endpoints.call_center import router as call_center_router, webhook_router as call_center_webhook_router
 from app.api.v1.endpoints.admin import router as admin_router
 from app.api.v1.endpoints.video import router as video_router
+from app.api.v1.endpoints.elevenlabs import router as elevenlabs_router
 
 
 def _feat(*modules: str):
@@ -40,6 +41,7 @@ router.include_router(admin_router, prefix="/admin", tags=["Super Admin"])
 # --- webhooks (service-to-service, no user session) ---
 router.include_router(messaging_webhook_router, prefix="/messaging", tags=["Messaging"])
 router.include_router(call_center_webhook_router, prefix="/call-center", tags=["Call Center"])
+router.include_router(elevenlabs_router, prefix="/elevenlabs", tags=["ElevenLabs Agent"])
 
 # --- plan-gated: 403 unless the workspace's package grants the module ---
 router.include_router(leads_router, prefix="/leads", tags=["Leads"], dependencies=_feat("leads"))

@@ -141,6 +141,23 @@ class Settings(BaseSettings):
     # DB round-trip. Blank => only per-workspace secrets are accepted.
     PBX_EVENT_WEBHOOK_SECRET: str = Field(default="", description="shared secret for POST /call-center/webhook/<ws>/event")
 
+    # ElevenLabs Conversational AI agent — answers/places calls via a second
+    # SIP trunk into the same Asterisk PBX. Everything below is inert until
+    # ELEVENLABS_API_KEY is set; see asterisk/README.md for the wiring.
+    ELEVENLABS_API_KEY: str = Field(default="", description="paste once the ElevenAgents SIP trunk + tools are configured on their side")
+    # Verifies POSTs FROM ElevenLabs (conversation-initiation webhook, and
+    # any agent "tool" hitting our /elevenlabs/tools/* endpoints) — set this
+    # in both places: here, and as a custom header in the ElevenLabs agent's
+    # Security settings / tool config.
+    ELEVENLABS_WEBHOOK_SECRET: str = Field(default="", description="shared secret ElevenLabs' webhook + tool calls must send")
+
+    # The block of DIDs Cloud One allocated on the shared trunk, comma-separated
+    # E.164 (e.g. "+254207916250,+254207916251,..."). Super admin can only
+    # assign a workspace a DID from this pool — keeps two workspaces from ever
+    # being handed the same number by a typo. Blank => no pool restriction
+    # (any E.164 string is accepted, for dev/testing).
+    CLOUDONE_DID_POOL: str = Field(default="", description="comma-separated E.164 DIDs available to assign to workspaces")
+
     # Video generation — Google Veo 3.1 via the Gemini API
     GEMINI_API_KEY: Optional[str] = Field(default=None, description="Gemini API key (Veo 3.1 video generation)")
     GEMINI_API_BASE: str = Field(

@@ -12,4 +12,6 @@ attach = no
 externnotify = /opt/tolkyn/voicemail-notify.sh
 
 [default]
-${SOFTPHONE_EXT} => 0000,Agent,,,attach=no
+; One mailbox per workspace's agent extension — generated + kept in sync by
+; asterisk/sync_workspaces.py, same mechanism as pjsip_workspaces.conf.
+#include voicemail_workspaces.conf

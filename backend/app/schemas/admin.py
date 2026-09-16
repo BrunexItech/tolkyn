@@ -243,6 +243,12 @@ class TelephonyConfigResponse(BaseModel):
     agent_sip_configured: bool = False  # extension AND a password are both set
 
 
+class DidPoolResponse(BaseModel):
+    all: List[str] = []
+    assigned: Dict[str, str] = {}  # did -> workspace_id
+    available: List[str] = []
+
+
 class TelephonyConfigUpdate(BaseModel):
     provider: Optional[str] = None  # simulated | cloudone | asterisk
     is_active: Optional[bool] = None

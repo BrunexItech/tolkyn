@@ -20,6 +20,24 @@ from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.lead import Lead
 import secrets as _secrets
 
+
+def _normalize_did(raw: str) -> str:
+    """+254XXXXXXXXX — the same normalisation the dialplan applies to caller
+    ID (asterisk/etc/extensions.conf.template's CNUM logic), so a DID typed
+    as 0207916250 / 254207916250 / +254207916250 is always stored (and
+    matched against the pool / other workspaces) the same way."""
+    raw = (raw or "").strip()
+    digits = "".join(ch for ch in raw if ch.isdigit())
+    if not digits:
+        return raw
+    if digits.startswith("254"):
+        return "+" + digits
+    if digits.startswith("0"):
+        return "+254" + digits[1:]
+    if len(digits) == 9:
+        return "+254" + digits
+    return "+" + digits
+
 from app.core.config import settings as _settings
 from app.core.crypto import encrypt as _encrypt
 from app.core.features import MODULES, normalize_modules
@@ -386,6 +404,28 @@ class SuperAdminService:
             other.is_default = False
 
     # -------------------------------------------------------- telephony
+    async def did_pool(self) -> Dict[str, Any]:
+        """The block of DIDs Cloud One allocated on the shared trunk, and
+        which workspace (if any) already holds each one. The telephony admin
+        page only offers what's in `available` — a workspace can never be
+        assigned a DID another workspace already has, by construction, not
+        just by later validation."""
+        pool = [_normalize_did(d) for d in _settings.CLOUDONE_DID_POOL.split(",") if d.strip()]
+        rows = (
+            await self.db.execute(
+                select(TelephonyConfig.workspace_id, TelephonyConfig.outbound_caller_id).where(
+                    TelephonyConfig.outbound_caller_id.isnot(None),
+                    TelephonyConfig.provider == "asterisk",
+                )
+            )
+        ).all()
+        assigned = {did: ws for ws, did in rows}
+        return {
+            "all": pool,
+            "assigned": assigned,
+            "available": [d for d in pool if d not in assigned],
+        }
+
     async def _agent_sip_status(self, workspace_id: str) -> Dict[str, Any]:
         from app.services.call_center_service import CallCenterService
 
@@ -436,9 +476,46 @@ class SuperAdminService:
             cfg = TelephonyConfig(workspace_id=workspace_id, webhook_secret=_secrets.token_hex(24))
             self.db.add(cfg)
         for k in ("provider", "is_active", "pbx_base_url", "api_client_id", "sip_domain",
-                  "sip_ws_url", "outbound_caller_id", "record_calls"):
+                  "sip_ws_url", "record_calls"):
             if k in patch and patch[k] is not None:
                 setattr(cfg, k, patch[k])
+
+        # The DID is the one thing two workspaces can never be allowed to
+        # share on the shared Asterisk/Cloud One trunk — it's how inbound
+        # calls get routed to the right client. Validate it here, against
+        # the DB, not just in the frontend picker. Only for provider
+        # "asterisk" — a CloudOne/Yeastar client's caller ID is a completely
+        # unrelated numbering system and shouldn't be pool/uniqueness
+        # constrained against our own trunk's DIDs.
+        if "outbound_caller_id" in patch and patch["outbound_caller_id"] is not None:
+            if cfg.provider != "asterisk":
+                cfg.outbound_caller_id = patch["outbound_caller_id"] or None
+            else:
+                did = _normalize_did(patch["outbound_caller_id"])
+                if not did:
+                    cfg.outbound_caller_id = None
+                else:
+                    pool = [_normalize_did(d) for d in _settings.CLOUDONE_DID_POOL.split(",") if d.strip()]
+                    if pool and did not in pool:
+                        raise HTTPException(
+                            status.HTTP_422_UNPROCESSABLE_ENTITY,
+                            f"{did} isn't one of the allocated Cloud One DIDs",
+                        )
+                    conflict = (
+                        await self.db.execute(
+                            select(TelephonyConfig.workspace_id).where(
+                                TelephonyConfig.outbound_caller_id == did,
+                                TelephonyConfig.provider == "asterisk",
+                                TelephonyConfig.workspace_id != workspace_id,
+                            )
+                        )
+                    ).scalar_one_or_none()
+                    if conflict:
+                        raise HTTPException(
+                            status.HTTP_409_CONFLICT,
+                            f"{did} is already assigned to another workspace",
+                        )
+                    cfg.outbound_caller_id = did
         if "api_client_secret" in patch:
             v = patch["api_client_secret"]
             cfg.api_client_secret_enc = _encrypt(v) if v else None
@@ -451,7 +528,17 @@ class SuperAdminService:
             cfg.sip_domain = cfg.sip_domain or _settings.PBX_SIP_DOMAIN
         if not cfg.webhook_secret:
             cfg.webhook_secret = _secrets.token_hex(24)
-        await self.db.commit()
+        try:
+            await self.db.commit()
+        except IntegrityError:
+            # belt-and-braces: the pool/conflict check above closes almost
+            # every window, but two concurrent saves could still both pass it
+            # a moment apart — the DB-level unique index is the real backstop.
+            await self.db.rollback()
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{cfg.outbound_caller_id} is already assigned to another workspace",
+            )
 
         if "agent_sip_extension" in patch or "agent_sip_password" in patch:
             from app.services.call_center_service import CallCenterService

@@ -9,7 +9,6 @@ import { StatusBadge } from "@/components/om/primitives/StatusBadge";
 import { cn } from "@/lib/utils";
 import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
 import type { IvrAction, IvrFlow, IvrMenu, IvrOption } from "@/lib/api/callcenter";
-import { useCallAgents } from "./ivr-hooks";
 
 const DIGITS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0", "*", "#"];
 const DAYS: { key: string; label: string }[] = [
@@ -42,16 +41,17 @@ const TZ = [
 
 export function IvrBuilder({
   flow,
+  agents,
   saving,
   onSave,
   onDirtyChange,
 }: {
   flow: IvrFlow;
+  agents: { id: string; name: string }[];
   saving: boolean;
   onSave: (f: IvrFlow) => void;
   onDirtyChange?: (dirty: boolean) => void;
 }) {
-  const { data: agents } = useCallAgents();
   const { confirm, dialog } = useConfirm();
   const [draft, setDraft] = useState<IvrFlow>(flow);
 
@@ -139,7 +139,7 @@ export function IvrBuilder({
           menu={draft.menus[key]}
           isMain={key === "main"}
           allMenuKeys={menuKeys}
-          agents={(agents ?? []).map((a) => ({ id: a.id, name: a.name }))}
+          agents={agents}
           onChange={(m) => setMenu(key, m)}
           onDelete={() => removeSubmenu(key)}
         />

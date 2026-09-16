@@ -67,7 +67,41 @@ The browser softphone also self-reports its SIP lifecycle
 (`POST /call-center/softphone/event`) so the UI stays correct even if the bridge
 is down while the agent's tab is open.
 
-## POC scope
-One trunk, one extension (`1001`), one DID. Multi-tenant (per-workspace trunks,
-DID→workspace routing, PJSIP realtime from the DB, ARI call control/CDR, IVR
-over the real trunk) is the production phase — see `DEPLOYMENT.md`.
+## Multi-tenant: one trunk, many DIDs, many workspaces
+One Cloud One trunk serves every workspace. Adding a client is entirely a
+super-admin action (Telephony page): assign them a **DID** from the pool
+(`CLOUDONE_DID_POOL` in the backend `.env` — a workspace can never be handed
+a DID another workspace already holds, enforced by a DB unique index, not
+just the UI) and a **SIP extension + password**. Nothing to touch on the PBX
+itself.
+
+`sync_workspaces.py` (host systemd timer `tolkyn-sync-workspaces`, every 30s)
+is what makes that true: it pulls the current DID/extension/workspace table
+from the backend (`GET /call-center/pbx-routing`, secret-protected) and
+- (re)writes `pjsip_workspaces.conf` — one endpoint/aor/auth block per agent
+  extension, `#include`d from `pjsip.conf` — then `pjsip reload`s only if it
+  changed;
+- (re)writes `voicemail_workspaces.conf` the same way, `#include`d from
+  `voicemail.conf`;
+- keeps Asterisk's built-in AstDB (family `tolkyn`) current: `did/<last 9
+  digits>` → extension, `ext_did/<ext>` → DID, `ext_ws/<ext>` → workspace_id.
+
+`extensions.conf.template`'s dialplan never hardcodes a DID or extension — it
+looks up `${DB(tolkyn/did/...)}` at call time, so onboarding a new client
+never touches the dialplan. An unmapped DID is hung up, never guessed at
+(same principle in the AMI bridge and voicemail-notify.sh: an event that
+can't be resolved to exactly one workspace is dropped and logged, not
+attributed to the wrong client).
+
+```bash
+journalctl -u tolkyn-sync-workspaces -f
+sudo asterisk -rx "database show tolkyn"     # the live routing table
+sudo asterisk -rx "pjsip show endpoints"     # every provisioned agent line
+sudo systemctl start tolkyn-sync-workspaces.service   # force a sync now
+```
+
+One escape hatch: `PBX_EVENT_WORKSPACE_ID` / `SOFTPHONE_EXT` in `.env` are
+kept as a legacy single-tenant fallback, used only for as long as the routing
+table is completely empty (nobody has been assigned a DID yet through super
+admin). The moment even one workspace is configured, an unresolved call is
+dropped rather than silently attributed to that fallback workspace.

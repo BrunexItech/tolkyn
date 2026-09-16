@@ -2,6 +2,8 @@
  * lib/api/http.ts — its own token key (`admin_access_token`), its own error
  * type, so a tenant session and an admin session never collide in the same
  * browser. */
+import type { AgentRow, IvrCall, IvrFlow, IvrSimulateResult } from "@/lib/api/callcenter";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 function adminToken(): string | null {
@@ -212,6 +214,12 @@ export interface TelephonyConfig {
   agent_sip_configured: boolean;
 }
 
+export interface DidPool {
+  all: string[];
+  assigned: Record<string, string>; // did -> workspace_id
+  available: string[];
+}
+
 export type TelephonyConfigInput = Partial<{
   provider: string;
   is_active: boolean;
@@ -404,10 +412,25 @@ export const adminApi = {
   sendAnnouncement: (body: { subject: string; body: string; audience: AnnouncementAudience }) =>
     request<AnnouncementRow>("POST", "/admin/announcements", body),
 
+  getDidPool: () => request<DidPool>("GET", "/admin/telephony/did-pool"),
   getTelephony: (workspaceId: string) =>
     request<TelephonyConfig>("GET", `/admin/telephony/${workspaceId}`),
   updateTelephony: (workspaceId: string, body: TelephonyConfigInput) =>
     request<TelephonyConfig>("PUT", `/admin/telephony/${workspaceId}`, body),
+
+  // Call flow / IVR — built by a Tolkyn operator on the client's behalf,
+  // never self-service (see asterisk README / DEPLOYMENT.md).
+  getIvrAgents: (workspaceId: string) => request<AgentRow[]>("GET", `/admin/telephony/${workspaceId}/agents`),
+  getIvr: (workspaceId: string) => request<IvrFlow>("GET", `/admin/telephony/${workspaceId}/ivr`),
+  updateIvr: (workspaceId: string, patch: Partial<IvrFlow>) =>
+    request<IvrFlow>("PUT", `/admin/telephony/${workspaceId}/ivr`, patch),
+  testIvr: (workspaceId: string, digits: string[]) =>
+    request<IvrSimulateResult>("POST", `/admin/telephony/${workspaceId}/ivr/test`, { digits }),
+  getIvrCalls: (workspaceId: string) => request<IvrCall[]>("GET", `/admin/telephony/${workspaceId}/ivr-calls`),
+  simulateIvrCall: (workspaceId: string) =>
+    request<IvrCall[]>("POST", `/admin/telephony/${workspaceId}/ivr/simulate-call`),
+  ivrPress: (workspaceId: string, callId: string, digit: string) =>
+    request<IvrCall[]>("POST", `/admin/telephony/${workspaceId}/ivr-calls/${callId}/press`, { digits: [digit] }),
 
   videoModels: () => request<VideoModelInfo[]>("GET", "/admin/video-models"),
   videoUsage: () => request<{ items: VideoUsageRow[] }>("GET", "/admin/video-usage"),

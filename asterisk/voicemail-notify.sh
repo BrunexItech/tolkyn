@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 # Asterisk voicemail externnotify hook (see etc/voicemail.conf.template).
-# Fires whenever a message is left in any mailbox. Finds the newest
-# not-yet-sent message for this box and POSTs its audio + caller info to the
-# Tolkyn backend, so it shows up in the Call Center instead of sitting
-# unseen in this spool folder. Reuses the same config the AMI bridge already
-# has (asterisk/install-on-host.sh writes it) — no separate setup needed.
+# Fires whenever a message is left in any mailbox. Multi-tenant: doesn't
+# trust externnotify's own positional args (they vary by Asterisk
+# version/config) — instead scans every mailbox under the "default"
+# voicemail context for a message this script hasn't sent yet, resolves
+# which workspace owns that extension via AstDB (kept current by
+# asterisk/sync_workspaces.py — same routing table the dialplan and the AMI
+# bridge use), and POSTs to that workspace's webhook.
 #
 # Deliberately defensive throughout: never fails or blocks Asterisk's own
 # voicemail delivery, always exits 0.
@@ -19,39 +21,56 @@ set +a
 [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ] || exit 0
 
 BACKEND="${PBX_EVENT_BACKEND_URL:-http://127.0.0.1:8090/api/v1}"
-WORKSPACE="${PBX_EVENT_WORKSPACE_ID:-_default}"
-MAILBOX="${SOFTPHONE_EXT:-1001}"
+# Legacy single-tenant fallback — only used for the one extension that
+# matches SOFTPHONE_EXT, and only until that workspace is migrated onto the
+# multi-tenant routing table (see ami-bridge.py's own fallback for why).
+LEGACY_WORKSPACE="${PBX_EVENT_WORKSPACE_ID:-_default}"
+LEGACY_EXT="${SOFTPHONE_EXT:-}"
 CONTEXT="default"
-SPOOL="/var/spool/asterisk/voicemail/${CONTEXT}/${MAILBOX}/INBOX"
-[ -d "$SPOOL" ] || exit 0
+SPOOL_ROOT="/var/spool/asterisk/voicemail/${CONTEXT}"
+[ -d "$SPOOL_ROOT" ] || exit 0
 
 STATE_DIR="/var/lib/tolkyn"
 mkdir -p "$STATE_DIR" 2>/dev/null || true
-STATE_FILE="${STATE_DIR}/last-voicemail-${MAILBOX}"
-LAST_SENT="$(cat "$STATE_FILE" 2>/dev/null || true)"
 
-LATEST_TXT="$(ls -t "$SPOOL"/msg*.txt 2>/dev/null | head -1)"
-[ -z "$LATEST_TXT" ] && exit 0
-[ "$LATEST_TXT" = "$LAST_SENT" ] && exit 0
+for MAILBOX_DIR in "$SPOOL_ROOT"/*/; do
+    [ -d "$MAILBOX_DIR" ] || continue
+    MAILBOX="$(basename "$MAILBOX_DIR")"
+    SPOOL="${MAILBOX_DIR}INBOX"
+    [ -d "$SPOOL" ] || continue
 
-BASE="${LATEST_TXT%.txt}"
-WAV="${BASE}.wav"
-[ -f "$WAV" ] || exit 0
+    WORKSPACE="$(asterisk -rx "database get tolkyn ext_ws/${MAILBOX}" 2>/dev/null | sed -n 's/^Value: //p')"
+    if [ -z "$WORKSPACE" ]; then
+        if [ -n "$LEGACY_EXT" ] && [ "$MAILBOX" = "$LEGACY_EXT" ]; then
+            WORKSPACE="$LEGACY_WORKSPACE"
+        else
+            continue
+        fi
+    fi
 
-# The .txt Asterisk writes alongside every message — a stable, documented
-# sidecar format, far more reliable than trusting externnotify's own
-# positional args (which vary by Asterisk version/config).
-CALLERID_LINE="$(grep -m1 '^callerid=' "$LATEST_TXT" | cut -d= -f2-)"
-NUMBER="$(echo "$CALLERID_LINE" | grep -oE '[0-9+]{6,}' | head -1)"
-DURATION="$(grep -m1 '^duration=' "$LATEST_TXT" | cut -d= -f2-)"
-DURATION="${DURATION:-0}"
+    STATE_FILE="${STATE_DIR}/last-voicemail-${MAILBOX}"
+    LAST_SENT="$(cat "$STATE_FILE" 2>/dev/null || true)"
 
-TMP_B64="$(mktemp)"
-trap 'rm -f "$TMP_B64"' EXIT
-base64 -w0 "$WAV" > "$TMP_B64" 2>/dev/null
-[ -s "$TMP_B64" ] || exit 0
+    LATEST_TXT="$(ls -t "$SPOOL"/msg*.txt 2>/dev/null | head -1)"
+    [ -z "$LATEST_TXT" ] && continue
+    [ "$LATEST_TXT" = "$LAST_SENT" ] && continue
 
-python3 - "$BACKEND" "$WORKSPACE" "$PBX_EVENT_WEBHOOK_SECRET" "$NUMBER" "$DURATION" "$TMP_B64" <<'PYEOF'
+    BASE="${LATEST_TXT%.txt}"
+    WAV="${BASE}.wav"
+    [ -f "$WAV" ] || continue
+
+    # The .txt Asterisk writes alongside every message — a stable, documented
+    # sidecar format, far more reliable than trusting externnotify's own
+    # positional args (which vary by Asterisk version/config).
+    CALLERID_LINE="$(grep -m1 '^callerid=' "$LATEST_TXT" | cut -d= -f2-)"
+    NUMBER="$(echo "$CALLERID_LINE" | grep -oE '[0-9+]{6,}' | head -1)"
+    DURATION="$(grep -m1 '^duration=' "$LATEST_TXT" | cut -d= -f2-)"
+    DURATION="${DURATION:-0}"
+
+    TMP_B64="$(mktemp)"
+    base64 -w0 "$WAV" > "$TMP_B64" 2>/dev/null
+    if [ -s "$TMP_B64" ]; then
+        python3 - "$BACKEND" "$WORKSPACE" "$PBX_EVENT_WEBHOOK_SECRET" "$NUMBER" "$DURATION" "$TMP_B64" <<'PYEOF'
 import json
 import sys
 import urllib.error
@@ -80,6 +99,9 @@ try:
 except Exception:
     pass
 PYEOF
+        echo "$LATEST_TXT" > "$STATE_FILE" 2>/dev/null || true
+    fi
+    rm -f "$TMP_B64"
+done
 
-echo "$LATEST_TXT" > "$STATE_FILE" 2>/dev/null || true
 exit 0

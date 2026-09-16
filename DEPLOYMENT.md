@@ -95,8 +95,15 @@ config, install + start coturn (the media relay) and the AMI call-event bridge.
    (see `.env.example`). Required: `CLOUDONE_SIP_PASSWORD`,
    `SOFTPHONE_EXT_PASSWORD`, `PBX_PUBLIC_IP` (this server's public IP),
    `PBX_TURN_PASSWORD` (call audio), and `PBX_AMI_PASSWORD` +
-   `PBX_EVENT_WEBHOOK_SECRET` (live call state in the UI). Generate secrets with
+   `PBX_EVENT_WEBHOOK_SECRET` (live call state in the UI — also what the
+   multi-tenant sync script authenticates with). Generate secrets with
    `openssl rand -hex 20`.
+
+   Also set `CLOUDONE_DID_POOL` — every DID Cloud One gave you,
+   comma-separated E.164 (e.g. `+254207916250,+254207916251,...254207916257`).
+   Super Admin → Telephony then only ever offers a number from this list, and
+   only if no other workspace already holds it — a DID can't be typo'd or
+   double-assigned.
 
 2. DNS — a `pbx.<domain>` A record at the server IP (Cloudflare: Proxied is
    fine; it's covered by a `*.<domain>` origin cert).
@@ -120,18 +127,20 @@ config, install + start coturn (the media relay) and the AMI call-event bridge.
 5. Check trunk + relay + bridge:
    ```bash
    sudo asterisk -rx "pjsip show registrations"      # trunk Registered
-   systemctl is-active coturn tolkyn-ami-bridge      # both active
+   systemctl is-active coturn tolkyn-ami-bridge tolkyn-sync-workspaces.timer
    journalctl -u tolkyn-ami-bridge -f               # call events as they fire
+   journalctl -u tolkyn-sync-workspaces -f          # DID/extension provisioning as it happens
    ```
 
 **Per client:** entirely from Super Admin → Telephony — no need to open the
-client's own workspace. Set provider **Tolkyn PBX**, tick Active, set their
-**Assigned DID**, and fill in their softphone line's **SIP extension /
-password** right there on the same page. That extension still has to match
-an endpoint that actually exists in `asterisk/etc/pjsip.conf.template` on the
-server, since PJSIP config is one static file today — multi-tenant
-PJSIP-from-DB (a distinct extension per client, provisioned automatically)
-and ARI call control / CDR are the next phase, not the POC.
+client's own workspace, and nothing to touch on the server. Set provider
+**Tolkyn PBX**, tick Active, pick their **Assigned DID** from the pool
+dropdown, and fill in their softphone line's **SIP extension / password**
+right there on the same page. A background sync (every 30s, `asterisk/
+sync_workspaces.py`) reads that straight from the database and provisions the
+PBX endpoint + voicemail box + inbound-routing entry automatically — save the
+form, wait up to 30s, the line is live. Force it immediately instead of
+waiting: `sudo systemctl start tolkyn-sync-workspaces.service`.
 
 ### Moving from a POC trunk to a paid production trunk
 
@@ -159,9 +168,12 @@ over is a `.env` edit, not a code change:
 4. Report the successful test back to Cloud One — that's what gets the
    completion certificate issued and full billing opened.
 
-Splitting the bundled DIDs across individual clients (rather than all of them
-landing on one destination) is the same multi-tenant DID→workspace routing
-called out above — not yet built.
+Splitting the bundled DIDs across individual clients (rather than all of
+them landing on one destination) is exactly the multi-tenant DID→workspace
+routing described above under **Per client** — assign each new client one
+of the free numbers from the pool dropdown in Super Admin → Telephony, save,
+and their calls route separately from everyone else's within a sync cycle.
+No dialplan edit, no restart.
 
 ## Bulk SMS — MobileSasa
 

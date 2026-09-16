@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Building2, Users, Activity, ShieldAlert, LogOut, Clapperboard, Package, Phone, Megaphone, Sparkles } from "lucide-react";
+import { LayoutDashboard, Building2, Users, Activity, ShieldAlert, LogOut, Clapperboard, Package, Phone, Megaphone, Sparkles, GitBranch } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAdminSession } from "./AdminSession";
 
@@ -12,6 +12,7 @@ const NAV = [
   { label: "Users & Rights", href: "/admin/users", icon: Users },
   { label: "Packages", href: "/admin/packages", icon: Package },
   { label: "Telephony", href: "/admin/telephony", icon: Phone },
+  { label: "Call Flow (IVR)", href: "/admin/telephony/ivr", icon: GitBranch },
   { label: "AI Video", href: "/admin/video", icon: Clapperboard },
   { label: "AI Images", href: "/admin/images", icon: Sparkles },
   { label: "Announcements", href: "/admin/announcements", icon: Megaphone },

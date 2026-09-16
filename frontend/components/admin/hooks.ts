@@ -230,6 +230,13 @@ export function useSendAnnouncement() {
 }
 
 // ------------------------------------------------------------- telephony
+export function useDidPool() {
+  return useQuery({
+    queryKey: [...KEY, "did-pool"],
+    queryFn: () => adminApi.getDidPool(),
+  });
+}
+
 export function useTelephony(workspaceId: string | null) {
   return useQuery({
     queryKey: [...KEY, "telephony", workspaceId],
@@ -244,6 +251,7 @@ export function useUpdateTelephony(workspaceId: string) {
     mutationFn: (body: TelephonyConfigInput) => adminApi.updateTelephony(workspaceId, body),
     onSuccess: (data) => {
       qc.setQueryData([...KEY, "telephony", workspaceId], data);
+      qc.invalidateQueries({ queryKey: [...KEY, "did-pool"] });
       toast.ok("Telephony settings saved");
     },
     onError: (e: Error) => toast.err(e.message),

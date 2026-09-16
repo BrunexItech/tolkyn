@@ -411,6 +411,31 @@ class CallCenterService:
         await self.db.refresh(c)
         return c
 
+    def _attach_recording(self, c: Call, d: Dict[str, Any]) -> None:
+        """A finished call recording (asterisk/ami-bridge.py, MixMonitor via
+        the dialplan) riding on the same hangup event that ends the call.
+        Only ever called when the call isn't ENDED yet, so this always wins
+        over any earlier recording_url (e.g. a stray voicemail webhook that
+        matched the same channel by coincidence — shouldn't happen, but a
+        real call recording is always the more specific signal)."""
+        audio_b64 = d.get("recording_b64")
+        if not audio_b64:
+            return
+        import base64
+        import uuid
+        from pathlib import Path
+
+        ext = re.sub(r"[^a-z0-9]", "", str(d.get("format") or "wav").lower()) or "wav"
+        media_dir = Path(__file__).resolve().parents[2] / "media" / "call-recordings"
+        media_dir.mkdir(parents=True, exist_ok=True)
+        fname = f"{uuid.uuid4().hex}.{ext}"
+        try:
+            (media_dir / fname).write_bytes(base64.b64decode(audio_b64))
+        except Exception:  # noqa: BLE001 — a bad upload shouldn't lose the call record
+            return
+        c.recording_url = f"/media/call-recordings/{fname}"
+        c.recorded = True
+
     async def _end_call(self, c: Call, outcome: Optional[str] = None) -> Call:
         """Move a Call to ENDED and compute its billed duration. A call that
         never got a started_at (nobody answered) is MISSED, not completed."""
@@ -763,6 +788,7 @@ class CallCenterService:
                 await self.db.commit()
         elif any(k in etype for k in ("hangup", "end", "terminate", "cdr")):
             if existing.state != CallState.ENDED:
+                self._attach_recording(existing, d)
                 disp = str(d.get("disposition") or "").upper()
                 outcome = "missed" if disp in ("NO ANSWER", "BUSY", "FAILED", "CONGESTION") else None
                 await self._end_call(existing, outcome)

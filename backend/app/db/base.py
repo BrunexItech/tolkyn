@@ -180,6 +180,14 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS continuation_frame_url VARCHAR(500)",
     "ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS openai_response_id VARCHAR(80)",
     "ALTER TABLE image_jobs ADD COLUMN IF NOT EXISTS cost_usd DOUBLE PRECISION",
+    # Multi-tenant DID routing: on the shared Asterisk/Cloud One trunk, a DID
+    # can only ever belong to one workspace. Scoped to provider='asterisk'
+    # (partial index) so a CloudOne/Yeastar client's unrelated caller-ID
+    # field is never blocked by a coincidental string match, and workspaces
+    # with no DID assigned yet don't collide with each other either.
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_telephony_configs_outbound_caller_id "
+    "ON telephony_configs (outbound_caller_id) "
+    "WHERE outbound_caller_id IS NOT NULL AND provider = 'asterisk'",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

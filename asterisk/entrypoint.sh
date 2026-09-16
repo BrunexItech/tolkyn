@@ -27,6 +27,14 @@ for f in "$TPL"/*.conf; do
     cp "$f" "$DEST/$(basename "$f")"
 done
 
+# pjsip.conf / voicemail.conf now #include these — owned by
+# asterisk/sync_workspaces.py on the native host install (see
+# install-on-host.sh); this container path doesn't run that sync, so just
+# make sure the include target exists or Asterisk fails to start.
+for f in pjsip_workspaces.conf voicemail_workspaces.conf; do
+    [ -f "$DEST/$f" ] || echo "; empty — sync_workspaces.py is not run in this container path" > "$DEST/$f"
+done
+
 # writable spool/log/lib for the asterisk user (matters once volumes are mounted)
 chown -R asterisk:asterisk /var/lib/asterisk /var/log/asterisk /var/spool/asterisk /var/run/asterisk 2>/dev/null || true
 

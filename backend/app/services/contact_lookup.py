@@ -57,3 +57,26 @@ async def resolve_contact_name(db: AsyncSession, workspace_id: str, number: str)
         if name:
             return name
     return None
+
+
+async def save_known_caller(db: AsyncSession, workspace_id: str, number: str, name: str) -> bool:
+    """Same upsert CallCenterService.save_caller_name does against a live
+    Call row, but usable standalone — e.g. by the ElevenLabs agent tool
+    that asks a caller their name mid-conversation. Returns False (no-op)
+    for a number too short to be a real phone number."""
+    digits = re.sub(r"\D", "", number or "")
+    name = (name or "").strip()
+    if len(digits) < 7 or not name:
+        return False
+    tail = digits[-9:]
+    row = (
+        await db.execute(
+            select(KnownCaller).where(KnownCaller.workspace_id == workspace_id, KnownCaller.phone == tail)
+        )
+    ).scalar_one_or_none()
+    if row:
+        row.name = name
+    else:
+        db.add(KnownCaller(workspace_id=workspace_id, phone=tail, name=name))
+    await db.commit()
+    return True

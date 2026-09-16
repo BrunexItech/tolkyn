@@ -1,7 +1,5 @@
-import Link from "next/link";
-import { GitBranch, Headset } from "lucide-react";
+import { Headset } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
-import { OmButton } from "@/components/om/primitives/OmButton";
 import { Grid } from "@/components/om/primitives/Grid";
 import { CallCenterProvider } from "@/components/call-center/store";
 import { CallActions } from "@/components/call-center/CallActions";
@@ -21,16 +19,7 @@ export default function CallCenterPage() {
           title="Call Center"
           subtitle="Inbound & outbound voice for your team"
           icon={<Headset />}
-          actions={
-            <>
-              <OmButton asChild variant="outline" size="sm">
-                <Link href="/dashboard/calls/flow">
-                  <GitBranch /> Call flow
-                </Link>
-              </OmButton>
-              <CallActions />
-            </>
-          }
+          actions={<CallActions />}
         />
 
         <CallStats />

@@ -9,7 +9,7 @@ import { OmButton } from "@/components/om/primitives/OmButton";
 import { StatusBadge } from "@/components/om/primitives/StatusBadge";
 import { Field, OmInput, OmSelect } from "@/components/om/primitives/Field";
 import { toast } from "@/lib/om/toast";
-import { useApprovedUsers, useTelephony, useUpdateTelephony } from "@/components/admin/hooks";
+import { useApprovedUsers, useDidPool, useTelephony, useUpdateTelephony } from "@/components/admin/hooks";
 import type { TelephonyConfig, TelephonyConfigInput } from "@/lib/api/admin";
 
 export default function AdminTelephonyPage() {
@@ -68,6 +68,7 @@ export default function AdminTelephonyPage() {
 
 function TelephonyForm({ workspaceId }: { workspaceId: string }) {
   const { data, isLoading } = useTelephony(workspaceId);
+  const { data: pool } = useDidPool();
   const save = useUpdateTelephony(workspaceId);
   const [form, setForm] = useState<TelephonyConfigInput>({});
   const [secret, setSecret] = useState("");
@@ -169,20 +170,43 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
           Record calls
         </label>
 
-        <Field
-          label={isAsterisk ? "Assigned DID (caller ID)" : "Outbound caller ID"}
-          hint={
-            isAsterisk
-              ? "The Cloud One number allocated to this client. Used as caller ID on their outbound calls and to route inbound calls to this workspace."
-              : "E.164 number shown to the person being called (optional)."
-          }
-        >
-          <OmInput
-            value={form.outbound_caller_id ?? ""}
-            onChange={(e) => set("outbound_caller_id", e.target.value)}
-            placeholder="254207901958"
-          />
-        </Field>
+        {isAsterisk && pool && pool.all.length > 0 ? (
+          <Field
+            label="Assigned DID (caller ID)"
+            hint="From the block Cloud One allocated on the shared trunk. Only numbers no other workspace already holds are offered here — this workspace can never be handed a DID that would collide with another client's."
+          >
+            <OmSelect
+              value={form.outbound_caller_id ?? ""}
+              onChange={(e) => set("outbound_caller_id", e.target.value)}
+            >
+              <option value="">— none assigned —</option>
+              {(data.outbound_caller_id && !pool.available.includes(data.outbound_caller_id)
+                ? [data.outbound_caller_id, ...pool.available]
+                : pool.available
+              ).map((did) => (
+                <option key={did} value={did}>
+                  {did}
+                  {did === data.outbound_caller_id ? " (current)" : ""}
+                </option>
+              ))}
+            </OmSelect>
+          </Field>
+        ) : (
+          <Field
+            label={isAsterisk ? "Assigned DID (caller ID)" : "Outbound caller ID"}
+            hint={
+              isAsterisk
+                ? "The Cloud One number allocated to this client. Used as caller ID on their outbound calls and to route inbound calls to this workspace. Set CLOUDONE_DID_POOL in the backend .env to pick from a validated list instead of typing it free-form."
+                : "E.164 number shown to the person being called (optional)."
+            }
+          >
+            <OmInput
+              value={form.outbound_caller_id ?? ""}
+              onChange={(e) => set("outbound_caller_id", e.target.value)}
+              placeholder="254207901958"
+            />
+          </Field>
+        )}
       </Card>
 
       {isAsterisk && (
@@ -223,9 +247,8 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
             />
           </Field>
           <p className="text-[10.5px] text-om-faint">
-            This extension must also exist in the PBX config on the server
-            (<code>asterisk/etc/pjsip.conf.template</code>) — multi-tenant PJSIP-from-DB is the next phase; for
-            now it needs to match the one softphone extension the server already knows about.
+            Nothing else to do on the server — a background sync (every 30s) reads this extension +
+            DID straight from here and provisions the PBX line automatically.
           </p>
         </Card>
       )}

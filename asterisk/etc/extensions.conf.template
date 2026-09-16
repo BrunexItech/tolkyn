@@ -4,6 +4,20 @@
 ;   outbound — Kenya local in 0XXXXXXXXX form; international in +CC / E.164
 ;   caller ID on every outbound leg MUST be our DID (trunk authentication)
 ;
+; Multi-tenant routing: one Cloud One trunk, many DIDs, many workspaces. The
+; DID -> agent-extension map lives in Asterisk's built-in AstDB (family
+; "tolkyn"), kept in sync with telephony_configs / call_agents by the host
+; script asterisk/sync_workspaces.py (systemd timer). This dialplan never
+; hardcodes a DID or an extension — it's rewritten once and never touched
+; again when a new client is onboarded.
+;
+; AstDB keys (last 9 digits of the phone number, so the format Cloud One
+; happens to send — with/without +254 — never matters):
+;   tolkyn/did/<9digits>      -> agent extension  (inbound routing)
+;   tolkyn/ext_did/<ext>      -> the workspace's DID, +254... (informational)
+;   tolkyn/ext_ws/<ext>       -> workspace_id      (used by voicemail-notify.sh)
+;   tolkyn/ext_record/<ext>   -> "1"/"0" — call recording on/off for that workspace
+;
 ; Asterisk picks the MOST SPECIFIC matching pattern, so the +254 / 254 rules
 ; below win over the generic international ones for Kenyan numbers.
 ;======================================================================
@@ -13,65 +27,93 @@ writeprotect = no
 clearglobalvars = no
 
 [globals]
-DID = ${CLOUDONE_DID}
-AGENT = PJSIP/${SOFTPHONE_EXT}
 RINGTIME = 25
 
-;--- Inbound: Cloud One -> the DID -> ring the agent, else voicemail ---
+;--- Inbound: Cloud One -> whichever DID was dialled -> that workspace's ---
+;--- agent, else that workspace's voicemail. Unknown DID -> hang up: we   ---
+;--- never guess which workspace an unmapped number belongs to.          ---
 [from-cloudone]
-exten => ${CLOUDONE_DID},1,Goto(handle,1)
-exten => s,1,Goto(handle,1)
-exten => _X!,1,Goto(handle,1)
+exten => _X.,1,Goto(route,1)
+exten => s,1,Goto(route,1)
 
-exten => handle,1,NoOp(Inbound from ${CALLERID(num)})
+exten => route,1,NoOp(Inbound to ${EXTEN})
+ same => n,Set(DNUM=${FILTER(0-9,${EXTEN})})
+ same => n,Set(DNUM=${DNUM:-9})
+ same => n,Set(WS_EXT=${DB(tolkyn/did/${DNUM})})
+ same => n,GotoIf($["${WS_EXT}" = ""]?nodid,1)
+ same => n,Goto(handle,1)
+
+exten => nodid,1,NoOp(No workspace owns a DID ending ${DNUM} -- hanging up)
+ same => n,Hangup()
+
+exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,Set(CNUM=${FILTER(0-9+,${CALLERID(num)})})
  same => n,ExecIf($["${CNUM:0:3}" = "254"]?Set(CNUM=+${CNUM}))
  same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
- same => n,Dial(${AGENT},${RINGTIME},rtT)
+ ; call recording — opt-in per workspace (Super Admin -> Telephony ->
+ ; Record calls), mirrored into AstDB by sync_workspaces.py. 'b' = only
+ ; record once the call is actually bridged, not ring time.
+ same => n,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+ same => n,Dial(PJSIP/${WS_EXT},${RINGTIME},rtT)
  ; if the call actually connected (agent answered, then either side hung up)
  ; end it — don't dump the caller into voicemail.
  same => n,ExecIf($["${DIALSTATUS}" = "ANSWER"]?Hangup())
- same => n,VoiceMail(${SOFTPHONE_EXT}@default,u)
+ same => n,VoiceMail(${WS_EXT}@default,u)
  same => n,Hangup()
 
 exten => h,1,Hangup()
 
-;--- Outbound: from the agent softphone -> Cloud One trunk ---
+;--- Outbound: from an agent softphone -> Cloud One trunk. Caller ID is  ---
+;--- ${DID}, a per-endpoint channel variable (set_var=DID=... on that    ---
+;--- agent's PJSIP endpoint in pjsip_workspaces.conf) — so each workspace---
+;--- always calls out as its own DID, never another workspace's.        ---
 [from-internal]
+; Call recording (same opt-in as inbound, see [from-cloudone]) applies to
+; every outbound pattern below — one subroutine so it's only written once.
+exten => rec-gate,1,ExecIf($["${DB(tolkyn/ext_record/${MYEXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+ same => n,Return()
+
 ; Kenya: +254XXXXXXXXX -> 0XXXXXXXXX
 exten => _+254XXXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Gosub(rec-gate,1)
  same => n,Dial(PJSIP/0${EXTEN:4}@cloudone,60,rtT)
  same => n,Hangup()
 
 ; Kenya: 254XXXXXXXXX -> 0XXXXXXXXX
 exten => _254XXXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Gosub(rec-gate,1)
  same => n,Dial(PJSIP/0${EXTEN:3}@cloudone,60,rtT)
  same => n,Hangup()
 
 ; Kenya: already 0XXXXXXXXX (10 digits) -> send as-is
 exten => _0XXXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Gosub(rec-gate,1)
  same => n,Dial(PJSIP/${EXTEN}@cloudone,60,rtT)
  same => n,Hangup()
 
 ; Kenya: bare 9-digit local (7XXXXXXXX / 1XXXXXXXX) -> prefix 0
 exten => _[17]XXXXXXXX,1,Set(CALLERID(num)=${DID})
+ same => n,Gosub(rec-gate,1)
  same => n,Dial(PJSIP/0${EXTEN}@cloudone,60,rtT)
  same => n,Hangup()
 
 ; International dialled as 000<CC>... -> +<CC>...
 exten => _000X.,1,Set(CALLERID(num)=${DID})
+ same => n,Gosub(rec-gate,1)
  same => n,Dial(PJSIP/+${EXTEN:3}@cloudone,60,rtT)
  same => n,Hangup()
 
 ; International, already E.164 with a leading + -> send as-is
 exten => _+X.,1,Set(CALLERID(num)=${DID})
+ same => n,Gosub(rec-gate,1)
  same => n,Dial(PJSIP/${EXTEN}@cloudone,60,rtT)
  same => n,Hangup()
 
-; voicemail access
-exten => *97,1,VoiceMailMain(${SOFTPHONE_EXT}@default)
+; voicemail access — ${MYEXT} is the calling agent's own extension, another
+; per-endpoint set_var (same mechanism as ${DID} above).
+exten => *97,1,VoiceMailMain(${MYEXT}@default)
  same => n,Hangup()
 
 exten => h,1,Hangup()

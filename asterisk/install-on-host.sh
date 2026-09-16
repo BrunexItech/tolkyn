@@ -50,6 +50,34 @@ if ! command -v asterisk >/dev/null; then
   apt-get install -y --no-install-recommends asterisk gettext-base
 fi
 
+# --- 2b. safety check: don't blank out a live agent's PBX line -----------
+# pjsip.conf now #includes pjsip_workspaces.conf, owned by
+# sync_workspaces.py — the static [${SOFTPHONE_EXT}] block this script used
+# to render directly is gone. If a workspace is already live on the OLD
+# static config but has never been assigned a DID in Super Admin ->
+# Telephony (the new source of truth), the very first render here would
+# swap their working line for an empty one until that's fixed. Catch it
+# here, before anything is touched, rather than mid-outage.
+if [ -f /etc/asterisk/pjsip.conf ] && grep -q "^\[${SOFTPHONE_EXT}\]" /etc/asterisk/pjsip.conf 2>/dev/null \
+   && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
+  ROUTING_JSON="$(curl -fsS -m 10 -H "X-Webhook-Secret: ${PBX_EVENT_WEBHOOK_SECRET}" \
+    "${PBX_EVENT_BACKEND_URL}/call-center/pbx-routing" 2>/dev/null || true)"
+  if [ -z "$ROUTING_JSON" ] || ! echo "$ROUTING_JSON" | grep -q '"extension"'; then
+    echo
+    echo "!! STOP — this box currently has a live agent line (extension ${SOFTPHONE_EXT})"
+    echo "   from the OLD static config, but the backend's multi-tenant routing table"
+    echo "   (GET /call-center/pbx-routing) came back empty. Continuing would replace"
+    echo "   that working line with an empty one until it's fixed."
+    echo
+    echo "   Fix first: open Super Admin -> Telephony for that workspace and set its"
+    echo "   'Assigned DID' + confirm the SIP extension/password match ${SOFTPHONE_EXT},"
+    echo "   then re-run this script."
+    echo
+    exit 1
+  fi
+  echo "==> routing table has at least one line — safe to continue"
+fi
+
 # --- 3. render our config over the stock config -------------------------
 echo "==> writing /etc/asterisk config"
 SUBST='${CLOUDONE_SIP_HOST} ${CLOUDONE_SIP_USER} ${CLOUDONE_SIP_PASSWORD} ${CLOUDONE_DID} ${PBX_PUBLIC_IP} ${SOFTPHONE_EXT} ${SOFTPHONE_EXT_PASSWORD} ${PBX_WS_PORT} ${PBX_AMI_USER} ${PBX_AMI_PASSWORD}'
@@ -62,6 +90,20 @@ done
 for f in "$TPL"/*.conf; do
   cp "$f" "/etc/asterisk/$(basename "$f")"
 done
+
+# Multi-tenant PJSIP endpoints + voicemail mailboxes: owned entirely by
+# asterisk/sync_workspaces.py from here on (see that script). Only create
+# these if they don't exist yet — NEVER overwrite them on a re-run of this
+# installer, or every already-registered agent line would vanish until the
+# next sync tick.
+for f in pjsip_workspaces.conf voicemail_workspaces.conf; do
+  [ -f "/etc/asterisk/$f" ] || echo "; created by install-on-host.sh — content owned by sync_workspaces.py" > "/etc/asterisk/$f"
+done
+
+# Call recording (MixMonitor, see extensions.conf.template's rec-gate) —
+# opt-in per workspace, picked up + POSTed to the backend by ami-bridge.py.
+mkdir -p /var/spool/asterisk/recordings
+
 chown -R asterisk:asterisk /etc/asterisk /var/lib/asterisk /var/log/asterisk /var/spool/asterisk /var/run/asterisk 2>/dev/null || true
 
 # --- 4. firewall: only Cloud One may reach SIP; RTP open --------------
@@ -142,6 +184,7 @@ if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; the
 
   install -d -o asterisk -g asterisk /opt/tolkyn
   install -m 0644 -o asterisk -g asterisk "$HERE/ami-bridge.py" /opt/tolkyn/ami-bridge.py
+  install -m 0644 -o asterisk -g asterisk "$HERE/sync_workspaces.py" /opt/tolkyn/sync_workspaces.py
   # voicemail.conf.template's externnotify — asterisk (the user, not the
   # shell) executes this directly, so it needs +x.
   install -m 0755 -o asterisk -g asterisk "$HERE/voicemail-notify.sh" /opt/tolkyn/voicemail-notify.sh
@@ -164,8 +207,11 @@ EOF
   chmod 640 /etc/tolkyn/ami-bridge.env
 
   install -m 0644 "$HERE/tolkyn-ami-bridge.service" /etc/systemd/system/tolkyn-ami-bridge.service
+  install -m 0644 "$HERE/tolkyn-sync-workspaces.service" /etc/systemd/system/tolkyn-sync-workspaces.service
+  install -m 0644 "$HERE/tolkyn-sync-workspaces.timer" /etc/systemd/system/tolkyn-sync-workspaces.timer
   systemctl daemon-reload
   systemctl enable tolkyn-ami-bridge >/dev/null 2>&1 || true
+  systemctl enable tolkyn-sync-workspaces.timer >/dev/null 2>&1 || true
 else
   echo "==> PBX_AMI_PASSWORD / PBX_EVENT_WEBHOOK_SECRET not set — skipping the call-event bridge"
   # make sure a half-configured AMI isn't left enabled
@@ -184,6 +230,12 @@ sleep 4
 if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
   echo "==> starting the call-event bridge"
   systemctl restart tolkyn-ami-bridge || true
+
+  echo "==> starting the workspace sync timer + running one sync now"
+  systemctl restart tolkyn-sync-workspaces.timer || true
+  systemctl start tolkyn-sync-workspaces.service || true
+  sleep 1
+  journalctl -u tolkyn-sync-workspaces.service -n 15 --no-pager || true
 fi
 
 echo
@@ -198,8 +250,13 @@ if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; the
   systemctl is-active --quiet tolkyn-ami-bridge \
     && echo "ami-bridge: active — journalctl -u tolkyn-ami-bridge -f" \
     || echo "ami-bridge: NOT running — check: journalctl -u tolkyn-ami-bridge -n40"
+  systemctl is-active --quiet tolkyn-sync-workspaces.timer \
+    && echo "sync-workspaces: timer active (every 30s) — journalctl -u tolkyn-sync-workspaces -n40" \
+    || echo "sync-workspaces: timer NOT running — check: journalctl -u tolkyn-sync-workspaces -n40"
 fi
 echo
+echo "check:  asterisk -rx 'pjsip show endpoints'     # every agent line, once assigned in super admin"
+echo "check:  asterisk -rx 'database show tolkyn'     # the DID/extension/workspace routing table"
 echo "check:  asterisk -rx 'pjsip show contacts'     # softphone + trunk"
 echo "logs:   journalctl -u asterisk -f"
 echo "cli:    asterisk -rvvv"

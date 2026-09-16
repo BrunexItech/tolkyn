@@ -174,12 +174,6 @@ export const callCenterApi = {
     http.post<CallOverview>("/call-center/softphone/event", { kind, number, name }),
   setAgentSip: (agentId: string, sip_extension: string, sip_password: string) =>
     http.patch<CallOverview>(`/call-center/agents/${agentId}/sip`, { sip_extension, sip_password }),
-
-  getIvr: () => http.get<IvrFlow>("/call-center/ivr"),
-  updateIvr: (patch: Partial<IvrFlow>) => http.put<IvrFlow>("/call-center/ivr", patch),
-  testIvr: (digits: string[]) =>
-    http.post<IvrSimulateResult>("/call-center/ivr/test", { digits }),
-  simulateIvrCall: () => http.post<CallOverview>("/call-center/ivr/simulate-call"),
-  ivrPress: (callId: string, digit: string) =>
-    http.post<CallOverview>(`/call-center/calls/${callId}/ivr-press`, { digits: [digit] }),
+  // IVR editing/testing moved to Super Admin — see lib/api/admin.ts. This
+  // workspace client only ever reads ivrCalls via overview()/poll() now.
 };
