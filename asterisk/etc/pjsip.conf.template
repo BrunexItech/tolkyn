@@ -114,11 +114,11 @@ type = auth
 auth_type = userpass
 username = ${ELEVENLABS_SIP_AUTH_USER}
 password = ${ELEVENLABS_SIP_AUTH_PASSWORD}
-; ElevenLabs' digest challenge carries an empty realm. Without this
-; explicitly set, Asterisk falls back to its own default realm ("asterisk")
-; when matching an auth object to the challenge, which doesn't match theirs
-; -- the auth response never gets sent and the call just dies.
-realm =
+; ElevenLabs' digest challenge carries an empty realm. A literal blank
+; `realm =` here did NOT fix it (Asterisk's config parser likely treats
+; that the same as unset) -- the documented alternative is an explicit
+; wildcard, which is unambiguous.
+realm = *
 
 [elevenlabs_aor]
 type = aor
