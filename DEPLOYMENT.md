@@ -130,6 +130,54 @@ lines, give each agent a SIP extension + password — and add the matching
 endpoint to `asterisk/etc/pjsip.conf.template` (multi-tenant PJSIP-from-DB and
 ARI call control / CDR is the next phase, not the POC).
 
+### Moving from a POC trunk to a paid production trunk
+
+Cloud One issues fresh credentials + a bundle of DIDs when the account goes
+from trial to paid (see their "Project Kick Off" onboarding flow). Switching
+over is a `.env` edit, not a code change:
+
+1. `nano ~/tolkyn/.env` — update from Cloud One's "production SIP Trunk
+   created" email:
+   ```
+   CLOUDONE_SIP_USER=<new username>
+   CLOUDONE_SIP_PASSWORD=<new password>
+   CLOUDONE_DID=<one of the bundled DIDs — used for outbound caller ID>
+   ```
+   Leave `SOFTPHONE_EXT` / `SOFTPHONE_EXT_PASSWORD` alone — that's the
+   internal browser-softphone extension, unrelated to the trunk.
+2. `cd ~/tolkyn && sudo bash asterisk/install-on-host.sh` — re-renders the
+   config with the new credentials and restarts Asterisk.
+3. Verify: `sudo asterisk -rx "pjsip show registrations"` should show
+   `Registered` against the new username. Make a test outbound call, and take
+   an inbound call on any of the bundled DIDs — the dialplan's `_X!` catch-all
+   in `[from-cloudone]` already routes *every* DID Cloud One sends an INVITE
+   for to the same destination, so nothing else needs configuring just to get
+   calls flowing on all of them.
+4. Report the successful test back to Cloud One — that's what gets the
+   completion certificate issued and full billing opened.
+
+Splitting the bundled DIDs across individual clients (rather than all of them
+landing on one destination) is the same multi-tenant DID→workspace routing
+called out above — not yet built.
+
+## Bulk SMS — MobileSasa
+
+Root `.env` → `backend/.env` actually (`MOBILESASA_TOKEN`, `MOBILESASA_SENDER_ID`,
+`MOBILESASA_BASE_URL`) sets the **platform's shared default** sender — every
+workspace sends under it unless overridden.
+
+**Give one workspace its own registered sender ID (a paid add-on per
+client):** Super Admin → Users & Rights → that user → **Bulk SMS sender ID**.
+Type the exact, already-approved sender name. No deploy, no `.env` edit —
+takes effect on their very next send.
+
+**If that sender ID is approved on a *different* MobileSasa account** (not
+the platform's own) — set the **MobileSasa API token** field right below it
+too, so sends for that workspace authenticate against the right account.
+Leave it blank when the sender ID is just a paid add-on on the platform's
+own account. This field is write-only (never shown again after saving); use
+its **Clear** button to remove it.
+
 ## Capacity — running ~100 client workspaces
 
 100 tenant workspaces is a *data* number, not a load number — most are idle at
