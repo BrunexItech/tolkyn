@@ -164,6 +164,8 @@ export const callCenterApi = {
   flags: (id: string, flags: { muted?: boolean; on_hold?: boolean }) =>
     http.post<CallOverview>(`/call-center/calls/${id}/flags`, flags),
   dismiss: (id: string) => http.post<CallOverview>(`/call-center/calls/${id}/dismiss`),
+  saveCallerName: (id: string, name: string) =>
+    http.post<CallOverview>(`/call-center/calls/${id}/name`, { name }),
   presence: (status: AgentStatus) =>
     http.post<CallOverview>("/call-center/presence", { status }),
   simulateInbound: () => http.post<CallOverview>("/call-center/simulate-inbound"),

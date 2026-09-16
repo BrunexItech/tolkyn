@@ -13,6 +13,8 @@ import {
   PhoneOutgoing,
   PhoneIncoming,
   CircleDot,
+  UserPlus,
+  Check,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
@@ -208,9 +210,23 @@ function DialerCard({
 }
 
 function ActiveCallCard({ sip }: { sip: ReturnType<typeof useSipPhone> }) {
-  const { active, hangup, toggleMute, toggleHold } = useCallCenter();
+  const { active, hangup, toggleMute, toggleHold, saveCallerName } = useCallCenter();
   const [elapsed, setElapsed] = useState(0);
+  const [namingCaller, setNamingCaller] = useState(false);
+  const [callerNameInput, setCallerNameInput] = useState("");
   const ringing = !!active?.ringing;
+
+  useEffect(() => {
+    setNamingCaller(false);
+    setCallerNameInput("");
+  }, [active?.id]);
+
+  const submitCallerName = () => {
+    const name = callerNameInput.trim();
+    if (!active || !name) return;
+    saveCallerName(active.id, name);
+    setNamingCaller(false);
+  };
 
   const wrapMute = () => {
     if (active && sip.enabled) sip.setMuted(!active.muted).catch(() => undefined);
@@ -261,6 +277,40 @@ function ActiveCallCard({ sip }: { sip: ReturnType<typeof useSipPhone> }) {
         </span>
         <div className="mt-2 text-[14px] font-semibold">{active.name}</div>
         <div className="font-mono text-[11.5px] text-om-muted">{active.number}</div>
+
+        {active.name === "Unknown caller" &&
+          (namingCaller ? (
+            <div className="mt-1.5 flex items-center gap-1">
+              <input
+                autoFocus
+                value={callerNameInput}
+                onChange={(e) => setCallerNameInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") submitCallerName();
+                  if (e.key === "Escape") setNamingCaller(false);
+                }}
+                placeholder="Who's calling?"
+                maxLength={160}
+                className="w-36 rounded-md border border-om-border bg-white/[0.04] px-2 py-1 text-[11.5px] text-om-text outline-none focus:border-om-blue/60"
+              />
+              <button
+                type="button"
+                onClick={submitCallerName}
+                className="grid size-6 shrink-0 place-items-center rounded-md border border-om-border text-om-green hover:border-om-green/40"
+              >
+                <Check className="size-3" />
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setNamingCaller(true)}
+              className="mt-1 inline-flex items-center gap-1 text-[10.5px] font-medium text-om-blue hover:underline"
+            >
+              <UserPlus className="size-3" /> Save name
+            </button>
+          ))}
+
         <div className="mt-1 font-mono text-[20px] font-bold tracking-wide text-om-green">
           {ringing
             ? active.direction === "inbound"

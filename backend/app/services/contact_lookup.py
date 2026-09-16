@@ -16,6 +16,7 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.call import KnownCaller
 from app.models.customer import Customer
 from app.models.lead import Lead
 from app.models.phone_book import PhoneBookContact
@@ -28,6 +29,18 @@ async def resolve_contact_name(db: AsyncSession, workspace_id: str, number: str)
     if len(digits) < 7:
         return None
     tail = digits[-9:]
+
+    # An agent's own saved name wins over CRM/phone-book/leads data — it's
+    # the most recent explicit signal, and a plain indexed match.
+    known = (
+        await db.execute(
+            select(KnownCaller.name).where(
+                KnownCaller.workspace_id == workspace_id, KnownCaller.phone == tail
+            )
+        )
+    ).scalar_one_or_none()
+    if known:
+        return known
 
     for model in _MODELS:
         name = (

@@ -19,6 +19,7 @@ from app.schemas.call_center import (
     IvrSimulateRequest,
     IvrSimulateResult,
     PresenceRequest,
+    SaveCallerNameRequest,
     SoftphoneConfig,
     SoftphoneEvent,
 )
@@ -82,6 +83,18 @@ async def hangup(
 ):
     svc = _svc(db, user_id)
     await svc.hangup(call_id, body.outcome)
+    return await svc.overview()
+
+
+@router.post("/calls/{call_id}/name", response_model=CallOverview)
+async def save_caller_name(
+    call_id: str,
+    body: SaveCallerNameRequest,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    svc = _svc(db, user_id)
+    await svc.save_caller_name(call_id, body.name)
     return await svc.overview()
 
 

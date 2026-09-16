@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 
@@ -87,3 +87,22 @@ class CallAgent(BaseModel):
 
     user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     workspace_id = Column(String(36), nullable=False, index=True)
+
+
+class KnownCaller(BaseModel):
+    """A name an agent saved against a phone number mid-call — so the next
+    call from that number resolves to it instead of "Unknown caller".
+    Deliberately separate from the CRM/phone-book/leads tables (see
+    contact_lookup.py): a quick note taken on a call, not a full contact
+    record, and checked first since it's the most recent explicit signal.
+    `phone` is the last 9 digits, normalized once at save time, so lookups
+    are a plain indexed match rather than the fuzzy LIKE the other three
+    tables need."""
+
+    __tablename__ = "known_callers"
+
+    workspace_id = Column(String(36), nullable=False, index=True)
+    phone = Column(String(9), nullable=False, index=True)
+    name = Column(String(160), nullable=False)
+
+    __table_args__ = (UniqueConstraint("workspace_id", "phone", name="uq_known_caller_workspace_phone"),)

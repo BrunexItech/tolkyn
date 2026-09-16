@@ -13,6 +13,7 @@ from app.models.call import (
     CallDirection,
     CallOutcome,
     CallState,
+    KnownCaller,
 )
 from app.core.crypto import encrypt
 from app.models.team_member import MemberStatus, TeamMember, TeamRole
@@ -325,6 +326,35 @@ class CallCenterService:
     async def _bump_self(self, delta: int = 1) -> None:
         agent = await self._self_agent()
         agent.calls_today = max(0, (agent.calls_today or 0) + delta)
+
+    async def save_caller_name(self, call_id: str, name: str) -> Call:
+        """The agent identified who's on the line — label this call, and
+        remember the number so every future call from it resolves the same
+        way. See models.call.KnownCaller / contact_lookup.py."""
+        c = await self._get_call(call_id)
+        name = name.strip()
+        if not name:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Name is required")
+        c.contact_name = name
+
+        digits = re.sub(r"\D", "", c.number or "")
+        if len(digits) >= 7:
+            tail = digits[-9:]
+            row = (
+                await self.db.execute(
+                    select(KnownCaller).where(
+                        KnownCaller.workspace_id == self.workspace_id, KnownCaller.phone == tail
+                    )
+                )
+            ).scalar_one_or_none()
+            if row:
+                row.name = name
+            else:
+                self.db.add(KnownCaller(workspace_id=self.workspace_id, phone=tail, name=name))
+
+        await self.db.commit()
+        await self.db.refresh(c)
+        return c
 
     async def dial(self, name: str, number: str) -> Call:
         await self._ensure_seed()

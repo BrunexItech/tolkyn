@@ -42,6 +42,7 @@ from app.models.call import (
     CallState,
     CallOutcome,
     AgentStatus,
+    KnownCaller,
 )
 from app.models.telephony import TelephonyConfig
 from app.models.ivr import IvrFlow

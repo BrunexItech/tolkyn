@@ -96,6 +96,10 @@ class HangupRequest(BaseModel):
     outcome: str = "completed"
 
 
+class SaveCallerNameRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=160)
+
+
 class FlagsRequest(BaseModel):
     muted: Optional[bool] = None
     on_hold: Optional[bool] = None

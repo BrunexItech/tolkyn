@@ -36,6 +36,7 @@ interface CallCenterValue {
   toggleMute: () => void;
   toggleHold: () => void;
   dismissQueued: (id: string) => void;
+  saveCallerName: (callId: string, name: string) => void;
   simulateInbound: () => void;
   ivrCalls: IvrCall[];
   softphone: SoftphoneConfig | null;
@@ -92,6 +93,11 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
     onError,
   });
   const dismissM = useMutation({ mutationFn: (id: string) => callCenterApi.dismiss(id), onSuccess, onError });
+  const saveNameM = useMutation({
+    mutationFn: (v: { id: string; name: string }) => callCenterApi.saveCallerName(v.id, v.name),
+    onSuccess,
+    onError,
+  });
   const presenceM = useMutation({
     mutationFn: (s: AgentStatus) => callCenterApi.presence(s),
     onSuccess,
@@ -165,6 +171,10 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
         if (active) flagsM.mutate({ id: active.id, on_hold: !active.onHold });
       },
       dismissQueued: (id) => dismissM.mutate(id),
+      saveCallerName: (callId, name) => {
+        saveNameM.mutate({ id: callId, name });
+        feedBus.emit(`Saved "${name}" for this caller`, "ok");
+      },
       simulateInbound: () => inboundM.mutate(),
       ivrCalls: data?.ivrCalls ?? [],
       softphone: softphone ?? null,
