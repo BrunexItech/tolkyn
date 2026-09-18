@@ -39,6 +39,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db import get_db
 from app.models.telephony import TelephonyConfig
+from app.models.user import User
 from app.services.contact_lookup import resolve_contact_name, save_known_caller
 from app.services.ivr_service import IvrService
 
@@ -96,7 +97,11 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     sip_headers = body.get("sip_headers") if isinstance(body.get("sip_headers"), dict) else None
 
     workspace_id = await _resolve_workspace(db, called_number, sip_headers)
-    dynamic_vars: Dict[str, Any] = {"caller_number": caller_id}
+    # business_name is a REQUIRED variable in the agent's first message --
+    # always set it to something, even when the workspace can't be resolved
+    # (an unmapped test call, a misdial), or the agent errors out before it
+    # even starts talking.
+    dynamic_vars: Dict[str, Any] = {"caller_number": caller_id, "business_name": "our team"}
     if workspace_id:
         # secret__ — never sent to the LLM or spoken; just carried through
         # so a later tool call (resolve-caller, save-caller-name, ...) knows
@@ -105,6 +110,16 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
         name = await resolve_contact_name(db, workspace_id, caller_id) if caller_id else None
         if name:
             dynamic_vars["caller_name"] = name
+
+        flow = await IvrService(db, workspace_id).get_flow(create=False)
+        business_name = (flow.business_name if flow else None) or ""
+        if not business_name:
+            user = (
+                await db.execute(select(User.name).where(User.id == workspace_id))
+            ).scalar_one_or_none()
+            business_name = user or ""
+        if business_name:
+            dynamic_vars["business_name"] = business_name
 
     return {"type": "conversation_initiation_client_data", "dynamic_variables": dynamic_vars}
 

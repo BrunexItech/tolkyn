@@ -35,6 +35,13 @@ class IvrFlow(BaseModel):
     workspace_id = Column(String(36), nullable=False, unique=True, index=True)
     is_active = Column(Boolean, nullable=False, default=False)
 
+    # Spoken by the ElevenLabs AI agent ({{business_name}} in its prompt) via
+    # the conversation-initiation webhook — set here, not in ElevenLabs
+    # itself, since one shared agent answers for every workspace. Falls back
+    # to the workspace owner's account name when blank (see
+    # app.api.v1.endpoints.elevenlabs.conversation_init).
+    business_name = Column(String(200), nullable=True)
+
     greeting = Column(Text, nullable=False, default="")
     invalid_message = Column(
         Text, nullable=False, default="Sorry, that isn't a valid option."

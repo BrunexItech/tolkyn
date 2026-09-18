@@ -120,6 +120,9 @@ export interface IvrMenu {
 
 export interface IvrFlow {
   is_active: boolean;
+  /** Spoken by the ElevenLabs AI agent ({{business_name}}) — not set in
+   * ElevenLabs itself, since one shared agent answers for every workspace. */
+  business_name: string | null;
   greeting: string;
   invalid_message: string;
   timeout_message: string;

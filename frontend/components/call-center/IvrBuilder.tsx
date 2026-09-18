@@ -123,6 +123,16 @@ export function IvrBuilder({
 
       <Card className="flex flex-col gap-2">
         <CardTitle icon={<Phone />}>Greeting</CardTitle>
+        <Field
+          label="Business name"
+          hint="Spoken by the AI agent (e.g. “thank you for calling ___”) if this workspace's calls are ever routed to it. Not used by the plain phone-menu greeting below."
+        >
+          <OmInput
+            value={draft.business_name ?? ""}
+            onChange={(e) => set("business_name", e.target.value)}
+            placeholder="Acme Traders"
+          />
+        </Field>
         <Field hint="Played once when the call connects, before the main menu.">
           <OmTextarea
             value={draft.greeting}

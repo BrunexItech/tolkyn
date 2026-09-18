@@ -188,6 +188,7 @@ _SCHEMA_PATCHES = [
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_telephony_configs_outbound_caller_id "
     "ON telephony_configs (outbound_caller_id) "
     "WHERE outbound_caller_id IS NOT NULL AND provider = 'asterisk'",
+    "ALTER TABLE ivr_flows ADD COLUMN IF NOT EXISTS business_name VARCHAR(200)",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run
