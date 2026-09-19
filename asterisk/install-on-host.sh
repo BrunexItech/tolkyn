@@ -192,10 +192,13 @@ if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; the
   install -d -o asterisk -g asterisk /opt/tolkyn
   install -m 0644 -o asterisk -g asterisk "$HERE/ami-bridge.py" /opt/tolkyn/ami-bridge.py
   install -m 0644 -o asterisk -g asterisk "$HERE/sync_workspaces.py" /opt/tolkyn/sync_workspaces.py
+  install -m 0644 -o asterisk -g asterisk "$HERE/ivr_agi.py" /opt/tolkyn/ivr_agi.py
   # voicemail.conf.template's externnotify — asterisk (the user, not the
   # shell) executes this directly, so it needs +x.
   install -m 0755 -o asterisk -g asterisk "$HERE/voicemail-notify.sh" /opt/tolkyn/voicemail-notify.sh
   install -d -o asterisk -g asterisk /var/lib/tolkyn
+  # where ivr_agi.py caches rendered prompt audio for STREAM FILE
+  install -d -o asterisk -g asterisk /var/lib/asterisk/sounds/tolkyn-ivr
 
   install -d /etc/tolkyn
   umask 077
@@ -216,9 +219,11 @@ EOF
   install -m 0644 "$HERE/tolkyn-ami-bridge.service" /etc/systemd/system/tolkyn-ami-bridge.service
   install -m 0644 "$HERE/tolkyn-sync-workspaces.service" /etc/systemd/system/tolkyn-sync-workspaces.service
   install -m 0644 "$HERE/tolkyn-sync-workspaces.timer" /etc/systemd/system/tolkyn-sync-workspaces.timer
+  install -m 0644 "$HERE/tolkyn-ivr-agi.service" /etc/systemd/system/tolkyn-ivr-agi.service
   systemctl daemon-reload
   systemctl enable tolkyn-ami-bridge >/dev/null 2>&1 || true
   systemctl enable tolkyn-sync-workspaces.timer >/dev/null 2>&1 || true
+  systemctl enable tolkyn-ivr-agi >/dev/null 2>&1 || true
 else
   echo "==> PBX_AMI_PASSWORD / PBX_EVENT_WEBHOOK_SECRET not set — skipping the call-event bridge"
   # make sure a half-configured AMI isn't left enabled
@@ -237,6 +242,9 @@ sleep 4
 if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
   echo "==> starting the call-event bridge"
   systemctl restart tolkyn-ami-bridge || true
+
+  echo "==> starting the real-call IVR bridge"
+  systemctl restart tolkyn-ivr-agi || true
 
   echo "==> starting the workspace sync timer + running one sync now"
   systemctl restart tolkyn-sync-workspaces.timer || true
@@ -260,6 +268,9 @@ if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; the
   systemctl is-active --quiet tolkyn-sync-workspaces.timer \
     && echo "sync-workspaces: timer active (every 30s) — journalctl -u tolkyn-sync-workspaces -n40" \
     || echo "sync-workspaces: timer NOT running — check: journalctl -u tolkyn-sync-workspaces -n40"
+  systemctl is-active --quiet tolkyn-ivr-agi \
+    && echo "ivr-agi: active — journalctl -u tolkyn-ivr-agi -f" \
+    || echo "ivr-agi: NOT running — check: journalctl -u tolkyn-ivr-agi -n40"
 fi
 echo
 echo "check:  asterisk -rx 'pjsip show endpoints'     # every agent line, once assigned in super admin"

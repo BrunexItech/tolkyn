@@ -31,9 +31,10 @@ ACTIONS = {
     "transfer",
     "hangup",
     "repeat",
+    "ai_agent",
 }
-_EXHAUSTED = {"ring_all", "voicemail", "hangup"}
-_AFTER_HOURS = {"ring_all", "voicemail", "hangup", "message"}
+_EXHAUSTED = {"ring_all", "voicemail", "hangup", "ai_agent"}
+_AFTER_HOURS = {"ring_all", "voicemail", "hangup", "message", "ai_agent"}
 _DIGITS = {*(str(i) for i in range(10)), "*", "#"}
 _DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 _MAX_HOPS = 6  # guard against a mis-built submenu loop
@@ -336,6 +337,14 @@ class IvrService:
             await self.db.commit()
             return {"action": "transfer", "target": target}
 
+        if action == "ai_agent":
+            call.state = CallState.ENDED
+            call.outcome = CallOutcome.TRANSFERRED
+            call.ended_at = datetime.now(timezone.utc)
+            call.reason = "Handed to the AI agent"
+            await self.db.commit()
+            return {"action": "ai_agent"}
+
         # hangup / fallthrough
         call.state = CallState.ENDED
         call.outcome = CallOutcome.MISSED
@@ -373,13 +382,19 @@ def _label_action(action: str, target: str, agents: Dict[str, str]) -> Dict[str,
         "message": f"Play a message: “{target}”",
         "transfer": f"Transfer the call to {target}",
         "hangup": "Hang up",
+        "ai_agent": "Hand off to the AI agent",
     }
     return {"action": action, "target": target, "label": labels.get(action, action)}
 
 
 def _resolve_exhausted(f: IvrFlow, transcript: List[Dict[str, str]]) -> Dict[str, Any]:
     transcript.append({"kind": "note", "text": f"Retries exhausted → {f.on_exhausted}."})
-    label = {"ring_all": "Ring all agents", "voicemail": "Send to voicemail", "hangup": "Hang up"}
+    label = {
+        "ring_all": "Ring all agents",
+        "voicemail": "Send to voicemail",
+        "hangup": "Hang up",
+        "ai_agent": "Hand off to the AI agent",
+    }
     return {"transcript": transcript, "resolved": {"action": f.on_exhausted, "target": "", "label": label.get(f.on_exhausted, f.on_exhausted)}}
 
 

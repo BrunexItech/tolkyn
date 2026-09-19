@@ -104,7 +104,8 @@ export type IvrAction =
   | "message"
   | "transfer"
   | "hangup"
-  | "repeat";
+  | "repeat"
+  | "ai_agent";
 
 export interface IvrOption {
   digit: string;
@@ -128,12 +129,12 @@ export interface IvrFlow {
   timeout_message: string;
   timeout_seconds: number;
   max_retries: number;
-  on_exhausted: "ring_all" | "voicemail" | "hangup";
+  on_exhausted: "ring_all" | "voicemail" | "hangup" | "ai_agent";
   menus: Record<string, IvrMenu>;
   hours_enabled: boolean;
   timezone: string;
   hours: Record<string, string[][]>;
-  after_hours_action: "ring_all" | "voicemail" | "hangup" | "message";
+  after_hours_action: "ring_all" | "voicemail" | "hangup" | "message" | "ai_agent";
   after_hours_message: string;
 }
 

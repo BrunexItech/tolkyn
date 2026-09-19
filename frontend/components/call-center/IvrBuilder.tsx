@@ -29,6 +29,7 @@ const ACTION_LABEL: Record<IvrAction, string> = {
   transfer: "Transfer to a phone number",
   hangup: "Hang up",
   repeat: "Repeat this menu",
+  ai_agent: "Hand off to the AI agent",
 };
 const TZ = [
   "Africa/Nairobi",
@@ -195,6 +196,7 @@ export function IvrBuilder({
               <option value="ring_all">Ring all agents</option>
               <option value="voicemail">Send to voicemail</option>
               <option value="hangup">Hang up</option>
+              <option value="ai_agent">Hand off to the AI agent</option>
             </OmSelect>
           </Field>
         </div>
@@ -251,6 +253,7 @@ export function IvrBuilder({
                   <option value="message">A message, then hang up</option>
                   <option value="ring_all">Ring all agents anyway</option>
                   <option value="hangup">Hang up</option>
+                  <option value="ai_agent">Hand off to the AI agent</option>
                 </OmSelect>
               </Field>
               <Field label="After-hours message">

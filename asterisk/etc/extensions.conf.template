@@ -14,8 +14,10 @@
 ; AstDB keys (last 9 digits of the phone number, so the format Cloud One
 ; happens to send — with/without +254 — never matters):
 ;   tolkyn/did/<9digits>      -> agent extension  (inbound routing)
-;   tolkyn/ext_did/<ext>      -> the workspace's DID, +254... (informational)
-;   tolkyn/ext_ws/<ext>       -> workspace_id      (used by voicemail-notify.sh)
+;   tolkyn/ext_did/<ext>      -> the workspace's DID, +254... (caller ID on an
+;                                IVR "transfer" action; also informational)
+;   tolkyn/ext_ws/<ext>       -> workspace_id (real-call IVR AGI bridge; also
+;                                used by voicemail-notify.sh)
 ;   tolkyn/ext_record/<ext>   -> "1"/"0" — call recording on/off for that workspace
 ;
 ; Asterisk picks the MOST SPECIFIC matching pattern, so the +254 / 254 rules
@@ -57,6 +59,19 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
+ ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
+ ; before ever dialing the agent. It plays this workspace's menu (if the IVR
+ ; is even turned on — get_flow()/on_call_enter() decide that, not this
+ ; dialplan) and sets IVR_NEXT to whatever the caller's choice resolved to.
+ ; If the IVR is off, or the AGI service is down/unreachable for any reason,
+ ; IVR_NEXT stays unset and every GotoIf below is skipped — falls straight
+ ; through to the exact same ring-the-agent behaviour as before this existed.
+ same => n,Set(WS_ID=${DB(tolkyn/ext_ws/${WS_EXT})})
+ same => n,AGI(agi://127.0.0.1:4573/ivr,${WS_ID})
+ same => n,GotoIf($["${IVR_NEXT}" = "voicemail"]?ivr-voicemail,1)
+ same => n,GotoIf($["${IVR_NEXT}" = "ai_agent"]?ivr-ai-agent,1)
+ same => n,GotoIf($["${IVR_NEXT}" = "transfer"]?ivr-transfer,1)
+ same => n,GotoIf($["${IVR_NEXT}" = "hangup"]?ivr-hangup,1)
  ; call recording — opt-in per workspace (Super Admin -> Telephony ->
  ; Record calls), mirrored into AstDB by sync_workspaces.py. 'b' = only
  ; record once the call is actually bridged, not ring time.
@@ -67,6 +82,22 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,ExecIf($["${DIALSTATUS}" = "ANSWER"]?Hangup())
  same => n,VoiceMail(${WS_EXT}@default,u)
  same => n,Hangup()
+
+exten => ivr-voicemail,1,VoiceMail(${WS_EXT}@default,u)
+ same => n,Hangup()
+
+exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtT)
+ same => n,Hangup()
+
+; Reuses [from-internal]'s own number-normalisation patterns rather than
+; duplicating them — ${DID} is the same channel var those patterns already
+; expect for caller ID, just set from AstDB here instead of an agent
+; endpoint's set_var (there's no agent endpoint on this leg, it's the caller).
+exten => ivr-transfer,1,Set(DID=${DB(tolkyn/ext_did/${WS_EXT})})
+ same => n,Goto(from-internal,${IVR_TARGET},1)
+
+exten => ivr-hangup,1,Hangup()
 
 exten => h,1,Hangup()
 
