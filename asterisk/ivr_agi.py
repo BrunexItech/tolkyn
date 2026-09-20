@@ -44,7 +44,7 @@ BACKEND = os.environ.get("PBX_EVENT_BACKEND_URL", "http://127.0.0.1:8090/api/v1"
 BACKEND_ROOT = BACKEND[: -len("/api/v1")] if BACKEND.endswith("/api/v1") else BACKEND
 SECRET = os.environ.get("PBX_EVENT_WEBHOOK_SECRET", "")
 RUNTIME_URL = f"{BACKEND}/call-center/ivr-runtime"
-SOUNDS_DIR = Path("/var/lib/asterisk/sounds/tolkyn-ivr")
+SOUNDS_DIR = Path("/usr/share/asterisk/sounds/tolkyn-ivr")
 
 ESCAPE_DIGITS = "0123456789*#"
 

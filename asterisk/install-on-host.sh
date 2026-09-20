@@ -197,8 +197,14 @@ if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; the
   # shell) executes this directly, so it needs +x.
   install -m 0755 -o asterisk -g asterisk "$HERE/voicemail-notify.sh" /opt/tolkyn/voicemail-notify.sh
   install -d -o asterisk -g asterisk /var/lib/tolkyn
-  # where ivr_agi.py caches rendered prompt audio for STREAM FILE
-  install -d -o asterisk -g asterisk /var/lib/asterisk/sounds/tolkyn-ivr
+  # where ivr_agi.py caches rendered prompt audio for STREAM FILE -- this
+  # MUST be under astdatadir (asterisk.conf's [directories] section), not
+  # astvarlibdir: on Debian/Ubuntu packaging these differ (astdatadir is
+  # /usr/share/asterisk, astvarlibdir is /var/lib/asterisk), and Asterisk
+  # resolves STREAM FILE's sounds search path from astdatadir. Using the
+  # wrong one leaves the file on disk but invisible to Asterisk -- it logs
+  # "does not exist in any format" and plays nothing, with no other error.
+  install -d -o asterisk -g asterisk /usr/share/asterisk/sounds/tolkyn-ivr
 
   install -d /etc/tolkyn
   umask 077

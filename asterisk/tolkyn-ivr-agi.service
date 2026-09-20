@@ -15,7 +15,7 @@ NoNewPrivileges=yes
 ProtectHome=yes
 PrivateTmp=yes
 ReadOnlyPaths=/opt/tolkyn
-ReadWritePaths=/var/lib/asterisk/sounds
+ReadWritePaths=/usr/share/asterisk/sounds
 
 [Install]
 WantedBy=multi-user.target
