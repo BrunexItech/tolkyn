@@ -85,8 +85,14 @@ async def _mp3_to_wav8k(mp3_bytes: bytes) -> bytes:
     with tempfile.NamedTemporaryFile(suffix=".mp3") as src, tempfile.NamedTemporaryFile(suffix=".wav") as dst:
         src.write(mp3_bytes)
         src.flush()
+        # Explicit codec + bit depth -- Asterisk's STREAM FILE expects plain
+        # 16-bit signed linear PCM in the WAV container. Without -acodec,
+        # ffmpeg's own default for .wav can vary by build/version; leaving
+        # it ambiguous risks a file that "converts successfully" but that
+        # Asterisk can't actually play (silently, with no error either side).
         proc = await asyncio.create_subprocess_exec(
-            "ffmpeg", "-y", "-i", src.name, "-ar", "8000", "-ac", "1", "-f", "wav", dst.name,
+            "ffmpeg", "-y", "-i", src.name,
+            "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le", "-f", "wav", dst.name,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
         _, stderr = await proc.communicate()

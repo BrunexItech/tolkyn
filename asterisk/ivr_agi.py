@@ -126,10 +126,15 @@ class AGISession:
 
     def stream_file(self, filename: str, escape_digits: str = ESCAPE_DIGITS) -> str:
         """Plays filename, interruptible by any of escape_digits. Returns the
-        pressed digit (e.g. "1") if interrupted, or "" if it played through
-        (or failed to play at all — treated the same as silence)."""
+        pressed digit (e.g. "1") if interrupted, or "" if it played through.
+        A negative result means Asterisk couldn't find/play the file at all
+        (wrong path, format it doesn't recognise, channel already gone) —
+        logged loudly, since that's silent-but-broken otherwise: the caller
+        hears nothing and nothing looks wrong in the response itself."""
         resp = self.command(f'STREAM FILE {filename} "{escape_digits}"')
         code = self.result_of(resp)
+        if code < 0:
+            log(f"STREAM FILE {filename} failed (result={code}) — no audio played")
         return chr(code) if code > 0 else ""
 
     def wait_for_digit(self, timeout_ms: int) -> str:
