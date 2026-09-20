@@ -155,7 +155,11 @@ class Settings(BaseSettings):
     # Conversational AI agent above. Voice ID default is ElevenLabs' own
     # long-standing public "Rachel" voice; override with your own pick.
     ELEVENLABS_IVR_VOICE_ID: str = Field(default="21m00Tcm4TlvDq8ikWAM", description="voice used to render IVR menu prompts to audio")
-    ELEVENLABS_TTS_MODEL: str = Field(default="eleven_flash_v2_5", description="low-latency TTS model for IVR prompt rendering")
+    # Rendered once per unique prompt text and cached indefinitely (see
+    # ivr_tts.py's _cache_key) -- every real call just replays the cached
+    # file, so TTS latency is irrelevant here. Use ElevenLabs' most lifelike
+    # model, not a low-latency one meant for live conversation.
+    ELEVENLABS_TTS_MODEL: str = Field(default="eleven_multilingual_v2", description="highest-quality TTS model for IVR prompt rendering (cached, not real-time)")
 
     # The block of DIDs Cloud One allocated on the shared trunk, comma-separated
     # E.164 (e.g. "+254207916250,+254207916251,..."). Super admin can only
