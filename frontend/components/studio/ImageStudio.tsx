@@ -30,6 +30,7 @@ import { PromptHelper } from "./PromptHelper";
 import { PROMPT_LIMITS, canSubmitPrompt } from "./limits";
 import { toast } from "@/lib/om/toast";
 import { cn } from "@/lib/utils";
+import { sendToComposer } from "@/lib/composer/prefill";
 
 type Msg =
   | { id: string; role: "user"; text: string; attachmentUrl?: string }
@@ -223,14 +224,9 @@ export function ImageStudio() {
   };
 
   const sendImageToComposer = (url: string) => {
-    try {
-      sessionStorage.setItem(
-        "om:composer:prefill",
-        JSON.stringify({ media: [{ url, alt: "", type: "image" }] }),
-      );
-    } catch {
-      /* ignore */
-    }
+    const sent = sendToComposer({ media: [{ url, alt: "", type: "image" }] });
+    if (sent) toast.ok("Added to composer");
+    else toast.err("Couldn't hand this to the composer — try again");
     router.push("/dashboard/publishing");
   };
 

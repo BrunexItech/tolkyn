@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { postsApi, type MediaItem, type MusicTrack, type Post, type PostInput } from "@/lib/api/posts";
 import { toast } from "@/lib/om/toast";
 import { feedBus } from "@/components/om/feed-bus";
+import { COMPOSER_PREFILL_EVENT, hasPendingComposerPrefill, readComposerPrefill } from "@/lib/composer/prefill";
 
 export interface DraftForm {
   title: string;
@@ -61,14 +62,23 @@ export function useComposerDraft(initial?: Post) {
   const create = useMutation({ mutationFn: (b: PostInput) => postsApi.create(b) });
   const update = useMutation({ mutationFn: ({ id, b }: { id: string; b: PostInput }) => postsApi.update(id, b) });
 
-  // pick up a draft handed over from Content Studio ("Use" button)
+  // Pick up content handed over from Content Studio ("Use" / "Use in post").
+  // Runs on mount AND on the custom event, so it also works if this composer
+  // was already mounted when the handoff happened (e.g. a second tab) --
+  // sessionStorage's own "storage" event never fires in the tab that wrote
+  // it, so a same-tab handoff needs its own signal.
   useEffect(() => {
-    if (initial) return;
-    try {
-      const raw = sessionStorage.getItem("om:composer:prefill");
-      if (!raw) return;
-      sessionStorage.removeItem("om:composer:prefill");
-      const p = JSON.parse(raw) as Partial<DraftForm>;
+    const apply = () => {
+      if (initial) {
+        // Don't silently drop it, and don't clobber an in-progress edit of
+        // an existing post either -- tell the user why nothing changed.
+        if (hasPendingComposerPrefill()) {
+          toast.warn("AI content is ready, but you're editing an existing post — start a new post to use it.");
+        }
+        return;
+      }
+      const p = readComposerPrefill();
+      if (!p) return;
       setForm((f) => ({
         ...f,
         body: p.body ?? f.body,
@@ -77,11 +87,13 @@ export function useComposerDraft(initial?: Post) {
         title: p.title ?? f.title,
         media: Array.isArray(p.media) && p.media.length ? [...f.media, ...p.media] : f.media,
       }));
-    } catch {
-      /* ignore */
-    }
+      toast.ok("AI content added to your post");
+    };
+    apply();
+    window.addEventListener(COMPOSER_PREFILL_EVENT, apply);
+    return () => window.removeEventListener(COMPOSER_PREFILL_EVENT, apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [initial]);
 
   const flush = useCallback(
     async (f: DraftForm) => {

@@ -15,6 +15,7 @@ import { PROMPT_LIMITS, canSubmitPrompt } from "./limits";
 import type { CopyResponse } from "@/lib/api/studio";
 import { toast } from "@/lib/om/toast";
 import { cn } from "@/lib/utils";
+import { sendToComposer } from "@/lib/composer/prefill";
 
 const CHANNELS = PLATFORMS.filter((p) =>
   ["instagram", "tiktok", "x", "linkedin", "facebook", "youtube"].includes(p.id),
@@ -143,18 +144,13 @@ export function CopyPanel() {
                         platform={g.platform}
                         brief={prompt}
                         onUse={() => {
-                          try {
-                            sessionStorage.setItem(
-                              "om:composer:prefill",
-                              JSON.stringify({
-                                body: v.text,
-                                hashtags: v.hashtags,
-                                platforms: [g.platform],
-                              }),
-                            );
-                          } catch {
-                            /* ignore */
-                          }
+                          const sent = sendToComposer({
+                            body: v.text,
+                            hashtags: v.hashtags,
+                            platforms: [g.platform],
+                          });
+                          if (sent) toast.ok("Added to composer");
+                          else toast.err("Couldn't hand this to the composer — try again");
                           router.push("/dashboard/publishing");
                         }}
                       />

@@ -11,6 +11,8 @@ import { ImageLightbox } from "./ImageLightbox";
 import { CopyLightbox, type CaptionView } from "./CopyLightbox";
 import { mediaUrl, type AssetKind, type GeneratedAsset } from "@/lib/api/studio";
 import { relativeTime, truncate } from "@/lib/om/format";
+import { sendToComposer } from "@/lib/composer/prefill";
+import { toast } from "@/lib/om/toast";
 
 const ICON: Record<AssetKind, typeof Type> = {
   copy: Type,
@@ -63,30 +65,20 @@ export function AssetLibrary({ kind }: { kind: AssetKind }) {
   };
 
   const sendImageToComposer = (url: string) => {
-    try {
-      sessionStorage.setItem(
-        "om:composer:prefill",
-        JSON.stringify({ media: [{ url, alt: "", type: "image" }] }),
-      );
-    } catch {
-      /* ignore */
-    }
+    const sent = sendToComposer({ media: [{ url, alt: "", type: "image" }] });
+    if (sent) toast.ok("Added to composer");
+    else toast.err("Couldn't hand this to the composer — try again");
     router.push("/dashboard/publishing");
   };
 
   const sendCaptionToComposer = (c: CaptionView) => {
-    try {
-      sessionStorage.setItem(
-        "om:composer:prefill",
-        JSON.stringify({
-          body: c.text,
-          hashtags: c.hashtags,
-          platforms: c.platform ? [c.platform] : [],
-        }),
-      );
-    } catch {
-      /* ignore */
-    }
+    const sent = sendToComposer({
+      body: c.text,
+      hashtags: c.hashtags,
+      platforms: c.platform ? [c.platform] : [],
+    });
+    if (sent) toast.ok("Added to composer");
+    else toast.err("Couldn't hand this to the composer — try again");
     router.push("/dashboard/publishing");
   };
 
