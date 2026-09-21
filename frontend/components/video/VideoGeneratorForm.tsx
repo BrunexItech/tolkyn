@@ -6,7 +6,7 @@ import { Card } from "@/components/om/primitives/Card";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { uploadFile } from "@/lib/api/uploads";
-import { mediaUrl, estimateCost } from "@/lib/api/video";
+import { mediaUrl } from "@/lib/api/video";
 import { useVideoModels, useGenerateVideo, useEnhancePrompt } from "./hooks";
 import { toast } from "@/lib/om/toast";
 import { cn } from "@/lib/utils";
@@ -90,11 +90,8 @@ export function VideoGeneratorForm() {
 
   const activeModel = models?.models.find((m) => m.key === modelKey) ?? models?.models[0] ?? null;
   const effectiveModelKey = modelKey || activeModel?.key || "";
-  const supportedResolutions = activeModel ? Object.keys(activeModel.price_per_second) : [];
-  const cost = models ? estimateCost(models.models, effectiveModelKey, resolution, duration) : null;
-
-  const overBudget =
-    models?.budget_usd != null && cost != null ? models.spent_usd + cost > models.budget_usd : false;
+  const supportedResolutions = activeModel ? activeModel.resolutions : [];
+  const overBudget = models?.budget_reached ?? false;
 
   const pickReferenceImage = async (file?: File) => {
     if (!file) return;
@@ -326,22 +323,9 @@ export function VideoGeneratorForm() {
           )}
         </div>
 
-        <div className="flex items-center justify-between rounded-lg border border-om-border bg-white/[0.02] px-3 py-2">
-          <div className="text-[11px] text-om-muted">
-            Estimated cost
-            {models?.budget_usd != null && (
-              <span className="ml-1.5">
-                · ${models.spent_usd.toFixed(2)} used of ${models.budget_usd.toFixed(2)}
-              </span>
-            )}
-          </div>
-          <div className={cn("font-mono text-[15px] font-bold", overBudget ? "text-om-red" : "text-om-text")}>
-            {cost != null ? `$${cost.toFixed(2)}` : "—"}
-          </div>
-        </div>
         {overBudget && (
           <p className="text-[10.5px] text-om-red">
-            This would go over your video budget. Ask the platform admin to raise it, or pick a cheaper option.
+            You&apos;ve reached your video budget. Ask the platform admin to raise it.
           </p>
         )}
 

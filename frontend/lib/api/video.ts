@@ -15,14 +15,17 @@ export interface VideoModelInfo {
   label: string;
   description: string;
   max_resolution: string;
-  price_per_second: Record<string, number | null>;
+  /** Selectable resolutions for this model. No pricing here — per-video
+   * cost is Super Admin only (see the admin video-usage page). */
+  resolutions: string[];
   supports_audio: boolean;
 }
 
 export interface VideoModelsResponse {
   models: VideoModelInfo[];
-  budget_usd: number | null;
-  spent_usd: number;
+  /** True once this workspace has hit its video budget — a plain flag, not
+   * a dollar figure. Budget is enforced server-side regardless. */
+  budget_reached: boolean;
   configured: boolean;
   brand_logo_url: string | null;
   brand_colors: string[] | null;
@@ -48,7 +51,6 @@ export interface VideoJob {
   video_url: string | null;
   thumbnail_url: string | null;
   error_message: string | null;
-  cost_usd: number;
   created_at: string;
 }
 
@@ -77,10 +79,3 @@ export const videoApi = {
     http.patch<VideoModelsResponse>("/video/brand", { logo_url, colors }),
   clearBrand: () => http.del<VideoModelsResponse>("/video/brand"),
 };
-
-export function estimateCost(models: VideoModelInfo[], modelKey: string, resolution: string, duration: number): number | null {
-  const model = models.find((m) => m.key === modelKey);
-  const perSecond = model?.price_per_second[resolution];
-  if (perSecond == null) return null;
-  return Math.round(perSecond * duration * 100) / 100;
-}

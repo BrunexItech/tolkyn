@@ -27,7 +27,7 @@ from app.core.video_models import (
 )
 from app.models.user import User
 from app.models.video_job import VideoJob, VideoJobStatus
-from app.schemas.video import BrandUpdateRequest, VideoGenerateRequest, VideoModelsResponse
+from app.schemas.video import BrandUpdateRequest, VideoGenerateRequest, VideoModelInfoPublic, VideoModelsResponse
 from app.services import gemini_video_client as gemini
 from app.services.video_ffmpeg import concat_videos, extract_last_frame
 from app.services.watermark import apply_watermark
@@ -57,11 +57,24 @@ class VideoService:
         allowed = self.user.allowed_video_models or []
         if allowed:
             catalog = [m for m in catalog if m["key"] in allowed]
-        spent = await self._spent_usd()
+        public_models = [
+            VideoModelInfoPublic(
+                key=m["key"],
+                label=m["label"],
+                description=m["description"],
+                max_resolution=m["max_resolution"],
+                resolutions=list(m["price_per_second"].keys()),
+                supports_audio=m["supports_audio"],
+            )
+            for m in catalog
+        ]
+        budget_reached = False
+        if self.user.video_budget_usd is not None:
+            spent = await self._spent_usd()
+            budget_reached = spent >= self.user.video_budget_usd
         return VideoModelsResponse(
-            models=catalog,
-            budget_usd=self.user.video_budget_usd,
-            spent_usd=spent,
+            models=public_models,
+            budget_reached=budget_reached,
             configured=bool(settings.GEMINI_API_KEY),
             brand_logo_url=self.user.brand_logo_url,
             brand_colors=self.user.brand_colors,
@@ -123,8 +136,7 @@ class VideoService:
             if spent + cost > self.user.video_budget_usd:
                 raise HTTPException(
                     status.HTTP_402_PAYMENT_REQUIRED,
-                    f"This would exceed your video budget (${self.user.video_budget_usd:.2f}). "
-                    f"Used ${spent:.2f} so far — ask the platform admin to raise it.",
+                    "This would exceed your video budget — ask the platform admin to raise it.",
                 )
 
         job = VideoJob(

@@ -5,6 +5,9 @@ from pydantic import BaseModel, Field
 
 
 class VideoModelInfo(BaseModel):
+    """Super-Admin view of a model — includes pricing. See VideoModelInfoPublic
+    for the tenant-facing version, which deliberately omits it (workspace
+    users don't see per-video cost; only the Super Admin does)."""
     key: str
     label: str
     description: str
@@ -13,10 +16,24 @@ class VideoModelInfo(BaseModel):
     supports_audio: bool = True
 
 
+class VideoModelInfoPublic(BaseModel):
+    """What a workspace user sees when picking a model/resolution -- no
+    pricing, just what's selectable."""
+    key: str
+    label: str
+    description: str
+    max_resolution: str
+    resolutions: List[str]
+    supports_audio: bool = True
+
+
 class VideoModelsResponse(BaseModel):
-    models: List[VideoModelInfo]
-    budget_usd: Optional[float] = None
-    spent_usd: float = 0.0
+    models: List[VideoModelInfoPublic]
+    # Whether this workspace has hit its video budget -- a plain flag, not
+    # the dollar figures themselves (those are Super-Admin-only; see
+    # /admin/video-usage). Budget is still enforced server-side regardless
+    # of what the client shows.
+    budget_reached: bool = False
     configured: bool = Field(..., description="Whether the platform has a Gemini API key set up")
     brand_logo_url: Optional[str] = None
     brand_colors: Optional[List[str]] = None
@@ -69,7 +86,6 @@ class VideoJobResponse(BaseModel):
     video_url: Optional[str] = None
     thumbnail_url: Optional[str] = None
     error_message: Optional[str] = None
-    cost_usd: float
     created_at: datetime
 
     model_config = {"from_attributes": True, "protected_namespaces": ()}

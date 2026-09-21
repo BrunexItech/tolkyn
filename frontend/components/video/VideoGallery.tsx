@@ -77,7 +77,7 @@ function JobCard({ job }: { job: VideoJob }) {
         <p className="line-clamp-2 text-[11px] leading-snug text-om-dim">{job.prompt}</p>
         <div className="flex items-center justify-between text-[9.5px] text-om-faint">
           <span>{job.resolution} · {job.duration_seconds}s · {job.aspect_ratio}</span>
-          <span>${job.cost_usd.toFixed(2)} · {relativeTime(job.created_at)}</span>
+          <span>{relativeTime(job.created_at)}</span>
         </div>
       </div>
     </Card>
