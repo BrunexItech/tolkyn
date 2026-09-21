@@ -124,6 +124,10 @@ export interface IvrFlow {
   /** Spoken by the ElevenLabs AI agent ({{business_name}}) — not set in
    * ElevenLabs itself, since one shared agent answers for every workspace. */
   business_name: string | null;
+  /** Business facts the AI agent can draw on ({{knowledge_base}}) — same
+   * delivery mechanism as business_name, since one shared agent answers
+   * for every workspace. Capped server-side to ~4000 chars per call. */
+  knowledge_base: string | null;
   greeting: string;
   invalid_message: string;
   timeout_message: string;

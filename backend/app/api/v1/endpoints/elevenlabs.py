@@ -101,7 +101,10 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     # always set it to something, even when the workspace can't be resolved
     # (an unmapped test call, a misdial), or the agent errors out before it
     # even starts talking.
-    dynamic_vars: Dict[str, Any] = {"caller_number": caller_id, "business_name": "our team"}
+    # knowledge_base is also referenced in the prompt, so it needs the same
+    # always-present treatment as business_name -- an empty string is a safe,
+    # valid default (the prompt just reads as having nothing extra to add).
+    dynamic_vars: Dict[str, Any] = {"caller_number": caller_id, "business_name": "our team", "knowledge_base": ""}
     if workspace_id:
         # secret__ — never sent to the LLM or spoken; just carried through
         # so a later tool call (resolve-caller, save-caller-name, ...) knows
@@ -120,6 +123,14 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
             business_name = user or ""
         if business_name:
             dynamic_vars["business_name"] = business_name
+
+        # No documented size limit from ElevenLabs for a dynamic variable's
+        # value -- cap it ourselves so one workspace's long-winded notes
+        # can't blow out the agent's response latency or hit some
+        # undocumented ceiling on a live call.
+        kb = ((flow.knowledge_base if flow else None) or "").strip()
+        if kb:
+            dynamic_vars["knowledge_base"] = kb[:4000]
 
     return {"type": "conversation_initiation_client_data", "dynamic_variables": dynamic_vars}
 

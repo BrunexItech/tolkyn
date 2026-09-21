@@ -134,6 +134,16 @@ export function IvrBuilder({
             placeholder="Acme Traders"
           />
         </Field>
+        <Field
+          label="Knowledge base"
+          hint="Facts about this business the AI agent can use when answering questions — hours, services, pricing, policies. Only used if calls are routed to the AI agent."
+        >
+          <OmTextarea
+            value={draft.knowledge_base ?? ""}
+            onChange={(e) => set("knowledge_base", e.target.value)}
+            placeholder={"We're open Mon-Sat, 8am-6pm. We offer... Our return policy is..."}
+          />
+        </Field>
         <Field hint="Played once when the call connects, before the main menu.">
           <OmTextarea
             value={draft.greeting}

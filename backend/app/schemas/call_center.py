@@ -151,6 +151,7 @@ class IvrMenu(BaseModel):
 class IvrFlowPayload(BaseModel):
     is_active: bool = False
     business_name: Optional[str] = None
+    knowledge_base: Optional[str] = None
     greeting: str = ""
     invalid_message: str = "Sorry, that isn't a valid option."
     timeout_message: str = "We didn't catch that."
@@ -168,6 +169,7 @@ class IvrFlowPayload(BaseModel):
 class IvrFlowUpdate(BaseModel):
     is_active: Optional[bool] = None
     business_name: Optional[str] = None
+    knowledge_base: Optional[str] = None
     greeting: Optional[str] = None
     invalid_message: Optional[str] = None
     timeout_message: Optional[str] = None

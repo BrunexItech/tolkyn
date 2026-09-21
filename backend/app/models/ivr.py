@@ -42,6 +42,14 @@ class IvrFlow(BaseModel):
     # app.api.v1.endpoints.elevenlabs.conversation_init).
     business_name = Column(String(200), nullable=True)
 
+    # Business-specific facts the AI agent can draw on ({{knowledge_base}} in
+    # its prompt), delivered the same way as business_name -- one shared
+    # ElevenLabs agent answers for every workspace, so this has to travel in
+    # per-call via the webhook rather than living in ElevenLabs' own
+    # per-agent Knowledge Base feature (which can't be scoped per workspace
+    # without a separate paid agent per workspace).
+    knowledge_base = Column(Text, nullable=True)
+
     greeting = Column(Text, nullable=False, default="")
     invalid_message = Column(
         Text, nullable=False, default="Sorry, that isn't a valid option."

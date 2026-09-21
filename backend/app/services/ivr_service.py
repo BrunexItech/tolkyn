@@ -359,6 +359,7 @@ def _flow_dict(f: IvrFlow) -> Dict[str, Any]:
     return {
         "is_active": f.is_active,
         "business_name": f.business_name,
+        "knowledge_base": f.knowledge_base,
         "greeting": f.greeting,
         "invalid_message": f.invalid_message,
         "timeout_message": f.timeout_message,
