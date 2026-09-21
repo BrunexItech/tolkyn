@@ -25,8 +25,19 @@ export function ComposerEditor({
   const [mediaUrlInput, setMediaUrlInput] = useState("");
 
   const addTag = () => {
-    const t = tagInput.trim().replace(/^#/, "");
-    if (t && !form.hashtags.includes(`#${t}`)) patch({ hashtags: [...form.hashtags, `#${t}`] });
+    // Splits on whitespace/commas so typing or pasting "#sale #new" in one
+    // go adds two tags, not one literal "#sale #new" tag.
+    const parts = tagInput
+      .split(/[\s,]+/)
+      .map((t) => t.trim().replace(/^#/, ""))
+      .filter(Boolean);
+    const existing = new Set(form.hashtags);
+    const fresh: string[] = [];
+    for (const t of parts) {
+      const tag = `#${t}`;
+      if (!existing.has(tag) && !fresh.includes(tag)) fresh.push(tag);
+    }
+    if (fresh.length) patch({ hashtags: [...form.hashtags, ...fresh] });
     setTagInput("");
   };
 
@@ -107,6 +118,7 @@ export function ComposerEditor({
             value={tagInput}
             onChange={(e) => setTagInput(e.target.value)}
             onKeyDown={(e) => (e.key === "Enter" || e.key === ",") && (e.preventDefault(), addTag())}
+            onBlur={() => tagInput.trim() && addTag()}
             placeholder="add tag"
             className="w-24 bg-transparent text-[11px] text-om-text outline-none placeholder:text-om-muted"
           />

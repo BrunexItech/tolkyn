@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Wand2, Loader2, ChevronDown, ChevronUp, ArrowRight, Ban, Lightbulb } from "lucide-react";
+import { Wand2, Loader2, ChevronDown, ChevronUp, ArrowRight, Ban, Lightbulb, Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useBuildPrompt } from "./hooks";
 import { PromptCount } from "./PromptCount";
@@ -22,6 +22,7 @@ export function PromptHelper({
   const [open, setOpen] = useState(defaultOpen);
   const [brief, setBrief] = useState("");
   const [result, setResult] = useState<PromptResult | null>(null);
+  const [used, setUsed] = useState(false);
   const build = useBuildPrompt();
 
   const briefOk = canSubmitPrompt(brief, PROMPT_LIMITS.brief);
@@ -74,10 +75,27 @@ export function PromptHelper({
                 {result.prompt}
               </div>
               <button
-                onClick={() => onUse(result.prompt)}
-                className="inline-flex items-center gap-1 rounded-md bg-om-violet/15 px-2 py-1 text-[10.5px] font-semibold text-om-violet hover:bg-om-violet/25"
+                onClick={() => {
+                  onUse(result.prompt);
+                  setUsed(true);
+                  setTimeout(() => setUsed(false), 1500);
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[10.5px] font-semibold transition-colors",
+                  used
+                    ? "bg-om-green/15 text-om-green"
+                    : "bg-om-violet/15 text-om-violet hover:bg-om-violet/25",
+                )}
               >
-                Use this prompt <ArrowRight className="size-3" />
+                {used ? (
+                  <>
+                    Applied <Check className="size-3" />
+                  </>
+                ) : (
+                  <>
+                    Use this prompt <ArrowRight className="size-3" />
+                  </>
+                )}
               </button>
 
               {result.style_tips.length > 0 && (
