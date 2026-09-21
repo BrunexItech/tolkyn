@@ -101,10 +101,15 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     # always set it to something, even when the workspace can't be resolved
     # (an unmapped test call, a misdial), or the agent errors out before it
     # even starts talking.
-    # knowledge_base is also referenced in the prompt, so it needs the same
+    # business_info is also referenced in the prompt, so it needs the same
     # always-present treatment as business_name -- an empty string is a safe,
     # valid default (the prompt just reads as having nothing extra to add).
-    dynamic_vars: Dict[str, Any] = {"caller_number": caller_id, "business_name": "our team", "knowledge_base": ""}
+    # Named "business_info", not "knowledge_base" -- the latter collides with
+    # ElevenLabs' own built-in per-agent Knowledge Base/RAG feature name, and
+    # in testing a dynamic variable with that exact name was never picked up
+    # by the agent even though the payload genuinely carried it (confirmed via
+    # a direct webhook call) -- while an ordinary name works fine.
+    dynamic_vars: Dict[str, Any] = {"caller_number": caller_id, "business_name": "our team", "business_info": ""}
     if workspace_id:
         # secret__ — never sent to the LLM or spoken; just carried through
         # so a later tool call (resolve-caller, save-caller-name, ...) knows
@@ -130,7 +135,7 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
         # undocumented ceiling on a live call.
         kb = ((flow.knowledge_base if flow else None) or "").strip()
         if kb:
-            dynamic_vars["knowledge_base"] = kb[:4000]
+            dynamic_vars["business_info"] = kb[:4000]
 
     return {"type": "conversation_initiation_client_data", "dynamic_variables": dynamic_vars}
 
