@@ -163,6 +163,21 @@ async def tool_save_caller_name(workspace_id: str, request: Request, db: AsyncSe
     return {"saved": saved}
 
 
+@router.get("/tools/{workspace_id}/business-info")
+async def tool_business_info(workspace_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    """Tool: the workspace's own business facts (hours, services, policies —
+    whatever's saved in Super Admin's Knowledge base field), fetched live
+    when the caller actually asks about the business — instead of relying
+    on the agent noticing a paragraph handed to it as dynamic-variable
+    context, which proved unreliable in testing regardless of prompt
+    wording. Point this agent's Tools tab at this URL with workspace_id set
+    to {{secret__workspace_id}}."""
+    _check_secret(request)
+    flow = await IvrService(db, workspace_id).get_flow(create=False)
+    info = ((flow.knowledge_base if flow else None) or "").strip()
+    return {"info": info}
+
+
 @router.get("/tools/{workspace_id}/business-status")
 async def tool_business_status(workspace_id: str, request: Request, db: AsyncSession = Depends(get_db)):
     """Tool: is this workspace open right now, per its own IVR business
