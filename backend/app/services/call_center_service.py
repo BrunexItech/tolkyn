@@ -18,7 +18,7 @@ from app.models.call import (
 from app.core.crypto import encrypt
 from app.models.team_member import MemberStatus, TeamMember, TeamRole
 from app.models.user import User
-from app.services.call_center_seed import build_agents, build_calls
+from app.services.call_center_seed import build_agents
 from app.services.telephony import TelephonyError, get_config, get_provider
 
 _VOLUME_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
@@ -48,39 +48,32 @@ class CallCenterService:
 
     # ---- seeding ----------------------------------------------------
     async def _ensure_seed(self) -> None:
-        n = (
-            await self.db.execute(
-                select(func.count()).select_from(Call).where(Call.workspace_id == self.workspace_id)
-            )
-        ).scalar() or 0
+        """Makes sure this workspace has its own "self" CallAgent row (and
+        rows for any real teammates) before the Call Center reads agent
+        data. No demo calls or placeholder agents are created -- a
+        workspace with no real call activity yet just has none, which
+        every read path here already renders as a genuine empty state."""
         a = (
             await self.db.execute(
                 select(func.count()).select_from(CallAgent).where(CallAgent.workspace_id == self.workspace_id)
             )
         ).scalar() or 0
-        if n and a:
+        if a:
             return
 
         me = (await self.db.execute(select(User).where(User.id == self.user_id))).scalar_one_or_none()
         self_name = (me.name if me else None) or "You"
 
-        if a == 0:
-            res = await self.db.execute(
-                select(TeamMember).where(
-                    TeamMember.workspace_id == self.workspace_id,
-                    TeamMember.role != TeamRole.OWNER,
-                    TeamMember.status != MemberStatus.SUSPENDED,
-                )
+        res = await self.db.execute(
+            select(TeamMember).where(
+                TeamMember.workspace_id == self.workspace_id,
+                TeamMember.role != TeamRole.OWNER,
+                TeamMember.status != MemberStatus.SUSPENDED,
             )
-            teammates = [m.name or m.email.split("@")[0].title() for m in res.scalars().all()]
-            for ag in build_agents(self.workspace_id, self.user_id, self_name, teammates):
-                self.db.add(ag)
-        # Only seed demo calls when there's no real phone system — once a
-        # trunk is live the queue/history fills from real webhook events.
-        cfg = await get_config(self.db, self.workspace_id)
-        if n == 0 and not (cfg and cfg.is_active and cfg.provider != "simulated"):
-            for c in build_calls(self.workspace_id, self.user_id):
-                self.db.add(c)
+        )
+        teammates = [m.name or m.email.split("@")[0].title() for m in res.scalars().all()]
+        for ag in build_agents(self.workspace_id, self.user_id, self_name, teammates):
+            self.db.add(ag)
         await self.db.commit()
 
     # ---- reads ----------------------------------------------------

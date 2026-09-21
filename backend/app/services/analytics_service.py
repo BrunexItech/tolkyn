@@ -209,6 +209,26 @@ class AnalyticsService:
         return self._overview_modelled(conns, posts, days)
 
     def _overview_modelled(self, conns, posts, days: int) -> Dict[str, Any]:
+        if not conns:
+            # No accounts connected -- real zeros, including deltas (with no
+            # history to compare against, "reach fell 100%" is as misleading
+            # as a fake positive trend would be).
+            return {
+                "provider": "modelled",
+                "window_days": days,
+                "connected": [],
+                "reach": 0,
+                "reach_delta": 0.0,
+                "engaged": 0,
+                "engagement_rate": 0.0,
+                "engagement_delta": 0.0,
+                "followers": 0,
+                "followers_delta": 0.0,
+                "new_followers": 0,
+                "profile_views": 0,
+                "posts_published": len(posts),
+                "avg_reach_per_post": 0,
+            }
         series = self._series(conns, days * 2)
         cur = series[-days:]
         prev = series[-days * 2:-days] or cur
@@ -248,7 +268,22 @@ class AnalyticsService:
     def _series(self, conns: List[SocialConnection], days: int) -> List[Dict[str, Any]]:
         today = date.today()
         out: List[Dict[str, Any]] = []
-        n_platforms = max(len(conns), 1)
+        if not conns:
+            # No connected accounts yet -- there's nothing to model. Real
+            # zeros, not a fabricated trend line: this used to force
+            # n_platforms to 1 and show fake-but-plausible reach numbers on
+            # every brand-new, empty dashboard.
+            for i in range(days):
+                d = today - timedelta(days=days - 1 - i)
+                out.append({
+                    "date": d.isoformat(),
+                    "label": d.strftime("%d %b"),
+                    "reach": 0,
+                    "engaged": 0,
+                    "impressions": 0,
+                })
+            return out
+        n_platforms = len(conns)
         for i in range(days):
             d = today - timedelta(days=days - 1 - i)
             r = _rng(self.workspace_id, d.isoformat())
