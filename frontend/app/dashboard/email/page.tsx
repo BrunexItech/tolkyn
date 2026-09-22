@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle, Inbox, Search } from "lucide-react";
+import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle, Inbox, Search, Trash2, Reply as ReplyIcon } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { Modal } from "@/components/om/primitives/Modal";
@@ -102,21 +102,63 @@ export default function BulkEmailPage() {
 
   const { data: history } = useQuery({ queryKey: ["email-campaigns"], queryFn: emailApi.campaigns });
 
+  const deleteCampaign = useMutation({
+    mutationFn: (id: string) => emailApi.deleteCampaign(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["email-campaigns"] });
+      toast.ok("Deleted");
+    },
+    onError: (e: Error) => toast.err(e.message),
+  });
+
+  const REPLIES_PAGE = 20;
   const [replySearch, setReplySearch] = useState("");
-  const { data: replies } = useQuery({
-    queryKey: ["email-replies", replySearch],
-    queryFn: () => emailApi.replies(replySearch.trim() || undefined),
+  const [repliesShown, setRepliesShown] = useState(REPLIES_PAGE);
+  useEffect(() => setRepliesShown(REPLIES_PAGE), [replySearch]);
+  const { data: replies, isFetching: repliesLoading } = useQuery({
+    queryKey: ["email-replies", replySearch, repliesShown],
+    queryFn: () => emailApi.replies({ search: replySearch.trim() || undefined, limit: repliesShown }),
+    refetchInterval: 60_000,
+  });
+  const { data: unread } = useQuery({
+    queryKey: ["email-replies-unread"],
+    queryFn: emailApi.unreadReplyCount,
     refetchInterval: 60_000,
   });
   const markRead = useMutation({
     mutationFn: (id: string) => emailApi.markReplyRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["email-replies"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["email-replies"] });
+      qc.invalidateQueries({ queryKey: ["email-replies-unread"] });
+    },
+  });
+  const deleteReply = useMutation({
+    mutationFn: (id: string) => emailApi.deleteReply(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["email-replies"] });
+      qc.invalidateQueries({ queryKey: ["email-replies-unread"] });
+      setOpenReply(null);
+      toast.ok("Deleted");
+    },
+    onError: (e: Error) => toast.err(e.message),
   });
   const [openReply, setOpenReply] = useState<ReplyRow | null>(null);
   const viewReply = (r: ReplyRow) => {
     setOpenReply(r);
     if (!r.is_read) markRead.mutate(r.id);
   };
+
+  const [replyDraft, setReplyDraft] = useState("");
+  const [replyBoxOpen, setReplyBoxOpen] = useState(false);
+  const sendReply = useMutation({
+    mutationFn: () => emailApi.replyToMessage(openReply!.id, replyDraft),
+    onSuccess: (r) => {
+      toast.ok(`Sent to ${r.to}`);
+      setReplyDraft("");
+      setReplyBoxOpen(false);
+    },
+    onError: (e: Error) => toast.err(e.message),
+  });
 
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const { data: campaignSends, isFetching: sendsLoading } = useQuery({
@@ -357,9 +399,9 @@ export default function BulkEmailPage() {
             <Card className="flex flex-col gap-1.5">
               <CardTitle icon={<Inbox />}>
                 Replies
-                {!!replies?.filter((r) => !r.is_read).length && (
+                {!!unread?.count && (
                   <span className="ml-1.5 rounded-full bg-om-blue/15 px-1.5 py-px text-[9.5px] font-semibold text-om-blue">
-                    {replies!.filter((r) => !r.is_read).length} new
+                    {unread.count} new
                   </span>
                 )}
               </CardTitle>
@@ -373,31 +415,43 @@ export default function BulkEmailPage() {
                 />
               </div>
               {replies?.length ? (
-                <ul className="flex flex-col divide-y divide-white/[0.05]">
-                  {replies.map((r) => (
-                    <li key={r.id}>
-                      <button
-                        type="button"
-                        onClick={() => viewReply(r)}
-                        className="flex w-full flex-col gap-0.5 py-1.5 text-left"
-                      >
-                        <span className="flex items-center gap-1.5">
-                          {!r.is_read && <span className="size-1.5 shrink-0 rounded-full bg-om-blue" />}
-                          <span className={cn("truncate text-[11px]", !r.is_read ? "font-semibold text-om-text" : "text-om-dim")}>
-                            {r.from_name || r.from_email}
+                <>
+                  <ul className="flex flex-col divide-y divide-white/[0.05]">
+                    {replies.map((r) => (
+                      <li key={r.id}>
+                        <button
+                          type="button"
+                          onClick={() => viewReply(r)}
+                          className="flex w-full flex-col gap-0.5 py-1.5 text-left"
+                        >
+                          <span className="flex items-center gap-1.5">
+                            {!r.is_read && <span className="size-1.5 shrink-0 rounded-full bg-om-blue" />}
+                            <span className={cn("truncate text-[11px]", !r.is_read ? "font-semibold text-om-text" : "text-om-dim")}>
+                              {r.from_name || r.from_email}
+                            </span>
+                            {r.received_at && (
+                              <span className="ml-auto shrink-0 text-[9.5px] text-om-faint">{relativeTime(r.received_at)}</span>
+                            )}
                           </span>
-                          {r.received_at && (
-                            <span className="ml-auto shrink-0 text-[9.5px] text-om-faint">{relativeTime(r.received_at)}</span>
+                          {r.subject && <span className="truncate text-[10.5px] text-om-muted">{r.subject}</span>}
+                          {r.body_preview && (
+                            <span className="line-clamp-1 text-[10px] text-om-faint">{r.body_preview}</span>
                           )}
-                        </span>
-                        {r.subject && <span className="truncate text-[10.5px] text-om-muted">{r.subject}</span>}
-                        {r.body_preview && (
-                          <span className="line-clamp-1 text-[10px] text-om-faint">{r.body_preview}</span>
-                        )}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                  {replies.length >= repliesShown && (
+                    <button
+                      type="button"
+                      onClick={() => setRepliesShown((n) => n + REPLIES_PAGE)}
+                      disabled={repliesLoading}
+                      className="mt-1 flex items-center justify-center gap-1.5 rounded-lg border border-om-border py-1.5 text-[10.5px] text-om-muted hover:border-om-blue/40 hover:text-om-dim disabled:opacity-50"
+                    >
+                      {repliesLoading ? <Loader2 className="size-3 animate-spin" /> : null} Load more
+                    </button>
+                  )}
+                </>
               ) : (
                 <p className="text-[11px] text-om-muted">
                   {replySearch
@@ -415,26 +469,44 @@ export default function BulkEmailPage() {
                     const open = expandedCampaign === c.id;
                     return (
                       <li key={c.id} className="py-1.5">
-                        <button
-                          type="button"
-                          onClick={() => setExpandedCampaign(open ? null : c.id)}
-                          className="flex w-full items-center justify-between gap-2 text-left"
-                        >
-                          <span className="flex min-w-0 flex-col">
-                            <span className="truncate text-[11.5px]">{c.subject}</span>
-                            {c.reply_to && (
-                              <span className="truncate text-[9.5px] text-om-faint">
-                                replies → {c.reply_to}
-                              </span>
-                            )}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-1">
-                            <StatusBadge tone={c.failed ? "amber" : "green"}>
-                              {c.sent}/{c.total}
-                            </StatusBadge>
-                            <ChevronDown className={cn("size-3.5 text-om-faint transition-transform", open && "rotate-180")} />
-                          </span>
-                        </button>
+                        <div className="flex w-full items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedCampaign(open ? null : c.id)}
+                            className="flex min-w-0 flex-1 items-center justify-between gap-2 text-left"
+                          >
+                            <span className="flex min-w-0 flex-col">
+                              <span className="truncate text-[11.5px]">{c.subject}</span>
+                              {c.reply_to && (
+                                <span className="truncate text-[9.5px] text-om-faint">
+                                  replies → {c.reply_to}
+                                </span>
+                              )}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1">
+                              <StatusBadge tone={c.failed ? "amber" : "green"}>
+                                {c.sent}/{c.total}
+                              </StatusBadge>
+                              <ChevronDown className={cn("size-3.5 text-om-faint transition-transform", open && "rotate-180")} />
+                            </span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: "Delete this send?",
+                                message: `"${c.subject}" and its ${c.total} recipient record${c.total === 1 ? "" : "s"} will be permanently removed.`,
+                                confirmLabel: "Delete",
+                                danger: true,
+                              });
+                              if (ok) deleteCampaign.mutate(c.id);
+                            }}
+                            className="shrink-0 rounded-md p-1 text-om-faint hover:bg-om-red/10 hover:text-om-red"
+                            title="Delete"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </button>
+                        </div>
                         {open && (
                           <div className="mt-1.5 rounded-lg border border-om-border bg-white/[0.02] p-1.5">
                             {sendsLoading ? (
@@ -479,7 +551,13 @@ export default function BulkEmailPage() {
 
       <Modal
         open={!!openReply}
-        onOpenChange={(o) => !o && setOpenReply(null)}
+        onOpenChange={(o) => {
+          if (!o) {
+            setOpenReply(null);
+            setReplyBoxOpen(false);
+            setReplyDraft("");
+          }
+        }}
         title={openReply?.subject || "(no subject)"}
         description={
           openReply
@@ -488,10 +566,89 @@ export default function BulkEmailPage() {
               }`
             : undefined
         }
+        footer={
+          openReply && (
+            <>
+              <button
+                type="button"
+                onClick={async () => {
+                  const ok = await confirm({
+                    title: "Delete this reply?",
+                    message: "It will be permanently removed.",
+                    confirmLabel: "Delete",
+                    danger: true,
+                  });
+                  if (ok) deleteReply.mutate(openReply.id);
+                }}
+                className="mr-auto rounded-md p-1.5 text-om-faint hover:bg-om-red/10 hover:text-om-red"
+                title="Delete"
+              >
+                <Trash2 className="size-4" />
+              </button>
+              <OmButton variant="outline" size="sm" onClick={() => setReplyBoxOpen((s) => !s)}>
+                <ReplyIcon className="size-3.5" /> Reply
+              </OmButton>
+            </>
+          )
+        }
       >
-        <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-om-dim">
-          {openReply?.body_preview || "(no message content)"}
-        </div>
+        {/* Untrusted mail content -- sandbox with no allow-scripts so nothing
+            in the message can execute, regardless of what it contains. */}
+        {openReply?.body_html ? (
+          <iframe
+            title="Email content"
+            sandbox="allow-same-origin"
+            srcDoc={openReply.body_html}
+            className="h-[320px] w-full rounded-lg border border-om-border bg-white"
+          />
+        ) : (
+          <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-om-dim">
+            {openReply?.body_preview || "(no message content)"}
+          </div>
+        )}
+
+        {!!openReply?.attachments?.length && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {openReply.attachments.map((a, i) => (
+              <a
+                key={i}
+                href={a.url}
+                target="_blank"
+                rel="noreferrer"
+                className="flex items-center gap-1.5 rounded-lg border border-om-border bg-white/[0.02] px-2 py-1.5 text-[10.5px] text-om-dim hover:border-om-blue/40"
+              >
+                {a.content_type.startsWith("image/") ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img src={a.url} alt={a.filename} className="size-8 rounded object-cover" />
+                ) : (
+                  <Mail className="size-3.5" />
+                )}
+                <span className="max-w-[120px] truncate">{a.filename}</span>
+              </a>
+            ))}
+          </div>
+        )}
+
+        {replyBoxOpen && (
+          <div className="mt-3 flex flex-col gap-1.5 border-t border-om-border pt-3">
+            <OmTextarea
+              value={replyDraft}
+              onChange={(e) => setReplyDraft(e.target.value)}
+              placeholder={`Reply to ${openReply?.from_name || openReply?.from_email}…`}
+              className="min-h-[90px]"
+              autoFocus
+            />
+            <OmButton
+              variant="solid"
+              size="sm"
+              className="self-end"
+              disabled={!replyDraft.trim() || sendReply.isPending}
+              onClick={() => sendReply.mutate()}
+            >
+              {sendReply.isPending ? <Loader2 className="animate-spin" /> : <Send />} Send reply
+            </OmButton>
+          </div>
+        )}
       </Modal>
     </div>
   );

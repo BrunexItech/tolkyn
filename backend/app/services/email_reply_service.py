@@ -15,28 +15,35 @@ import asyncio
 import email
 import imaplib
 import logging
+import mimetypes
+import uuid
 from datetime import datetime, timedelta, timezone
 from email.header import decode_header
 from email.utils import parseaddr, parsedate_to_datetime
+from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
 from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.crypto import decrypt
 from app.models.email_account import EmailAccount
 from app.models.email_reply import EmailReply
+from app.services.email_account_service import EmailAccountService
+from app.services.email_sender import send_email
 
 logger = logging.getLogger(__name__)
 
 _POLL_EVERY = timedelta(minutes=5)
 _FIRST_POLL_LOOKBACK = timedelta(days=3)
-# The stored column is TEXT (no real size limit) -- this caps it generously
-# rather than to a true "preview" length, so the full message is actually
-# there to view, not just a snippet. The list view still shows a short
-# excerpt; this is what backs the "click to read the full email" detail.
+# TEXT columns have no real size limit -- this caps generously rather than
+# to a true "preview" length, so the full message is actually there to
+# view, not just a snippet.
 _BODY_STORE_LEN = 20_000
+
+_MEDIA_DIR = Path(__file__).resolve().parents[2] / "media" / "email-attachments"
 
 # Most providers' IMAP host isn't just "imap." + the SMTP domain (Outlook is
 # the clearest example), so map the ones we already offer as presets and
@@ -69,26 +76,78 @@ def _decode(value: Optional[str]) -> str:
     return "".join(out)
 
 
-def _body_preview(msg: "email.message.Message") -> str:
-    if msg.is_multipart():
-        for part in msg.walk():
-            if part.get_content_type() == "text/plain" and not part.get_filename():
-                try:
-                    text = part.get_payload(decode=True).decode(
-                        part.get_content_charset() or "utf-8", errors="replace"
-                    )
-                    return text.strip()[:_BODY_STORE_LEN]
-                except Exception:  # noqa: BLE001
-                    continue
-        return ""
+def _save_image(part: "email.message.Message") -> Optional[Dict[str, Any]]:
+    """Writes one image part to disk, returns {filename, url, content_type,
+    size, content_id} or None on failure. content_id (without <>) is used to
+    rewrite matching cid: references in the HTML body."""
     try:
-        text = msg.get_payload(decode=True).decode(msg.get_content_charset() or "utf-8", errors="replace")
-        return text.strip()[:_BODY_STORE_LEN]
-    except Exception:  # noqa: BLE001
-        return ""
+        payload = part.get_payload(decode=True)
+        if not payload:
+            return None
+        ctype = part.get_content_type()
+        ext = mimetypes.guess_extension(ctype) or ".bin"
+        name = f"{uuid.uuid4().hex}{ext}"
+        _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
+        (_MEDIA_DIR / name).write_bytes(payload)
+        cid = (part.get("Content-ID") or "").strip().strip("<>") or None
+        base = (settings.BACKEND_PUBLIC_URL or "").rstrip("/")
+        return {
+            "filename": part.get_filename() or name,
+            "url": f"{base}/media/email-attachments/{name}",
+            "content_type": ctype,
+            "size": len(payload),
+            "content_id": cid,
+        }
+    except Exception as exc:  # noqa: BLE001 -- one bad part shouldn't drop the whole message
+        logger.warning("failed to save email image part: %r", exc)
+        return None
 
 
-def _poll_account_sync(acc_id: str, host: str, username: str, password: str, since: datetime) -> List[Dict[str, Any]]:
+def _extract_content(msg: "email.message.Message") -> Dict[str, Any]:
+    """Pulls plain text, HTML (with cid: images rewritten to real URLs), and
+    a flat attachments list out of a parsed email.message.Message."""
+    plain = ""
+    html = ""
+    images: List[Dict[str, Any]] = []
+
+    parts = msg.walk() if msg.is_multipart() else [msg]
+    for part in parts:
+        ctype = part.get_content_type()
+        disposition = (part.get("Content-Disposition") or "").lower()
+        if ctype == "text/plain" and "attachment" not in disposition and not plain:
+            try:
+                plain = part.get_payload(decode=True).decode(
+                    part.get_content_charset() or "utf-8", errors="replace"
+                ).strip()[:_BODY_STORE_LEN]
+            except Exception:  # noqa: BLE001
+                pass
+        elif ctype == "text/html" and "attachment" not in disposition and not html:
+            try:
+                html = part.get_payload(decode=True).decode(
+                    part.get_content_charset() or "utf-8", errors="replace"
+                )[:_BODY_STORE_LEN]
+            except Exception:  # noqa: BLE001
+                pass
+        elif ctype.startswith("image/"):
+            saved = _save_image(part)
+            if saved:
+                images.append(saved)
+
+    for img in images:
+        if img["content_id"]:
+            html = html.replace(f"cid:{img['content_id']}", img["url"])
+
+    return {
+        "body_preview": plain,
+        "body_html": html or None,
+        "attachments": [
+            {"filename": i["filename"], "url": i["url"], "content_type": i["content_type"], "size": i["size"]}
+            for i in images
+        ] or None,
+    }
+
+
+def _poll_account_sync(host: str, username: str, password: str, since: datetime) -> List[Dict[str, Any]]:
     """Runs in a worker thread (imaplib is blocking, like smtplib)."""
     found: List[Dict[str, Any]] = []
     with imaplib.IMAP4_SSL(host, 993, timeout=20) as m:
@@ -118,13 +177,14 @@ def _poll_account_sync(acc_id: str, host: str, username: str, password: str, sin
             from_name, from_email = parseaddr(_decode(msg.get("From")))
             if not from_email:
                 continue
+            content = _extract_content(msg)
             found.append({
                 "message_id": (msg.get("Message-ID") or "").strip()[:255] or None,
                 "from_email": from_email.strip().lower()[:255],
                 "from_name": from_name.strip()[:255] or None,
                 "subject": _decode(msg.get("Subject"))[:500] or None,
-                "body_preview": _body_preview(msg),
                 "received_at": received,
+                **content,
             })
     return found
 
@@ -149,7 +209,7 @@ async def _poll_account(db: AsyncSession, acc: EmailAccount) -> int:
     host = _imap_host(acc.smtp_host)
 
     try:
-        messages = await asyncio.to_thread(_poll_account_sync, acc.id, host, username, password, since)
+        messages = await asyncio.to_thread(_poll_account_sync, host, username, password, since)
     except Exception as exc:  # noqa: BLE001 -- one account's IMAP hiccup must never break the sweep
         logger.warning("IMAP poll failed for account %s (%s): %r", acc.id, host, exc)
         return 0
@@ -172,6 +232,8 @@ async def _poll_account(db: AsyncSession, acc: EmailAccount) -> int:
             from_name=m["from_name"],
             subject=m["subject"],
             body_preview=m["body_preview"],
+            body_html=m["body_html"],
+            attachments=m["attachments"],
             received_at=m["received_at"],
         ))
         new_count += 1
@@ -193,12 +255,30 @@ async def poll_all_accounts(db: AsyncSession) -> int:
     return total
 
 
+def _row_dict(r: EmailReply) -> Dict[str, Any]:
+    return {
+        "id": r.id,
+        "from_email": r.from_email,
+        "from_name": r.from_name,
+        "subject": r.subject,
+        "body_preview": r.body_preview,
+        "body_html": r.body_html,
+        "attachments": r.attachments,
+        "received_at": r.received_at,
+        "is_read": r.is_read,
+    }
+
+
 class EmailReplyService:
     def __init__(self, db: AsyncSession, user_id: str):
         self.db = db
         self.workspace_id = user_id
+        self.accounts = EmailAccountService(db, user_id)
 
-    async def list(self, limit: int = 200, search: Optional[str] = None) -> List[Dict[str, Any]]:
+    async def list(self, limit: int = 20, offset: int = 0, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        # Capped by default and paginated via offset/limit rather than
+        # dumping every reply into one unbounded list -- a busy inbox could
+        # have hundreds of these.
         q = select(EmailReply).where(EmailReply.workspace_id == self.workspace_id)
         term = (search or "").strip()
         if term:
@@ -212,22 +292,23 @@ class EmailReplyService:
                 )
             )
         rows = (
-            await self.db.execute(q.order_by(EmailReply.created_at.desc()).limit(limit))
+            await self.db.execute(
+                q.order_by(EmailReply.created_at.desc()).offset(max(0, offset)).limit(min(max(1, limit), 100))
+            )
         ).scalars()
-        return [
-            {
-                "id": r.id,
-                "from_email": r.from_email,
-                "from_name": r.from_name,
-                "subject": r.subject,
-                "body_preview": r.body_preview,
-                "received_at": r.received_at,
-                "is_read": r.is_read,
-            }
-            for r in rows
-        ]
+        return [_row_dict(r) for r in rows]
 
-    async def mark_read(self, reply_id: str) -> None:
+    async def unread_count(self) -> int:
+        from sqlalchemy import func
+
+        res = await self.db.execute(
+            select(func.count()).select_from(EmailReply).where(
+                EmailReply.workspace_id == self.workspace_id, EmailReply.is_read.is_(False)
+            )
+        )
+        return int(res.scalar() or 0)
+
+    async def _get(self, reply_id: str) -> EmailReply:
         row = (
             await self.db.execute(
                 select(EmailReply).where(EmailReply.id == reply_id, EmailReply.workspace_id == self.workspace_id)
@@ -235,5 +316,31 @@ class EmailReplyService:
         ).scalar_one_or_none()
         if not row:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Reply not found")
+        return row
+
+    async def mark_read(self, reply_id: str) -> None:
+        row = await self._get(reply_id)
         row.is_read = True
         await self.db.commit()
+
+    async def delete(self, reply_id: str) -> None:
+        row = await self._get(reply_id)
+        await self.db.delete(row)
+        await self.db.commit()
+
+    async def reply(self, reply_id: str, body: str, email_account_id: Optional[str] = None) -> Dict[str, Any]:
+        """Sends a plain reply back to whoever sent this message, from the
+        same account that received it (or a chosen one)."""
+        original = await self._get(reply_id)
+        acc = await self.accounts.get_model(email_account_id or original.email_account_id)
+        cfg = self.accounts.smtp_config(acc)
+        if not cfg.host or not cfg.password:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "That sending account is not fully configured.")
+
+        subject = original.subject or ""
+        if not subject.lower().startswith("re:"):
+            subject = f"Re: {subject}".strip()
+        outcome = await send_email(cfg, original.from_email, subject, body)
+        if not outcome.ok:
+            raise HTTPException(status.HTTP_502_BAD_GATEWAY, outcome.error or "Send failed")
+        return {"sent": True, "to": original.from_email}

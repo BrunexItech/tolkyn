@@ -336,6 +336,24 @@ class EmailCampaignService:
         ).scalars()
         return [_campaign_dict(c) for c in rows]
 
+    async def delete_campaign(self, campaign_id: str) -> None:
+        campaign = (
+            await self.db.execute(
+                select(EmailCampaign).where(
+                    EmailCampaign.id == campaign_id, EmailCampaign.workspace_id == self.workspace_id
+                )
+            )
+        ).scalar_one_or_none()
+        if not campaign:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found")
+        # per-recipient audit rows reference this campaign; drop them together
+        # rather than leaving orphaned EmailSend rows behind
+        sends = await self.db.execute(select(EmailSend).where(EmailSend.email_campaign_id == campaign_id))
+        for s in sends.scalars():
+            await self.db.delete(s)
+        await self.db.delete(campaign)
+        await self.db.commit()
+
 
 def _campaign_dict(c: EmailCampaign) -> Dict[str, Any]:
     return {

@@ -191,6 +191,8 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE ivr_flows ADD COLUMN IF NOT EXISTS business_name VARCHAR(200)",
     "ALTER TABLE ivr_flows ADD COLUMN IF NOT EXISTS knowledge_base TEXT",
     "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS last_reply_poll_at TIMESTAMPTZ",
+    "ALTER TABLE email_replies ADD COLUMN IF NOT EXISTS body_html TEXT",
+    "ALTER TABLE email_replies ADD COLUMN IF NOT EXISTS attachments JSONB",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

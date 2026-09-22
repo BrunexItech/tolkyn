@@ -87,12 +87,21 @@ export interface CampaignSendRow {
   sent_at: string | null;
 }
 
+export interface AttachmentRow {
+  filename: string;
+  url: string;
+  content_type: string;
+  size: number;
+}
+
 export interface ReplyRow {
   id: string;
   from_email: string;
   from_name: string | null;
   subject: string | null;
   body_preview: string | null;
+  body_html: string | null;
+  attachments: AttachmentRow[] | null;
   received_at: string | null;
   is_read: boolean;
 }
@@ -141,9 +150,20 @@ export const emailApi = {
     return http.upload<CsvImportResult>("/email/recipients/import-csv", fd);
   },
   campaignSends: (id: string) => http.get<CampaignSendRow[]>(`/email/campaigns/${id}/sends`),
+  deleteCampaign: (id: string) => http.del<void>(`/email/campaigns/${id}`),
 
   // inbox replies (IMAP-polled by the background scheduler)
-  replies: (search?: string) =>
-    http.get<ReplyRow[]>(`/email/replies${search ? `?search=${encodeURIComponent(search)}` : ""}`),
+  replies: (opts: { search?: string; limit?: number; offset?: number } = {}) => {
+    const params = new URLSearchParams();
+    if (opts.search) params.set("search", opts.search);
+    if (opts.limit != null) params.set("limit", String(opts.limit));
+    if (opts.offset != null) params.set("offset", String(opts.offset));
+    const qs = params.toString();
+    return http.get<ReplyRow[]>(`/email/replies${qs ? `?${qs}` : ""}`);
+  },
+  unreadReplyCount: () => http.get<{ count: number }>("/email/replies/unread-count"),
   markReplyRead: (id: string) => http.post<void>(`/email/replies/${id}/read`, {}),
+  deleteReply: (id: string) => http.del<void>(`/email/replies/${id}`),
+  replyToMessage: (id: string, body: string, email_account_id?: string) =>
+    http.post<{ sent: boolean; to: string }>(`/email/replies/${id}/reply`, { body, email_account_id }),
 };

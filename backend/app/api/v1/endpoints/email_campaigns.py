@@ -85,23 +85,60 @@ async def campaign_sends(
     return await EmailCampaignService(db, user_id).campaign_sends(campaign_id)
 
 
+@router.delete("/campaigns/{campaign_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_campaign(
+    campaign_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await EmailCampaignService(db, user_id).delete_campaign(campaign_id)
+
+
+class AttachmentRow(BaseModel):
+    filename: str
+    url: str
+    content_type: str
+    size: int
+
+
 class ReplyRow(BaseModel):
     id: str
     from_email: str
     from_name: Optional[str] = None
     subject: Optional[str] = None
     body_preview: Optional[str] = None
+    body_html: Optional[str] = None
+    attachments: Optional[List[AttachmentRow]] = None
     received_at: Optional[datetime] = None
     is_read: bool
+
+
+class UnreadCount(BaseModel):
+    count: int
+
+
+class ReplyToRequest(BaseModel):
+    body: str = Field(..., min_length=1, max_length=20_000)
+    email_account_id: Optional[str] = None
 
 
 @router.get("/replies", response_model=List[ReplyRow])
 async def list_replies(
     search: Optional[str] = Query(None, max_length=200),
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0),
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    return await EmailReplyService(db, user_id).list(search=search)
+    return await EmailReplyService(db, user_id).list(limit=limit, offset=offset, search=search)
+
+
+@router.get("/replies/unread-count", response_model=UnreadCount)
+async def replies_unread_count(
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return UnreadCount(count=await EmailReplyService(db, user_id).unread_count())
 
 
 @router.post("/replies/{reply_id}/read", status_code=status.HTTP_204_NO_CONTENT)
@@ -111,6 +148,25 @@ async def mark_reply_read(
     db: AsyncSession = Depends(get_db),
 ):
     await EmailReplyService(db, user_id).mark_read(reply_id)
+
+
+@router.delete("/replies/{reply_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_reply(
+    reply_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await EmailReplyService(db, user_id).delete(reply_id)
+
+
+@router.post("/replies/{reply_id}/reply")
+async def reply_to_message(
+    reply_id: str,
+    body: ReplyToRequest,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await EmailReplyService(db, user_id).reply(reply_id, body.body, body.email_account_id)
 
 
 @router.post("/recipients/preview", response_model=RecipientPreview)
