@@ -59,6 +59,13 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
+ ; A couple of seconds of normal ringback before anything answers -- without
+ ; this the AGI answers as soon as it has a prompt ready (often near-
+ ; instantly), which sounds like dead silence rather than a call
+ ; connecting. Ringing() makes Asterisk send 180 Ringing so the caller's
+ ; own phone generates the tone, same as any other call.
+ same => n,Ringing()
+ same => n,Wait(2)
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR
  ; is even turned on — get_flow()/on_call_enter() decide that, not this
