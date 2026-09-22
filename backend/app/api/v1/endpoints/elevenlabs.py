@@ -29,7 +29,6 @@ Verified against ElevenLabs' own SIP trunking + personalization docs
 """
 from __future__ import annotations
 
-import logging
 import re
 from typing import Any, Dict, Optional
 
@@ -43,8 +42,6 @@ from app.models.telephony import TelephonyConfig
 from app.models.user import User
 from app.services.contact_lookup import resolve_contact_name, save_known_caller
 from app.services.ivr_service import IvrService
-
-logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -98,18 +95,8 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     caller_id = str(body.get("caller_id") or "")
     called_number = str(body.get("called_number") or "")
     sip_headers = body.get("sip_headers") if isinstance(body.get("sip_headers"), dict) else None
-    # Temporary: workspace resolution has been inconsistent across real
-    # calls (business_name sometimes falls back to "our team" even on real
-    # inbound calls) -- log exactly what ElevenLabs actually sends so we can
-    # see whether called_number is the real dialled DID or our static SIP
-    # trunk identity, instead of guessing further.
-    logger.warning(
-        "conversation-init: caller_id=%r called_number=%r sip_headers=%r full_body=%r",
-        caller_id, called_number, sip_headers, body,
-    )
 
     workspace_id = await _resolve_workspace(db, called_number, sip_headers)
-    logger.warning("conversation-init: resolved workspace_id=%r", workspace_id)
     # business_name is a REQUIRED variable in the agent's first message --
     # always set it to something, even when the workspace can't be resolved
     # (an unmapped test call, a misdial), or the agent errors out before it
