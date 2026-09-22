@@ -87,6 +87,14 @@ exten => ivr-voicemail,1,VoiceMail(${WS_EXT}@default,u)
  same => n,Hangup()
 
 exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+ ; This leg dials one shared ElevenLabs SIP destination for every workspace,
+ ; so caller_id/called_number on it are just the trunk's own static
+ ; identity ("tolkynagent") -- useless for the conversation-init webhook to
+ ; tell workspaces apart (confirmed via real-call logging). A custom X-
+ ; header is how ElevenLabs' SIP trunking actually supports this: they
+ ; strip the X- prefix, lowercase it, and expose it to the webhook -- so
+ ; this becomes recoverable as the workspace's own id on their side.
+ same => n,Set(PJSIP_HEADER(add,X-Workspace-Id)=${WS_ID})
  same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtT)
  same => n,Hangup()
 
