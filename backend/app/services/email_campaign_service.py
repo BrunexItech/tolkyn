@@ -18,13 +18,15 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.customer import Customer
 from app.models.email_account import EmailAccount
 from app.models.email_campaign import EmailCampaign
 from app.models.email_send import EmailSend, EmailSendStatus
 from app.models.lead import Lead
+from app.models.user import User
 from app.services.email_account_service import EmailAccountService
-from app.services.email_sender import send_email
+from app.services.email_sender import render_branded_html, send_email
 
 _GAP_SECONDS = 1.0
 _MERGE_RE = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}", re.IGNORECASE)
@@ -238,6 +240,17 @@ class EmailCampaignService:
         await self.db.commit()
         await self.db.refresh(campaign)
 
+        # Workspace brand identity -- the same logo/colors already used for
+        # AI-generated video/image branding, reused here so a business's
+        # emails look consistent with the rest of what it sends out.
+        user = (await self.db.execute(select(User).where(User.id == self.workspace_id))).scalar_one_or_none()
+        logo_url = None
+        if user and user.brand_logo_url:
+            logo_url = user.brand_logo_url
+            if logo_url.startswith("/"):
+                logo_url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}{logo_url}"
+        brand_colors = user.brand_colors if user else None
+
         sent = failed = skipped = 0
         for r in recipients:
             ctx = {
@@ -257,10 +270,13 @@ class EmailCampaignService:
 
             merged_subject = _merge(subject, ctx)
             merged_body = _merge(body, ctx)
-            if acc.signature:
-                merged_body = f"{merged_body}\n\n{acc.signature}"
+            merged_signature = _merge(acc.signature, ctx) if acc.signature else None
+            plain_body = f"{merged_body}\n\n{merged_signature}" if merged_signature else merged_body
+            branded_html = render_branded_html(
+                merged_body, logo_url=logo_url, brand_colors=brand_colors, signature=merged_signature
+            )
 
-            outcome = await send_email(cfg, r["email"], merged_subject, merged_body)
+            outcome = await send_email(cfg, r["email"], merged_subject, plain_body, html=branded_html)
             await self.accounts.record_send(acc, outcome.ok, outcome.error)
             self.db.add(EmailSend(
                 workspace_id=self.workspace_id, email_account_id=acc.id, email_campaign_id=campaign.id,
@@ -282,6 +298,32 @@ class EmailCampaignService:
         await self.db.commit()
         await self.db.refresh(campaign)
         return _campaign_dict(campaign)
+
+    async def campaign_sends(self, campaign_id: str) -> List[Dict[str, Any]]:
+        # scoped to this workspace so one tenant can never read another's send log
+        owns = await self.db.execute(
+            select(EmailCampaign.id).where(
+                EmailCampaign.id == campaign_id, EmailCampaign.workspace_id == self.workspace_id
+            )
+        )
+        if not owns.scalar_one_or_none():
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Campaign not found")
+        rows = (
+            await self.db.execute(
+                select(EmailSend)
+                .where(EmailSend.email_campaign_id == campaign_id)
+                .order_by(EmailSend.created_at.asc())
+            )
+        ).scalars()
+        return [
+            {
+                "to_email": r.to_email,
+                "status": r.status.value,
+                "error": r.error,
+                "sent_at": r.sent_at,
+            }
+            for r in rows
+        ]
 
     async def history(self, limit: int = 50) -> List[Dict[str, Any]]:
         rows = (

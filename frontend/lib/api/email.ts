@@ -80,6 +80,13 @@ export interface CsvImportResult {
   columns: string[];
 }
 
+export interface CampaignSendRow {
+  to_email: string;
+  status: "sent" | "failed" | "skipped";
+  error: string | null;
+  sent_at: string | null;
+}
+
 export interface EmailCampaignRow {
   id: string;
   subject: string;
@@ -123,4 +130,5 @@ export const emailApi = {
     fd.append("file", file);
     return http.upload<CsvImportResult>("/email/recipients/import-csv", fd);
   },
+  campaignSends: (id: string) => http.get<CampaignSendRow[]>(`/email/campaigns/${id}/sends`),
 };

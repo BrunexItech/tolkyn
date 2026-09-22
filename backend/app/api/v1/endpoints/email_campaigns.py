@@ -60,12 +60,28 @@ class CampaignRow(BaseModel):
     created_at: datetime
 
 
+class CampaignSendRow(BaseModel):
+    to_email: str
+    status: str
+    error: Optional[str] = None
+    sent_at: Optional[datetime] = None
+
+
 @router.get("/campaigns", response_model=List[CampaignRow])
 async def list_campaigns(
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
     return await EmailCampaignService(db, user_id).history()
+
+
+@router.get("/campaigns/{campaign_id}/sends", response_model=List[CampaignSendRow])
+async def campaign_sends(
+    campaign_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await EmailCampaignService(db, user_id).campaign_sends(campaign_id)
 
 
 @router.post("/recipients/preview", response_model=RecipientPreview)

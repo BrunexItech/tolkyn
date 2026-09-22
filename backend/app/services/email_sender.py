@@ -1,5 +1,6 @@
 """Low-level SMTP send (stdlib smtplib, run in a worker thread)."""
 import asyncio
+import html as html_lib
 import logging
 import smtplib
 import ssl
@@ -7,9 +8,70 @@ import uuid
 from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
-from typing import Optional
+from typing import List, Optional
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_ACCENT = "#94a3b8"
+
+
+def _text_to_html(text: str) -> str:
+    """Plain text -> safe HTML: escape, then turn blank-line-separated blocks
+    into paragraphs and single newlines into <br>, so a plain-text compose
+    box still reads naturally once wrapped in the branded template."""
+    escaped = html_lib.escape(text or "")
+    paragraphs = [p.replace("\n", "<br>") for p in escaped.split("\n\n") if p.strip()]
+    return "".join(f'<p style="margin:0 0 16px;">{p}</p>' for p in paragraphs)
+
+
+def render_branded_html(
+    body: str,
+    *,
+    logo_url: Optional[str] = None,
+    brand_colors: Optional[List[str]] = None,
+    signature: Optional[str] = None,
+) -> str:
+    """Wraps a plain-text message in a simple, professional, table-based HTML
+    email -- deliberately basic markup (no flexbox/grid) since email clients
+    have much narrower CSS support than browsers. logo_url must already be an
+    absolute URL (a mail client can't resolve a relative path)."""
+    accent = (brand_colors or [None])[0] or _DEFAULT_ACCENT
+    logo_row = (
+        f'<tr><td style="padding:24px 32px 0;">'
+        f'<img src="{html_lib.escape(logo_url)}" alt="" style="max-height:48px; max-width:220px; display:block;">'
+        f"</td></tr>"
+        if logo_url
+        else ""
+    )
+    signature_row = (
+        f'<tr><td style="padding:0 32px 28px;">'
+        f'<div style="border-top:1px solid #e5e7eb; margin-bottom:16px;"></div>'
+        f'<div style="color:#6b7280; font-size:12.5px; line-height:1.6;">{_text_to_html(signature)}</div>'
+        f"</td></tr>"
+        if signature
+        else '<tr><td style="padding-bottom:8px;"></td></tr>'
+    )
+    return f"""<!DOCTYPE html>
+<html>
+  <body style="margin:0; padding:0; background:#f4f4f5; font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5; padding:24px 0;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="580" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:8px; overflow:hidden; max-width:92vw;">
+            <tr><td style="height:4px; background:{html_lib.escape(accent)}; font-size:0; line-height:0;">&nbsp;</td></tr>
+            {logo_row}
+            <tr>
+              <td style="padding:24px 32px; color:#1f2937; font-size:14px; line-height:1.6;">
+                {_text_to_html(body)}
+              </td>
+            </tr>
+            {signature_row}
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>"""
 
 
 @dataclass

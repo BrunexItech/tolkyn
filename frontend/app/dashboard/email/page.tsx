@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Users, Loader2, Info, Settings2, Upload } from "lucide-react";
+import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { OmButton } from "@/components/om/primitives/OmButton";
@@ -14,6 +14,7 @@ import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
 import { toast } from "@/lib/om/toast";
 import { emailApi, type CampaignSource, type ManualRecipient, type SendCampaignBody } from "@/lib/api/email";
 import { useEmailAccounts } from "@/components/settings/hooks";
+import { cn } from "@/lib/utils";
 
 // "csv" is a UI-only mode -- the backend only knows manual/leads/customers,
 // so a CSV import just fills the same manual-recipient list a pasted list
@@ -93,6 +94,13 @@ export default function BulkEmailPage() {
   });
 
   const { data: history } = useQuery({ queryKey: ["email-campaigns"], queryFn: emailApi.campaigns });
+
+  const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
+  const { data: campaignSends, isFetching: sendsLoading } = useQuery({
+    queryKey: ["email-campaign-sends", expandedCampaign],
+    queryFn: () => emailApi.campaignSends(expandedCampaign!),
+    enabled: !!expandedCampaign,
+  });
 
   const send = useMutation({
     mutationFn: (b: SendCampaignBody) => emailApi.sendCampaign(b),
@@ -319,21 +327,62 @@ export default function BulkEmailPage() {
               <CardTitle>Recent sends</CardTitle>
               {history?.length ? (
                 <ul className="flex flex-col divide-y divide-white/[0.05]">
-                  {history.map((c) => (
-                    <li key={c.id} className="flex items-center justify-between gap-2 py-1.5">
-                      <span className="flex min-w-0 flex-col">
-                        <span className="truncate text-[11.5px]">{c.subject}</span>
-                        {c.reply_to && (
-                          <span className="truncate text-[9.5px] text-om-faint">
-                            replies → {c.reply_to}
+                  {history.map((c) => {
+                    const open = expandedCampaign === c.id;
+                    return (
+                      <li key={c.id} className="py-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCampaign(open ? null : c.id)}
+                          className="flex w-full items-center justify-between gap-2 text-left"
+                        >
+                          <span className="flex min-w-0 flex-col">
+                            <span className="truncate text-[11.5px]">{c.subject}</span>
+                            {c.reply_to && (
+                              <span className="truncate text-[9.5px] text-om-faint">
+                                replies → {c.reply_to}
+                              </span>
+                            )}
                           </span>
+                          <span className="flex shrink-0 items-center gap-1">
+                            <StatusBadge tone={c.failed ? "amber" : "green"}>
+                              {c.sent}/{c.total}
+                            </StatusBadge>
+                            <ChevronDown className={cn("size-3.5 text-om-faint transition-transform", open && "rotate-180")} />
+                          </span>
+                        </button>
+                        {open && (
+                          <div className="mt-1.5 rounded-lg border border-om-border bg-white/[0.02] p-1.5">
+                            {sendsLoading ? (
+                              <p className="flex items-center gap-1.5 py-1 text-[10.5px] text-om-muted">
+                                <Loader2 className="size-3 animate-spin" /> Loading…
+                              </p>
+                            ) : campaignSends?.length ? (
+                              <ul className="flex flex-col gap-1">
+                                {campaignSends.map((s, i) => (
+                                  <li key={i} className="flex items-start gap-1.5 text-[10.5px]">
+                                    {s.status === "sent" ? (
+                                      <CheckCircle2 className="mt-0.5 size-3 shrink-0 text-om-green" />
+                                    ) : s.status === "skipped" ? (
+                                      <MinusCircle className="mt-0.5 size-3 shrink-0 text-om-faint" />
+                                    ) : (
+                                      <XCircle className="mt-0.5 size-3 shrink-0 text-om-red" />
+                                    )}
+                                    <span className="min-w-0 flex-1">
+                                      <span className="truncate text-om-dim">{s.to_email}</span>
+                                      {s.error && <span className="block text-om-red">{s.error}</span>}
+                                    </span>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : (
+                              <p className="py-1 text-[10.5px] text-om-muted">No send records.</p>
+                            )}
+                          </div>
                         )}
-                      </span>
-                      <StatusBadge tone={c.failed ? "amber" : "green"}>
-                        {c.sent}/{c.total}
-                      </StatusBadge>
-                    </li>
-                  ))}
+                      </li>
+                    );
+                  })}
                 </ul>
               ) : (
                 <p className="text-[11px] text-om-muted">Nothing sent yet.</p>
