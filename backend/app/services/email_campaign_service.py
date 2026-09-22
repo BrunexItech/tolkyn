@@ -8,6 +8,8 @@ Per-recipient audit rows go to `email_sends`; aggregate counts to
 from __future__ import annotations
 
 import asyncio
+import csv
+import io
 import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -27,6 +29,98 @@ from app.services.email_sender import send_email
 _GAP_SECONDS = 1.0
 _MERGE_RE = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}", re.IGNORECASE)
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+# CSV import -- same tolerant approach as the Bulk SMS contact importer
+# (messaging_service.parse_contacts_csv): works with or without a header
+# row, whatever delimiter, extra columns, by scanning for the pattern
+# (a valid email address) rather than requiring a specific header name.
+_EMAIL_HEADER_HINTS = ("email", "mail")
+_NAME_HEADERS = {
+    "name", "full name", "fullname", "contact name", "contact person", "customer name",
+    "client name", "first name", "firstname", "recipient", "recipient name", "business",
+    "business name", "company", "company name",
+}
+_NAME_HEADER_HINTS = ("name", "business", "company", "client", "customer", "person")
+_CSV_MAX_ROWS = 2000  # matches send()'s own per-campaign recipient cap
+
+
+def parse_email_csv(raw: bytes) -> Dict[str, Any]:
+    """Pull {name, email} out of an uploaded CSV."""
+    text = raw.decode("utf-8-sig", errors="replace").strip()
+    if not text:
+        return {"recipients": [], "imported": 0, "skipped": 0, "columns": []}
+
+    try:
+        dialect = csv.Sniffer().sniff(text[:4096], delimiters=",;\t|")
+    except csv.Error:
+        dialect = csv.excel
+    rows = [r for r in csv.reader(io.StringIO(text), dialect) if any(c.strip() for c in r)]
+    if not rows:
+        return {"recipients": [], "imported": 0, "skipped": 0, "columns": []}
+
+    header = [c.strip() for c in rows[0]]
+    has_header = not any(_EMAIL_RE.match(c.strip().lower()) for c in header) and any(header)
+    data_rows = rows[1:] if has_header else rows
+
+    email_idx: Optional[int] = None
+    name_idx: Optional[int] = None
+    if has_header:
+        low = [h.lower() for h in header]
+        for i, h in enumerate(low):
+            if email_idx is None and any(k in h for k in _EMAIL_HEADER_HINTS):
+                email_idx = i
+            if name_idx is None and (h in _NAME_HEADERS or any(k in h for k in _NAME_HEADER_HINTS)):
+                name_idx = i
+    if email_idx is None:  # scan columns, pick the one with the most valid emails
+        hits: Dict[int, int] = {}
+        for r in data_rows[:60]:
+            for i, c in enumerate(r):
+                if _EMAIL_RE.match(c.strip().lower()):
+                    hits[i] = hits.get(i, 0) + 1
+        if hits:
+            email_idx = max(hits, key=hits.get)
+
+    if name_idx is None and email_idx is not None:
+        text_hits: Dict[int, int] = {}
+        for r in data_rows[:60]:
+            for i, c in enumerate(r):
+                if i == email_idx:
+                    continue
+                s = c.strip()
+                if s and not _EMAIL_RE.match(s.lower()):
+                    text_hits[i] = text_hits.get(i, 0) + 1
+        if text_hits:
+            name_idx = max(text_hits, key=text_hits.get)
+
+    recipients: List[Dict[str, Any]] = []
+    seen: set = set()
+    imported = skipped = 0
+    for r in data_rows:
+        email = None
+        if email_idx is not None and email_idx < len(r):
+            candidate = r[email_idx].strip().lower()
+            if _EMAIL_RE.match(candidate):
+                email = candidate
+        if not email:
+            email = next((c.strip().lower() for c in r if _EMAIL_RE.match(c.strip().lower())), None)
+        if not email or email in seen:
+            skipped += 1
+            continue
+        seen.add(email)
+        name = ""
+        if name_idx is not None and name_idx < len(r) and r[name_idx].strip():
+            name = r[name_idx].strip()[:160]
+        recipients.append({"email": email, "name": name})
+        imported += 1
+        if imported >= _CSV_MAX_ROWS:
+            break
+
+    return {
+        "recipients": recipients,
+        "imported": imported,
+        "skipped": skipped,
+        "columns": header if has_header else [],
+    }
 
 
 def _merge(text: str, ctx: Dict[str, str]) -> str:

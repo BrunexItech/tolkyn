@@ -73,6 +73,13 @@ export interface RecipientPreview {
   sample: { email: string; name: string; company: string }[];
 }
 
+export interface CsvImportResult {
+  recipients: ManualRecipient[];
+  imported: number;
+  skipped: number;
+  columns: string[];
+}
+
 export interface EmailCampaignRow {
   id: string;
   subject: string;
@@ -111,4 +118,9 @@ export const emailApi = {
   previewRecipients: (body: { source: CampaignSource; ids?: string[]; manual?: ManualRecipient[] }) =>
     http.post<RecipientPreview>("/email/recipients/preview", body),
   sendCampaign: (body: SendCampaignBody) => http.post<EmailCampaignRow>("/email/campaigns", body),
+  importCsv: (file: File): Promise<CsvImportResult> => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return http.upload<CsvImportResult>("/email/recipients/import-csv", fd);
+  },
 };

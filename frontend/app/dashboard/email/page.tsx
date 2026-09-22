@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Users, Loader2, Info, Settings2 } from "lucide-react";
+import { Mail, Send, Users, Loader2, Info, Settings2, Upload } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { OmButton } from "@/components/om/primitives/OmButton";
@@ -12,13 +12,19 @@ import { StatusBadge } from "@/components/om/primitives/StatusBadge";
 import { Field, OmInput, OmSelect, OmTextarea } from "@/components/om/primitives/Field";
 import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
 import { toast } from "@/lib/om/toast";
-import { emailApi, type CampaignSource, type SendCampaignBody } from "@/lib/api/email";
+import { emailApi, type CampaignSource, type ManualRecipient, type SendCampaignBody } from "@/lib/api/email";
 import { useEmailAccounts } from "@/components/settings/hooks";
 
-const SOURCES: { key: CampaignSource; label: string; hint: string }[] = [
+// "csv" is a UI-only mode -- the backend only knows manual/leads/customers,
+// so a CSV import just fills the same manual-recipient list a pasted list
+// would, and sends with source: "manual" (see `backendSource` below).
+type SendToMode = CampaignSource | "csv";
+
+const SOURCES: { key: SendToMode; label: string; hint: string }[] = [
   { key: "leads", label: "Leads", hint: "Everyone in Lead Generator with an email address" },
   { key: "customers", label: "CRM customers", hint: "Everyone in your CRM with an email address" },
   { key: "manual", label: "Paste a list", hint: "One email per line (optionally: email, Name)" },
+  { key: "csv", label: "Upload CSV", hint: "A spreadsheet export with an email column" },
 ];
 
 export default function BulkEmailPage() {
@@ -28,8 +34,10 @@ export default function BulkEmailPage() {
   const accounts = accountsData?.items ?? [];
   const defaultAccount = accounts.find((a) => a.is_default) ?? accounts[0];
 
-  const [source, setSource] = useState<CampaignSource>("leads");
+  const [source, setSource] = useState<SendToMode>("leads");
   const [manual, setManual] = useState("");
+  const [csvRecipients, setCsvRecipients] = useState<ManualRecipient[]>([]);
+  const [csvFileName, setCsvFileName] = useState("");
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [accountId, setAccountId] = useState("");
@@ -61,10 +69,27 @@ export default function BulkEmailPage() {
     [manual],
   );
 
-  const previewBody = { source, manual: source === "manual" ? manualRecipients : undefined };
+  // "csv" is only a UI mode -- the backend sends with source: "manual" either
+  // way, just with a different origin for the recipient list.
+  const backendSource: CampaignSource = source === "csv" ? "manual" : source;
+  const effectiveManual = source === "csv" ? csvRecipients : source === "manual" ? manualRecipients : undefined;
+
+  const previewBody = { source: backendSource, manual: backendSource === "manual" ? effectiveManual : undefined };
   const { data: preview, isFetching: previewing } = useQuery({
-    queryKey: ["email-recipients", source, source === "manual" ? manual : ""],
+    queryKey: ["email-recipients", source, source === "manual" ? manual : "", source === "csv" ? csvRecipients : ""],
     queryFn: () => emailApi.previewRecipients(previewBody),
+  });
+
+  const importCsv = useMutation({
+    mutationFn: (file: File) => emailApi.importCsv(file),
+    onSuccess: (r) => {
+      setCsvRecipients(r.recipients);
+      toast.ok(`Imported ${r.imported} email${r.imported === 1 ? "" : "s"}${r.skipped ? ` · ${r.skipped} skipped` : ""}`);
+    },
+    onError: (e: Error) => {
+      toast.err(e.message);
+      setCsvFileName("");
+    },
   });
 
   const { data: history } = useQuery({ queryKey: ["email-campaigns"], queryFn: emailApi.campaigns });
@@ -78,6 +103,8 @@ export default function BulkEmailPage() {
       setSubject("");
       setBody("");
       setManual("");
+      setCsvRecipients([]);
+      setCsvFileName("");
     },
     onError: (e: Error) => toast.err(e.message),
   });
@@ -106,8 +133,8 @@ export default function BulkEmailPage() {
       subject,
       body,
       email_account_id: accountId,
-      source,
-      manual: source === "manual" ? manualRecipients : undefined,
+      source: backendSource,
+      manual: backendSource === "manual" ? effectiveManual : undefined,
       reply_to: replyTo.trim() || undefined,
     });
   };
@@ -141,7 +168,7 @@ export default function BulkEmailPage() {
             <CardTitle icon={<Send />}>Compose</CardTitle>
 
             <Field label="Send to">
-              <OmSelect value={source} onChange={(e) => setSource(e.target.value as CampaignSource)}>
+              <OmSelect value={source} onChange={(e) => setSource(e.target.value as SendToMode)}>
                 {SOURCES.map((s) => (
                   <option key={s.key} value={s.key}>
                     {s.label}
@@ -158,6 +185,39 @@ export default function BulkEmailPage() {
                   placeholder={"jane@acme.co Jane Doe\nsam@company.com"}
                   className="min-h-[90px]"
                 />
+              </Field>
+            )}
+
+            {source === "csv" && (
+              <Field label="Recipients" hint="A .csv export with an email column (and optionally a name column) — we'll find them automatically.">
+                <label className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-om-border px-2.5 py-3 text-[11.5px] text-om-muted hover:border-om-blue/40 hover:text-om-dim">
+                  <input
+                    type="file"
+                    accept=".csv,text/csv,text/plain"
+                    hidden
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      e.target.value = "";
+                      if (!file) return;
+                      setCsvFileName(file.name);
+                      importCsv.mutate(file);
+                    }}
+                  />
+                  {importCsv.isPending ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin" /> Importing…
+                    </>
+                  ) : csvRecipients.length ? (
+                    <>
+                      <Upload className="size-3.5" /> {csvFileName} · {csvRecipients.length} email
+                      {csvRecipients.length === 1 ? "" : "s"} — click to replace
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="size-3.5" /> Click to choose a CSV file
+                    </>
+                  )}
+                </label>
               </Field>
             )}
 
