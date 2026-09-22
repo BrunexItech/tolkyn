@@ -89,6 +89,7 @@ export function CustomersTable({
                   <th>Contact</th>
                   <th>Stage</th>
                   <th>MRR</th>
+                  <th>LTV</th>
                   <th>Source</th>
                   <th>Last contact</th>
                   <th className="text-right">Actions</th>
@@ -128,6 +129,9 @@ export function CustomersTable({
                     </td>
                     <td className="font-mono text-om-dim">
                       {c.monthly_value ? `$${c.monthly_value.toLocaleString()}` : "—"}
+                    </td>
+                    <td className="font-mono text-om-dim">
+                      {c.lifetime_value ? `$${c.lifetime_value.toLocaleString()}` : "—"}
                     </td>
                     <td>
                       <span className="text-[10.5px] text-om-dim">

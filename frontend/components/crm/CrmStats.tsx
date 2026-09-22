@@ -11,7 +11,7 @@ export function CrmStats() {
   const loading = !s;
 
   return (
-    <Grid cols={4}>
+    <Grid cols={5}>
       <StatTile
         label="Customers"
         value={s?.total ?? "—"}
@@ -24,6 +24,13 @@ export function CrmStats() {
         value={s ? `$${compact(s.total_mrr)}` : "—"}
         icon={<CircleDollarSign />}
         color="var(--om-green)"
+        loading={loading}
+      />
+      <StatTile
+        label="Lifetime value"
+        value={s ? `$${compact(s.total_ltv)}` : "—"}
+        icon={<CircleDollarSign />}
+        color="var(--om-violet)"
         loading={loading}
       />
       <StatTile

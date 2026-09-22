@@ -55,8 +55,11 @@ export function CustomerDetailDrawer({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [mrr, setMrr] = useState<string>("");
   const [mrrDirty, setMrrDirty] = useState(false);
+  const [ltv, setLtv] = useState<string>("");
+  const [ltvDirty, setLtvDirty] = useState(false);
 
   const currentMrr = mrrDirty ? mrr : c?.monthly_value != null ? String(c.monthly_value) : "";
+  const currentLtv = ltvDirty ? ltv : c?.lifetime_value != null ? String(c.lifetime_value) : "";
 
   return (
     <>
@@ -67,6 +70,7 @@ export function CustomerDetailDrawer({
         if (!v) {
           setConfirmDelete(false);
           setMrrDirty(false);
+          setLtvDirty(false);
         }
       }}
       title={c?.name ?? "Customer"}
@@ -168,6 +172,23 @@ export function CustomerDetailDrawer({
                   if (mrrDirty) {
                     update.mutate({ id: c.id, monthly_value: currentMrr ? Number(currentMrr) : 0 });
                     setMrrDirty(false);
+                  }
+                }}
+              />
+            </div>
+            <div>
+              <SectionLabel>Lifetime value</SectionLabel>
+              <OmInput
+                type="number"
+                value={currentLtv}
+                onChange={(e) => {
+                  setLtv(e.target.value);
+                  setLtvDirty(true);
+                }}
+                onBlur={() => {
+                  if (ltvDirty) {
+                    update.mutate({ id: c.id, lifetime_value: currentLtv ? Number(currentLtv) : 0 });
+                    setLtvDirty(false);
                   }
                 }}
               />

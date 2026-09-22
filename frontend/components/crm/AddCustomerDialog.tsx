@@ -15,6 +15,7 @@ const EMPTY = {
   phone: "",
   position: "",
   monthly_value: "",
+  lifetime_value: "",
   next_action: "",
   notes: "",
 };
@@ -43,6 +44,7 @@ export function AddCustomerDialog({
         phone: form.phone || undefined,
         position: form.position || undefined,
         monthly_value: form.monthly_value ? Number(form.monthly_value) : undefined,
+        lifetime_value: form.lifetime_value ? Number(form.lifetime_value) : undefined,
         next_action: form.next_action || undefined,
         notes: form.notes || undefined,
         stage,
@@ -108,6 +110,11 @@ export function AddCustomerDialog({
           </Field>
           <Field label="Monthly value">
             <OmInput type="number" value={form.monthly_value} onChange={set("monthly_value")} placeholder="0" />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <Field label="Lifetime value">
+            <OmInput type="number" value={form.lifetime_value} onChange={set("lifetime_value")} placeholder="0" />
           </Field>
         </div>
         <Field label="Next action">
