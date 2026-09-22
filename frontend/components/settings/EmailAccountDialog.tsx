@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2, TriangleAlert } from "lucide-react";
+import { Loader2, TriangleAlert, Eye, EyeOff } from "lucide-react";
 import { Modal } from "@/components/om/primitives/Modal";
 import { Field, OmInput } from "@/components/om/primitives/Field";
 import { OmButton } from "@/components/om/primitives/OmButton";
@@ -50,6 +50,7 @@ export function EmailAccountDialog({
   const [preset, setPreset] = useState("Gmail");
   const [form, setForm] = useState(blankForm);
   const [touched, setTouched] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   // reset the form whenever the dialog opens (for a new account or a different one)
   useEffect(() => {
@@ -220,13 +221,29 @@ export function EmailAccountDialog({
             />
           </Field>
           <Field label={editing ? "App password (leave blank to keep)" : "App password"}>
-            <OmInput
-              type="password"
-              value={form.smtp_password}
-              onChange={(e) => set("smtp_password", e.target.value)}
-              placeholder="16-char app password"
-              className={errCls("smtp_password")}
-            />
+            <div className="relative">
+              <OmInput
+                type={showPassword ? "text" : "password"}
+                value={form.smtp_password}
+                onChange={(e) => set("smtp_password", e.target.value)}
+                placeholder="16-char app password"
+                className={cn(errCls("smtp_password"), "pr-8")}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((s) => !s)}
+                tabIndex={-1}
+                title={showPassword ? "Hide password" : "Show password"}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-om-muted hover:text-om-text"
+              >
+                {showPassword ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+              </button>
+            </div>
+            {form.smtp_password !== form.smtp_password.trim() && (
+              <p className="mt-1 text-[10px] text-om-amber">
+                Has leading/trailing spaces — these get stripped automatically, but double-check nothing got cut off when you pasted it.
+              </p>
+            )}
             {show("smtp_password") && (
               <p className="mt-1 text-[10px] text-om-red">{errors.smtp_password}</p>
             )}
