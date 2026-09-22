@@ -110,7 +110,11 @@ export function EmailAccountDialog({
       use_ssl: form.use_ssl,
       signature: form.signature.trim() || undefined,
       daily_limit: Number(form.daily_limit) || 200,
-      ...(form.smtp_password ? { smtp_password: form.smtp_password } : {}),
+      // Providers display app passwords in space-separated groups for
+      // readability (e.g. "abcd efgh ijkl mnop") -- the password itself
+      // never legitimately contains whitespace, so strip it before it
+      // becomes part of the literal (wrong) credential.
+      ...(form.smtp_password ? { smtp_password: form.smtp_password.replace(/\s+/g, "") } : {}),
     };
     const done = { onSuccess: () => onOpenChange(false) };
     if (editing) update.mutate({ id: account!.id, ...payload }, done);

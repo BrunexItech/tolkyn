@@ -11,6 +11,15 @@ from app.schemas.email_account import EmailAccountCreate, EmailAccountResponse, 
 from app.services.email_sender import SmtpConfig, send_email, verify_smtp
 
 
+def _clean_password(raw: str) -> str:
+    """Google (and most providers) display app passwords in space-separated
+    groups for readability (e.g. "abcd efgh ijkl mnop"), but the password
+    itself never legitimately contains whitespace -- pasted verbatim, those
+    spaces become part of the literal credential and get rejected by the
+    server as bad credentials. Strip all whitespace before storing."""
+    return "".join(raw.split())
+
+
 class EmailAccountService:
     def __init__(self, db: AsyncSession, user_id: str):
         self.db = db
@@ -97,7 +106,7 @@ class EmailAccountService:
             smtp_host=data.smtp_host,
             smtp_port=data.smtp_port,
             smtp_username=data.smtp_username or str(data.from_email),
-            smtp_password_enc=encrypt(data.smtp_password) if data.smtp_password else None,
+            smtp_password_enc=encrypt(_clean_password(data.smtp_password)) if data.smtp_password else None,
             use_tls=data.use_tls,
             use_ssl=data.use_ssl,
             signature=data.signature,
@@ -131,7 +140,7 @@ class EmailAccountService:
                 v = str(v)
             setattr(acc, k, v)
         if pw:
-            acc.smtp_password_enc = encrypt(pw)
+            acc.smtp_password_enc = encrypt(_clean_password(pw))
             acc.verified_at = None
         if make_default:
             acc.is_default = True
