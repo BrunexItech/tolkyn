@@ -1,5 +1,6 @@
 """Low-level SMTP send (stdlib smtplib, run in a worker thread)."""
 import asyncio
+import logging
 import smtplib
 import ssl
 import uuid
@@ -7,6 +8,8 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 from email.utils import formataddr, make_msgid
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -59,28 +62,47 @@ def _build_message(
 
 
 def _send_sync(cfg: SmtpConfig, msg: EmailMessage) -> SendOutcome:
+    # Temporary: "Connection unexpectedly closed" on send (but not on a bare
+    # connect+login) has been persistent and unexplained -- split login and
+    # send_message into separate stages and log the full exception (type +
+    # args, and the raw SMTP response code/text if smtplib captured one) so
+    # the next real attempt tells us exactly where and why, instead of just
+    # the short summary string shown in the UI.
+    stage = "connect"
     try:
         if cfg.use_ssl:
             ctx = ssl.create_default_context()
             with smtplib.SMTP_SSL(cfg.host, cfg.port, timeout=30, context=ctx) as s:
+                stage = "login"
                 s.login(cfg.username, cfg.password)
+                stage = "send"
                 s.send_message(msg)
         else:
             with smtplib.SMTP(cfg.host, cfg.port, timeout=30) as s:
                 s.ehlo()
                 if cfg.use_tls:
+                    stage = "starttls"
                     s.starttls(context=ssl.create_default_context())
                     s.ehlo()
+                stage = "login"
                 s.login(cfg.username, cfg.password)
+                stage = "send"
                 s.send_message(msg)
         return SendOutcome(ok=True, message_id=msg["Message-ID"])
-    except smtplib.SMTPAuthenticationError:
+    except smtplib.SMTPAuthenticationError as exc:
+        logger.warning("SMTP auth failed at stage=%s: %r", stage, exc)
         return SendOutcome(ok=False, error="Authentication failed — check the username / app password.")
-    except smtplib.SMTPConnectError:
+    except smtplib.SMTPConnectError as exc:
+        logger.warning("SMTP connect failed at stage=%s: %r", stage, exc)
         return SendOutcome(ok=False, error="Could not connect to the SMTP server (host/port).")
-    except smtplib.SMTPRecipientsRefused:
+    except smtplib.SMTPRecipientsRefused as exc:
+        logger.warning("SMTP recipients refused at stage=%s: %r", stage, exc)
         return SendOutcome(ok=False, error="The recipient address was refused by the server.")
     except (smtplib.SMTPException, ssl.SSLError, OSError) as exc:
+        logger.warning(
+            "SMTP error at stage=%s: type=%s args=%r repr=%r",
+            stage, type(exc).__name__, getattr(exc, "args", None), exc,
+        )
         return SendOutcome(ok=False, error=f"SMTP error: {exc}")
 
 
