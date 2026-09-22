@@ -69,7 +69,7 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; audible ring tone itself, so it doesn't depend on the carrier at all.
  same => n,Progress()
  same => n,Playtones(ring)
- same => n,Wait(2)
+ same => n,Wait(3)
  same => n,StopPlayTones()
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR

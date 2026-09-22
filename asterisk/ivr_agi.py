@@ -156,6 +156,10 @@ def collect_one_digit(agi: AGISession, audio_key: Optional[str], timeout_seconds
     agi.answer()
     digit = ""
     if audio_key:
+        # A brief pause before playback starts -- streaming the file the
+        # instant the channel answers can clip the first syllable(s), since
+        # the media path isn't always fully settled yet on every trunk.
+        agi.command("EXEC Wait 0.3")
         digit = agi.stream_file(audio_key)
     if not digit:
         digit = agi.wait_for_digit(max(1, timeout_seconds) * 1000)
