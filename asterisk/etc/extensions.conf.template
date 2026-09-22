@@ -94,9 +94,21 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; header is how ElevenLabs' SIP trunking actually supports this: they
  ; strip the X- prefix, lowercase it, and expose it to the webhook -- so
  ; this becomes recoverable as the workspace's own id on their side.
- same => n,Set(PJSIP_HEADER(add,X-Workspace-Id)=${WS_ID})
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtT)
+ ;
+ ; PJSIP_HEADER(add,...) only affects requests sent by the channel it's set
+ ; on -- setting it here, on the INBOUND leg, does nothing to the separate
+ ; OUTBOUND channel Dial() creates (confirmed via a raw SIP trace: the
+ ; header never made it onto the actual INVITE). The b() option runs a
+ ; Gosub on that new outbound channel itself, before it dials out, which is
+ ; the only place PJSIP_HEADER actually takes effect for this leg. ${WS_ID}
+ ; is evaluated here, on the calling channel, and handed over as ARG1 --
+ ; it's a plain (non-inherited) channel var, so it wouldn't otherwise be
+ ; visible on the new channel at all.
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(add-workspace-header^s^1(${WS_ID})))
  same => n,Hangup()
+
+exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
+ same => n,Return()
 
 ; Reuses [from-internal]'s own number-normalisation patterns rather than
 ; duplicating them — ${DID} is the same channel var those patterns already
