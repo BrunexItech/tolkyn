@@ -87,6 +87,16 @@ export interface CampaignSendRow {
   sent_at: string | null;
 }
 
+export interface ReplyRow {
+  id: string;
+  from_email: string;
+  from_name: string | null;
+  subject: string | null;
+  body_preview: string | null;
+  received_at: string | null;
+  is_read: boolean;
+}
+
 export interface EmailCampaignRow {
   id: string;
   subject: string;
@@ -131,4 +141,8 @@ export const emailApi = {
     return http.upload<CsvImportResult>("/email/recipients/import-csv", fd);
   },
   campaignSends: (id: string) => http.get<CampaignSendRow[]>(`/email/campaigns/${id}/sends`),
+
+  // inbox replies (IMAP-polled by the background scheduler)
+  replies: () => http.get<ReplyRow[]>("/email/replies"),
+  markReplyRead: (id: string) => http.post<void>(`/email/replies/${id}/read`, {}),
 };

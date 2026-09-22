@@ -16,6 +16,7 @@ from app.models.customer_interaction import CustomerInteraction
 from app.models.email_account import EmailAccount, EmailAccountType
 from app.models.email_send import EmailSend, EmailSendStatus
 from app.models.email_campaign import EmailCampaign, PlatformAnnouncement
+from app.models.email_reply import EmailReply
 from app.models.target_area import TargetArea, TargetMode
 from app.models.media_watch import MediaWatch, WatchKind
 from app.models.generated_asset import GeneratedAsset, AssetKind

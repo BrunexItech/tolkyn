@@ -23,6 +23,7 @@ from app.models.team_member import TeamRole
 from app.services.automation_bus import emit as emit_automation
 from app.services.post_service import PostService
 from app.services.social_lead_service import SocialLeadService
+from app.services.email_reply_service import poll_all_accounts as poll_email_replies
 from app.services.video_service import advance_pending_jobs
 
 _task: "asyncio.Task | None" = None
@@ -71,6 +72,7 @@ async def run_due_posts_once() -> int:
     await _advance_video_jobs()
     await _advance_image_jobs()
     await _scan_social_leads_once()
+    await _poll_email_replies()
     return published
 
 
@@ -110,6 +112,19 @@ async def _scan_social_leads_once() -> None:
                 await SocialLeadService(db, wid).scan()
             except Exception as exc:  # pragma: no cover - one bad workspace shouldn't kill the sweep
                 print(f"[scheduler] social-lead scan failed for workspace {wid}: {exc}")
+
+
+async def _poll_email_replies() -> None:
+    """Checks every sending account's own mailbox via IMAP for new incoming
+    mail (see email_reply_service) -- each account is individually rate-
+    gated inside that service, so calling this every sweep is cheap."""
+    async with AsyncSessionLocal() as db:
+        try:
+            n = await poll_email_replies(db)
+            if n:
+                print(f"[scheduler] found {n} new email repl{'y' if n == 1 else 'ies'}")
+        except Exception as exc:  # pragma: no cover - best effort
+            print(f"[scheduler] email reply poll error: {exc}")
 
 
 async def _advance_video_jobs() -> None:

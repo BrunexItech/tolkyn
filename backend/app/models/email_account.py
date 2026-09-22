@@ -40,6 +40,10 @@ class EmailAccount(BaseModel):
     verified_at = Column(DateTime(timezone=True), nullable=True)
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     last_error = Column(Text, nullable=True)
+    # IMAP reply polling (see services/email_reply_service.py) -- rate-gates
+    # how often we open an IMAP connection to this mailbox, independent of
+    # how often the background scheduler sweeps.
+    last_reply_poll_at = Column(DateTime(timezone=True), nullable=True)
 
     daily_limit = Column(Integer, nullable=False, default=200)
     sent_today = Column(Integer, nullable=False, default=0)

@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.actor import get_workspace_id
 from app.db import get_db
 from app.services.email_campaign_service import EmailCampaignService, parse_email_csv
+from app.services.email_reply_service import EmailReplyService
 
 router = APIRouter()
 
@@ -82,6 +83,33 @@ async def campaign_sends(
     db: AsyncSession = Depends(get_db),
 ):
     return await EmailCampaignService(db, user_id).campaign_sends(campaign_id)
+
+
+class ReplyRow(BaseModel):
+    id: str
+    from_email: str
+    from_name: Optional[str] = None
+    subject: Optional[str] = None
+    body_preview: Optional[str] = None
+    received_at: Optional[datetime] = None
+    is_read: bool
+
+
+@router.get("/replies", response_model=List[ReplyRow])
+async def list_replies(
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await EmailReplyService(db, user_id).list()
+
+
+@router.post("/replies/{reply_id}/read", status_code=status.HTTP_204_NO_CONTENT)
+async def mark_reply_read(
+    reply_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    await EmailReplyService(db, user_id).mark_read(reply_id)
 
 
 @router.post("/recipients/preview", response_model=RecipientPreview)

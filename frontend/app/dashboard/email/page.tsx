@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle } from "lucide-react";
+import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle, Inbox } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { OmButton } from "@/components/om/primitives/OmButton";
@@ -15,6 +15,7 @@ import { toast } from "@/lib/om/toast";
 import { emailApi, type CampaignSource, type ManualRecipient, type SendCampaignBody } from "@/lib/api/email";
 import { useEmailAccounts } from "@/components/settings/hooks";
 import { cn } from "@/lib/utils";
+import { relativeTime } from "@/lib/om/format";
 
 // "csv" is a UI-only mode -- the backend only knows manual/leads/customers,
 // so a CSV import just fills the same manual-recipient list a pasted list
@@ -94,6 +95,16 @@ export default function BulkEmailPage() {
   });
 
   const { data: history } = useQuery({ queryKey: ["email-campaigns"], queryFn: emailApi.campaigns });
+
+  const { data: replies } = useQuery({
+    queryKey: ["email-replies"],
+    queryFn: emailApi.replies,
+    refetchInterval: 60_000,
+  });
+  const markRead = useMutation({
+    mutationFn: (id: string) => emailApi.markReplyRead(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["email-replies"] }),
+  });
 
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const { data: campaignSends, isFetching: sendsLoading } = useQuery({
@@ -320,6 +331,48 @@ export default function BulkEmailPage() {
                 </ul>
               ) : (
                 <p className="text-[11px] text-om-muted">No valid recipients yet.</p>
+              )}
+            </Card>
+
+            <Card className="flex flex-col gap-1.5">
+              <CardTitle icon={<Inbox />}>
+                Replies
+                {!!replies?.filter((r) => !r.is_read).length && (
+                  <span className="ml-1.5 rounded-full bg-om-blue/15 px-1.5 py-px text-[9.5px] font-semibold text-om-blue">
+                    {replies!.filter((r) => !r.is_read).length} new
+                  </span>
+                )}
+              </CardTitle>
+              {replies?.length ? (
+                <ul className="flex flex-col divide-y divide-white/[0.05]">
+                  {replies.map((r) => (
+                    <li key={r.id}>
+                      <button
+                        type="button"
+                        onClick={() => !r.is_read && markRead.mutate(r.id)}
+                        className="flex w-full flex-col gap-0.5 py-1.5 text-left"
+                      >
+                        <span className="flex items-center gap-1.5">
+                          {!r.is_read && <span className="size-1.5 shrink-0 rounded-full bg-om-blue" />}
+                          <span className={cn("truncate text-[11px]", !r.is_read ? "font-semibold text-om-text" : "text-om-dim")}>
+                            {r.from_name || r.from_email}
+                          </span>
+                          {r.received_at && (
+                            <span className="ml-auto shrink-0 text-[9.5px] text-om-faint">{relativeTime(r.received_at)}</span>
+                          )}
+                        </span>
+                        {r.subject && <span className="truncate text-[10.5px] text-om-muted">{r.subject}</span>}
+                        {r.body_preview && (
+                          <span className="line-clamp-1 text-[10px] text-om-faint">{r.body_preview}</span>
+                        )}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-[11px] text-om-muted">
+                  No replies yet — we check your sending accounts&apos; inboxes every few minutes.
+                </p>
               )}
             </Card>
 
