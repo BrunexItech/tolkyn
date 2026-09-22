@@ -135,7 +135,23 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; save their conversation_id onto the matching Call row -- which is what
  ; lets their post-call webhook (transcript + audio, once the call ends)
  ; find its way back to the right call in our own call log.
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
+ ;
+ ; Answer the caller's own leg outright, right here, instead of leaving it
+ ; unanswered/in-Progress through the Dial() below. Asterisk's 'r' ringback
+ ; flag only holds until the FAR end sends its own early media (a bare
+ ; 183+SDP, even carrying silence) -- confirmed Asterisk behaviour, not a
+ ; guess -- and ElevenLabs' SIP trunk can send that the instant it gets the
+ ; INVITE, while their own agent is still spinning up. That race is exactly
+ ; what produced "silent until the agent starts talking". Answering first
+ ; removes the race entirely: the call picks up instantly, and the only
+ ; wait left is ElevenLabs' own genuine startup time, which we don't
+ ; control but is now the shortest it can be. The 0.2s pause mirrors the
+ ; same clipped-first-syllable fix already applied to STREAM FILE in
+ ; ivr_agi.py -- guards against the identical class of bug (media path not
+ ; fully settled the instant audio starts) on this leg too.
+ same => n,Answer()
+ same => n,Wait(0.2)
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,Tb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
