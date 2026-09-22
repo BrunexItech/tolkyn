@@ -104,7 +104,7 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; is evaluated here, on the calling channel, and handed over as ARG1 --
  ; it's a plain (non-inherited) channel var, so it wouldn't otherwise be
  ; visible on the new channel at all.
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(add-workspace-header^s^1(${WS_ID})))
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(from-cloudone^add-workspace-header^1(${WS_ID})))
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
