@@ -121,6 +121,7 @@ class UserResponse(BaseModel):
     bio: Optional[str] = Field(None, description="User bio")
     location: Optional[str] = Field(None, description="Location")
     website: Optional[str] = Field(None, description="Website URL")
+    sms_disclaimer: Optional[str] = Field(None, description="Text appended to every outgoing Bulk SMS")
     role: UserRole = Field(..., description="User role")
     status: UserStatus = Field(..., description="User status")
     is_email_verified: bool = Field(..., description="Email verification status")

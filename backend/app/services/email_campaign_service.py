@@ -273,7 +273,12 @@ class EmailCampaignService:
             merged_signature = _merge(acc.signature, ctx) if acc.signature else None
             plain_body = f"{merged_body}\n\n{merged_signature}" if merged_signature else merged_body
             branded_html = render_branded_html(
-                merged_body, logo_url=logo_url, brand_colors=brand_colors, signature=merged_signature
+                merged_body,
+                logo_url=logo_url,
+                brand_colors=brand_colors,
+                signature=merged_signature,
+                contact_phone=user.phone if user else None,
+                contact_website=user.website if user else None,
             )
 
             outcome = await send_email(cfg, r["email"], merged_subject, plain_body, html=branded_html)

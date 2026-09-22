@@ -29,6 +29,7 @@ def user_response(user: User) -> UserResponse:
         bio=user.bio,
         location=user.location,
         website=user.website,
+        sms_disclaimer=user.sms_disclaimer,
         role=user.role,
         status=user.status,
         is_email_verified=user.is_email_verified,
@@ -223,7 +224,10 @@ class UserService:
             )
         
         # Allowed fields to update
-        allowed_fields = {"name", "phone", "position", "bio", "location", "website", "timezone", "language"}
+        allowed_fields = {
+            "name", "phone", "position", "bio", "location", "website", "timezone", "language",
+            "sms_disclaimer",
+        }
         
         for field, value in data.items():
             if field in allowed_fields and value is not None:

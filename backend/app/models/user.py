@@ -79,6 +79,11 @@ class User(BaseModel):
     # NULL = send with the platform's shared MOBILESASA_TOKEN as usual.
     sms_provider_token_enc = Column(String(600), nullable=True)
 
+    # User-editable text appended to every outgoing Bulk SMS (Settings ->
+    # Bulk SMS). NULL/blank = nothing appended -- never forced on a
+    # workspace that hasn't set one. See services/messaging_service.py.
+    sms_disclaimer = Column(String(300), nullable=True)
+
     # Per-module access overrides on top of the package. {"crm": true} force-
     # grants a module the package doesn't include; {"video": false} removes one
     # it does. Everything else follows the package. See app.core.actor.

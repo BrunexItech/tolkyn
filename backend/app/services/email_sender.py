@@ -30,6 +30,8 @@ def render_branded_html(
     logo_url: Optional[str] = None,
     brand_colors: Optional[List[str]] = None,
     signature: Optional[str] = None,
+    contact_phone: Optional[str] = None,
+    contact_website: Optional[str] = None,
 ) -> str:
     """Wraps a plain-text message in a simple, professional, table-based HTML
     email -- deliberately basic markup (no flexbox/grid) since email clients
@@ -43,12 +45,22 @@ def render_branded_html(
         if logo_url
         else ""
     )
+    # Optional one-line contact strip under the signature -- only appears if
+    # the workspace's profile actually has a phone/website set (Settings).
+    contact_bits = [c for c in (contact_phone, contact_website) if c and c.strip()]
+    contact_line = (
+        f'<div style="margin-top:6px; color:#9ca3af; font-size:11.5px;">'
+        f'{html_lib.escape(" · ".join(b.strip() for b in contact_bits))}</div>'
+        if contact_bits
+        else ""
+    )
+    footer_body = f'<div style="color:#6b7280; font-size:12.5px; line-height:1.6;">{_text_to_html(signature)}</div>' if signature else ""
     signature_row = (
         f'<tr><td style="padding:0 32px 28px;">'
         f'<div style="border-top:1px solid #e5e7eb; margin-bottom:16px;"></div>'
-        f'<div style="color:#6b7280; font-size:12.5px; line-height:1.6;">{_text_to_html(signature)}</div>'
+        f"{footer_body}{contact_line}"
         f"</td></tr>"
-        if signature
+        if (signature or contact_line)
         else '<tr><td style="padding-bottom:8px;"></td></tr>'
     )
     return f"""<!DOCTYPE html>

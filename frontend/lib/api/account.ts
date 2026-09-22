@@ -15,6 +15,7 @@ export interface Me {
   position?: string | null;
   location?: string | null;
   website?: string | null;
+  sms_disclaimer?: string | null;
   timezone: string;
   language: string;
   created_at: string;
@@ -26,6 +27,7 @@ export interface ProfileUpdate {
   position?: string;
   location?: string;
   website?: string;
+  sms_disclaimer?: string;
   timezone?: string;
   language?: string;
 }

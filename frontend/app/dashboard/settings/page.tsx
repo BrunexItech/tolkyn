@@ -6,6 +6,7 @@ import { Grid } from "@/components/om/primitives/Grid";
 import { ProfileCard } from "@/components/settings/ProfileCard";
 import { SecurityCard } from "@/components/settings/SecurityCard";
 import { EmailAccounts } from "@/components/settings/EmailAccounts";
+import { SmsDisclaimerCard } from "@/components/settings/SmsDisclaimerCard";
 
 export default function SettingsPage() {
   return (
@@ -21,6 +22,7 @@ export default function SettingsPage() {
       </Grid>
       <Grid cols={2}>
         <EmailAccounts />
+        <SmsDisclaimerCard />
       </Grid>
     </div>
   );

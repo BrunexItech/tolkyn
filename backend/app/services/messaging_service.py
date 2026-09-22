@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.broadcast import Broadcast, BroadcastChannel, BroadcastStatus
 from app.models.customer import Customer
 from app.models.lead import Lead
+from app.models.user import User
 from app.services.messaging_provider import (
     normalize_phone,
     send_many,
@@ -324,8 +325,15 @@ class MessagingService:
         b.status = BroadcastStatus.SENDING
         await self.db.commit()
 
+        # Workspace's own opt-in disclaimer (Settings -> Bulk SMS), appended
+        # to the message actually sent -- never forced, blank by default.
+        disclaimer = (
+            await self.db.execute(select(User.sms_disclaimer).where(User.id == self.workspace_id))
+        ).scalar_one_or_none()
+        body = f"{b.body}\n\n{disclaimer.strip()}" if disclaimer and disclaimer.strip() else b.body
+
         phones = [r["phone"] for r in b.recipients]
-        results = await send_many(b.channel.value, phones, b.body, workspace_id=self.workspace_id)
+        results = await send_many(b.channel.value, phones, body, workspace_id=self.workspace_id)
 
         rows = [
             {"phone": r.phone, "ok": r.ok, "id": r.id, "error": r.error, "simulated": r.simulated}
