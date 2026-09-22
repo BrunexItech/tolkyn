@@ -143,6 +143,7 @@ export const emailApi = {
   campaignSends: (id: string) => http.get<CampaignSendRow[]>(`/email/campaigns/${id}/sends`),
 
   // inbox replies (IMAP-polled by the background scheduler)
-  replies: () => http.get<ReplyRow[]>("/email/replies"),
+  replies: (search?: string) =>
+    http.get<ReplyRow[]>(`/email/replies${search ? `?search=${encodeURIComponent(search)}` : ""}`),
   markReplyRead: (id: string) => http.post<void>(`/email/replies/${id}/read`, {}),
 };

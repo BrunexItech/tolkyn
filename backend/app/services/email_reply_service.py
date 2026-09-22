@@ -21,7 +21,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.crypto import decrypt
@@ -32,7 +32,11 @@ logger = logging.getLogger(__name__)
 
 _POLL_EVERY = timedelta(minutes=5)
 _FIRST_POLL_LOOKBACK = timedelta(days=3)
-_BODY_PREVIEW_LEN = 400
+# The stored column is TEXT (no real size limit) -- this caps it generously
+# rather than to a true "preview" length, so the full message is actually
+# there to view, not just a snippet. The list view still shows a short
+# excerpt; this is what backs the "click to read the full email" detail.
+_BODY_STORE_LEN = 20_000
 
 # Most providers' IMAP host isn't just "imap." + the SMTP domain (Outlook is
 # the clearest example), so map the ones we already offer as presets and
@@ -73,13 +77,13 @@ def _body_preview(msg: "email.message.Message") -> str:
                     text = part.get_payload(decode=True).decode(
                         part.get_content_charset() or "utf-8", errors="replace"
                     )
-                    return text.strip()[:_BODY_PREVIEW_LEN]
+                    return text.strip()[:_BODY_STORE_LEN]
                 except Exception:  # noqa: BLE001
                     continue
         return ""
     try:
         text = msg.get_payload(decode=True).decode(msg.get_content_charset() or "utf-8", errors="replace")
-        return text.strip()[:_BODY_PREVIEW_LEN]
+        return text.strip()[:_BODY_STORE_LEN]
     except Exception:  # noqa: BLE001
         return ""
 
@@ -194,14 +198,21 @@ class EmailReplyService:
         self.db = db
         self.workspace_id = user_id
 
-    async def list(self, limit: int = 50) -> List[Dict[str, Any]]:
-        rows = (
-            await self.db.execute(
-                select(EmailReply)
-                .where(EmailReply.workspace_id == self.workspace_id)
-                .order_by(EmailReply.created_at.desc())
-                .limit(limit)
+    async def list(self, limit: int = 200, search: Optional[str] = None) -> List[Dict[str, Any]]:
+        q = select(EmailReply).where(EmailReply.workspace_id == self.workspace_id)
+        term = (search or "").strip()
+        if term:
+            like = f"%{term}%"
+            q = q.where(
+                or_(
+                    EmailReply.from_email.ilike(like),
+                    EmailReply.from_name.ilike(like),
+                    EmailReply.subject.ilike(like),
+                    EmailReply.body_preview.ilike(like),
+                )
             )
+        rows = (
+            await self.db.execute(q.order_by(EmailReply.created_at.desc()).limit(limit))
         ).scalars()
         return [
             {

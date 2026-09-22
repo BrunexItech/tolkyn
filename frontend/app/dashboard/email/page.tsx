@@ -3,16 +3,17 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle, Inbox } from "lucide-react";
+import { Mail, Send, Users, Loader2, Info, Settings2, Upload, ChevronDown, CheckCircle2, XCircle, MinusCircle, Inbox, Search } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
+import { Modal } from "@/components/om/primitives/Modal";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { EmptyState } from "@/components/om/primitives/EmptyState";
 import { StatusBadge } from "@/components/om/primitives/StatusBadge";
 import { Field, OmInput, OmSelect, OmTextarea } from "@/components/om/primitives/Field";
 import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
 import { toast } from "@/lib/om/toast";
-import { emailApi, type CampaignSource, type ManualRecipient, type SendCampaignBody } from "@/lib/api/email";
+import { emailApi, type CampaignSource, type ManualRecipient, type ReplyRow, type SendCampaignBody } from "@/lib/api/email";
 import { useEmailAccounts } from "@/components/settings/hooks";
 import { cn } from "@/lib/utils";
 import { relativeTime } from "@/lib/om/format";
@@ -77,9 +78,14 @@ export default function BulkEmailPage() {
   const effectiveManual = source === "csv" ? csvRecipients : source === "manual" ? manualRecipients : undefined;
 
   const previewBody = { source: backendSource, manual: backendSource === "manual" ? effectiveManual : undefined };
-  const { data: preview, isFetching: previewing } = useQuery({
+  const { data: preview, isFetching: previewing, error: previewError } = useQuery({
     queryKey: ["email-recipients", source, source === "manual" ? manual : "", source === "csv" ? csvRecipients : ""],
     queryFn: () => emailApi.previewRecipients(previewBody),
+    // Leads/CRM customers can change between visits to this page -- always
+    // refetch rather than silently showing a cached (possibly stale/wrong)
+    // count from earlier in the session.
+    staleTime: 0,
+    refetchOnMount: "always",
   });
 
   const importCsv = useMutation({
@@ -96,15 +102,21 @@ export default function BulkEmailPage() {
 
   const { data: history } = useQuery({ queryKey: ["email-campaigns"], queryFn: emailApi.campaigns });
 
+  const [replySearch, setReplySearch] = useState("");
   const { data: replies } = useQuery({
-    queryKey: ["email-replies"],
-    queryFn: emailApi.replies,
+    queryKey: ["email-replies", replySearch],
+    queryFn: () => emailApi.replies(replySearch.trim() || undefined),
     refetchInterval: 60_000,
   });
   const markRead = useMutation({
     mutationFn: (id: string) => emailApi.markReplyRead(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["email-replies"] }),
   });
+  const [openReply, setOpenReply] = useState<ReplyRow | null>(null);
+  const viewReply = (r: ReplyRow) => {
+    setOpenReply(r);
+    if (!r.is_read) markRead.mutate(r.id);
+  };
 
   const [expandedCampaign, setExpandedCampaign] = useState<string | null>(null);
   const { data: campaignSends, isFetching: sendsLoading } = useQuery({
@@ -317,7 +329,15 @@ export default function BulkEmailPage() {
           <div className="space-y-3">
             <Card className="flex flex-col gap-1.5">
               <CardTitle icon={<Info />}>Recipients</CardTitle>
-              {preview?.sample?.length ? (
+              {previewError ? (
+                <p className="text-[11px] text-om-red">
+                  Couldn&apos;t load recipients: {(previewError as Error).message}
+                </p>
+              ) : previewing ? (
+                <p className="flex items-center gap-1.5 text-[11px] text-om-muted">
+                  <Loader2 className="size-3 animate-spin" /> Checking…
+                </p>
+              ) : preview?.sample?.length ? (
                 <ul className="flex flex-col gap-1 text-[11px] text-om-muted">
                   {preview.sample.map((r) => (
                     <li key={r.email} className="truncate">
@@ -343,13 +363,22 @@ export default function BulkEmailPage() {
                   </span>
                 )}
               </CardTitle>
+              <div className="relative mb-1">
+                <Search className="pointer-events-none absolute left-2 top-1/2 size-3 -translate-y-1/2 text-om-faint" />
+                <OmInput
+                  value={replySearch}
+                  onChange={(e) => setReplySearch(e.target.value)}
+                  placeholder="Search replies…"
+                  className="pl-6 text-[11px]"
+                />
+              </div>
               {replies?.length ? (
                 <ul className="flex flex-col divide-y divide-white/[0.05]">
                   {replies.map((r) => (
                     <li key={r.id}>
                       <button
                         type="button"
-                        onClick={() => !r.is_read && markRead.mutate(r.id)}
+                        onClick={() => viewReply(r)}
                         className="flex w-full flex-col gap-0.5 py-1.5 text-left"
                       >
                         <span className="flex items-center gap-1.5">
@@ -371,7 +400,9 @@ export default function BulkEmailPage() {
                 </ul>
               ) : (
                 <p className="text-[11px] text-om-muted">
-                  No replies yet — we check your sending accounts&apos; inboxes every few minutes.
+                  {replySearch
+                    ? "No replies match that search."
+                    : "No replies yet — we check your sending accounts' inboxes every few minutes."}
                 </p>
               )}
             </Card>
@@ -445,6 +476,23 @@ export default function BulkEmailPage() {
         </div>
       )}
       {dialog}
+
+      <Modal
+        open={!!openReply}
+        onOpenChange={(o) => !o && setOpenReply(null)}
+        title={openReply?.subject || "(no subject)"}
+        description={
+          openReply
+            ? `From ${openReply.from_name ? `${openReply.from_name} · ` : ""}${openReply.from_email}${
+                openReply.received_at ? ` · ${relativeTime(openReply.received_at)}` : ""
+              }`
+            : undefined
+        }
+      >
+        <div className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-om-dim">
+          {openReply?.body_preview || "(no message content)"}
+        </div>
+      </Modal>
     </div>
   );
 }

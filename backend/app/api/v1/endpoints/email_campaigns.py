@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -97,10 +97,11 @@ class ReplyRow(BaseModel):
 
 @router.get("/replies", response_model=List[ReplyRow])
 async def list_replies(
+    search: Optional[str] = Query(None, max_length=200),
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    return await EmailReplyService(db, user_id).list()
+    return await EmailReplyService(db, user_id).list(search=search)
 
 
 @router.post("/replies/{reply_id}/read", status_code=status.HTTP_204_NO_CONTENT)
