@@ -11,6 +11,7 @@ import {
   Play,
   Pause,
   PhoneCall,
+  MessageSquareText,
 } from "lucide-react";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { TableWrap } from "@/components/om/primitives/Table";
@@ -19,6 +20,7 @@ import { useCallCenter } from "./store";
 import { formatDuration, type CallOutcome } from "@/lib/om/call-center";
 import { relativeTime } from "@/lib/om/format";
 import { mediaUrl } from "@/lib/api/video";
+import { CallTranscriptModal } from "./CallTranscriptModal";
 
 const OUTCOME: Record<CallOutcome, { tone: BadgeTone; label: string; Icon: typeof PhoneMissed }> = {
   completed: { tone: "green", label: "Completed", Icon: PhoneIncoming },
@@ -31,6 +33,7 @@ export function RecentCalls() {
   const { recent, dial, active } = useCallCenter();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
+  const [transcriptId, setTranscriptId] = useState<string | null>(null);
 
   const togglePlay = (id: string, url: string) => {
     const el = audioRef.current;
@@ -59,6 +62,7 @@ export function RecentCalls() {
               <th>Duration</th>
               <th>When</th>
               <th>Rec.</th>
+              <th>Transcript</th>
               <th />
             </tr>
           </thead>
@@ -106,6 +110,20 @@ export function RecentCalls() {
                     )}
                   </td>
                   <td>
+                    {c.hasTranscript ? (
+                      <button
+                        type="button"
+                        title="View conversation"
+                        onClick={() => setTranscriptId(c.id)}
+                        className="grid size-6 place-items-center rounded-md border border-om-border text-om-muted hover:text-om-blue hover:border-om-blue/40"
+                      >
+                        <MessageSquareText className="size-3" />
+                      </button>
+                    ) : (
+                      <span className="text-om-faint">—</span>
+                    )}
+                  </td>
+                  <td>
                     {c.number && c.number.toLowerCase() !== "unknown" && (
                       <button
                         type="button"
@@ -124,6 +142,11 @@ export function RecentCalls() {
           </tbody>
         </table>
       </TableWrap>
+      <CallTranscriptModal
+        callId={transcriptId}
+        callerName={recent.find((c) => c.id === transcriptId)?.name || "caller"}
+        onClose={() => setTranscriptId(null)}
+      />
     </Card>
   );
 }

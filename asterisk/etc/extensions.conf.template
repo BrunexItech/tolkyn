@@ -59,18 +59,28 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
- ; A couple of seconds of ringback before anything answers -- without this
- ; the AGI answers as soon as it has a prompt ready (often near-instantly),
- ; which sounds like dead silence rather than a call connecting. Plain
- ; Ringing() just sends a bare 180 and trusts the caller's own carrier to
- ; generate a tone locally, which Cloud One doesn't reliably do on this
- ; path -- confirmed silent in testing. Progress() opens real early media
- ; first, then Playtones(ring) has Asterisk generate and send an actual
- ; audible ring tone itself, so it doesn't depend on the carrier at all.
+ ; Ringback before anything answers -- without this the AGI answers as soon
+ ; as it has a prompt ready, which can sound like dead silence rather than a
+ ; call connecting. Plain Ringing() just sends a bare 180 and trusts the
+ ; caller's own carrier to generate a tone locally, which Cloud One doesn't
+ ; reliably do on this path -- confirmed silent in testing. Progress() opens
+ ; real early media first, then Playtones(ring) has Asterisk generate and
+ ; send an actual audible ring tone itself, so it doesn't depend on the
+ ; carrier at all.
+ ;
+ ; Playtones() is NOT blocking -- it starts a background tone generator on
+ ; the channel and returns immediately. It must stay running for the WHOLE
+ ; AGI round-trip below (which talks to our backend over the network and can
+ ; take an unpredictable amount of time), not just a fixed few seconds --
+ ; otherwise the tone dies on schedule while the AGI is still working and
+ ; the caller gets dead air until it finishes. Asterisk always deactivates
+ ; whatever generator is currently active before starting a new one, so if
+ ; the IVR has a menu prompt, the AGI's own STREAM FILE cleanly takes over
+ ; from this tone with no explicit stop needed on that path; StopPlayTones()
+ ; below only matters for the fallback paths where the AGI never played
+ ; anything (IVR off, backend unreachable, etc).
  same => n,Progress()
  same => n,Playtones(ring)
- same => n,Wait(3)
- same => n,StopPlayTones()
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR
  ; is even turned on — get_flow()/on_call_enter() decide that, not this
@@ -80,6 +90,7 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; through to the exact same ring-the-agent behaviour as before this existed.
  same => n,Set(WS_ID=${DB(tolkyn/ext_ws/${WS_EXT})})
  same => n,AGI(agi://127.0.0.1:4573/ivr,${WS_ID})
+ same => n,StopPlayTones()
  same => n,GotoIf($["${IVR_NEXT}" = "voicemail"]?ivr-voicemail,1)
  same => n,GotoIf($["${IVR_NEXT}" = "ai_agent"]?ivr-ai-agent,1)
  same => n,GotoIf($["${IVR_NEXT}" = "transfer"]?ivr-transfer,1)
@@ -116,10 +127,19 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; is evaluated here, on the calling channel, and handed over as ARG1 --
  ; it's a plain (non-inherited) channel var, so it wouldn't otherwise be
  ; visible on the new channel at all.
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(from-cloudone^add-workspace-header^1(${WS_ID})))
+ ;
+ ; X-Call-Id carries ${LINKEDID} -- the SAME id the AMI bridge already
+ ; reports as channel_id / stores as Call.provider_channel_id for this call
+ ; (see call_center_service.py's handle_pbx_event). ElevenLabs'
+ ; conversation-init webhook surfaces it back in sip_headers, letting us
+ ; save their conversation_id onto the matching Call row -- which is what
+ ; lets their post-call webhook (transcript + audio, once the call ends)
+ ; find its way back to the right call in our own call log.
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
+ same => n,Set(PJSIP_HEADER(add,X-Call-Id)=${ARG2})
  same => n,Return()
 
 ; Reuses [from-internal]'s own number-normalisation patterns rather than

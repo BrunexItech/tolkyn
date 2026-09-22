@@ -13,6 +13,7 @@ from app.schemas.call_center import (
     AgentSipUpdate,
     CallOverview,
     CallPoll,
+    CallTranscript,
     DialRequest,
     FlagsRequest,
     HangupRequest,
@@ -69,6 +70,17 @@ async def answer(
     svc = _svc(db, user_id)
     await svc.answer(call_id)
     return await svc.overview()
+
+
+@router.get("/calls/{call_id}/transcript", response_model=CallTranscript)
+async def call_transcript(
+    call_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """The AI agent's own turn-by-turn conversation (ElevenLabs post-call
+    webhook), if this call was handled by it and the transcript has arrived."""
+    return await _svc(db, user_id).get_transcript(call_id)
 
 
 @router.post("/calls/{call_id}/hangup", response_model=CallOverview)

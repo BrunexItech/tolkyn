@@ -150,6 +150,12 @@ class Settings(BaseSettings):
     # in both places: here, and as a custom header in the ElevenLabs agent's
     # Security settings / tool config.
     ELEVENLABS_WEBHOOK_SECRET: str = Field(default="", description="shared secret ElevenLabs' webhook + tool calls must send")
+    # Separate signing secret for ElevenLabs' own Post-call webhooks feature
+    # (Conversational AI settings -> Webhooks), which delivers the finished
+    # transcript + conversation audio after each AI-agent call ends -- a
+    # different mechanism from ELEVENLABS_WEBHOOK_SECRET above (HMAC-signed
+    # request body, not a static header), so it needs its own secret.
+    ELEVENLABS_POSTCALL_WEBHOOK_SECRET: str = Field(default="", description="HMAC signing secret from ElevenLabs' Post-call webhook config")
     # Real-call IVR prompts (menu text) are rendered to audio via ElevenLabs'
     # plain Text-to-Speech API — a separate, simpler endpoint from the
     # Conversational AI agent above. Voice ID default is ElevenLabs' own

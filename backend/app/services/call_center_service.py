@@ -136,6 +136,30 @@ class CallCenterService:
             "at": _aware(c.ended_at or c.started_at or c.queued_at or c.created_at).isoformat(),
             "recorded": bool(c.recorded and c.recording_url),
             "recordingUrl": c.recording_url,
+            "hasTranscript": bool(c.ai_transcript),
+        }
+
+    async def get_transcript(self, call_id: str) -> Dict[str, Any]:
+        call = (
+            await self.db.execute(
+                select(Call).where(Call.id == call_id, Call.workspace_id == self.workspace_id)
+            )
+        ).scalar_one_or_none()
+        if not call:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Call not found")
+        turns = [
+            {
+                "role": t.get("role"),
+                "message": t.get("message"),
+                "timeInCallSecs": t.get("time_in_call_secs"),
+            }
+            for t in (call.ai_transcript or [])
+        ]
+        return {
+            "hasTranscript": bool(turns),
+            "summary": call.ai_summary,
+            "turns": turns,
+            "audioUrl": call.ai_recording_url or (call.recording_url if call.recorded else None),
         }
 
     def _active_row(self, c: Optional[Call]) -> Optional[Dict[str, Any]]:

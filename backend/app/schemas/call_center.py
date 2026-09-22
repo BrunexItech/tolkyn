@@ -21,6 +21,20 @@ class RecentCall(BaseModel):
     at: str
     recorded: bool
     recordingUrl: Optional[str] = None
+    hasTranscript: bool = False
+
+
+class CallTranscriptTurn(BaseModel):
+    role: Optional[str] = None
+    message: str
+    timeInCallSecs: Optional[float] = None
+
+
+class CallTranscript(BaseModel):
+    hasTranscript: bool
+    summary: Optional[str] = None
+    turns: List[CallTranscriptTurn] = []
+    audioUrl: Optional[str] = None
 
 
 class ActiveCall(BaseModel):

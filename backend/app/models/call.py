@@ -65,6 +65,19 @@ class Call(BaseModel):
     # is routed to an agent / voicemail / hung up.
     ivr_state = Column(JSONB, nullable=True)
 
+    # Set at conversation-init time (elevenlabs.py, via the X-Call-Id SIP
+    # header carrying this call's own provider_channel_id) for calls handed
+    # to the ElevenLabs AI agent. Lets the post-call webhook match its
+    # finished transcript/audio back to this exact Call row.
+    ai_conversation_id = Column(String(64), nullable=True, index=True)
+    # [{"role": "agent"|"user", "message": str, "time_in_call_secs": float}, ...]
+    # from ElevenLabs' post-call transcription webhook.
+    ai_transcript = Column(JSONB, nullable=True)
+    ai_summary = Column(Text, nullable=True)
+    # The AI conversation's own audio (distinct from recording_url, which is
+    # Asterisk's own MixMonitor recording and may not be enabled).
+    ai_recording_url = Column(String(500), nullable=True)
+
     agent_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     workspace_id = Column(String(36), nullable=False, index=True)
 

@@ -29,7 +29,11 @@ Verified against ElevenLabs' own SIP trunking + personalization docs
 """
 from __future__ import annotations
 
+import hashlib
+import hmac
+import json
 import re
+import time
 from typing import Any, Dict, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -38,6 +42,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.db import get_db
+from app.models.call import Call
 from app.models.telephony import TelephonyConfig
 from app.models.user import User
 from app.services.contact_lookup import resolve_contact_name, save_known_caller
@@ -50,6 +55,36 @@ def _check_secret(request: Request) -> None:
     supplied = request.headers.get("x-webhook-secret") or request.query_params.get("secret")
     if not settings.ELEVENLABS_WEBHOOK_SECRET or supplied != settings.ELEVENLABS_WEBHOOK_SECRET:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad webhook secret")
+
+
+def _verify_postcall_signature(raw_body: bytes, sig_header: str, secret: str) -> bool:
+    """ElevenLabs' Post-call webhooks use their own HMAC scheme (distinct
+    from the static x-webhook-secret header everything else here checks):
+    `elevenlabs-signature: t=<unix ts>,v0=<hex hmac>[,v0=<hex hmac>...]`
+    (multiple v0 values appear during their own secret rotation), signing
+    "<ts>.<raw body bytes>" with HMAC-SHA256, keyed by the workspace's
+    Post-call webhook signing secret. Verified against ElevenLabs' own docs
+    + a third-party writeup on doing this without their SDK, not guessed."""
+    if not sig_header or not secret:
+        return False
+    ts: Optional[str] = None
+    sigs: list[str] = []
+    for part in sig_header.split(","):
+        k, _, v = part.partition("=")
+        k, v = k.strip(), v.strip()
+        if k == "t":
+            ts = v
+        elif k == "v0":
+            sigs.append(v)
+    if not ts or not sigs:
+        return False
+    try:
+        if abs(time.time() - int(ts)) > 1800:  # reject anything >30min old/future (replay)
+            return False
+    except ValueError:
+        return False
+    expected = hmac.new(secret.encode(), f"{ts}.".encode() + raw_body, hashlib.sha256).hexdigest()
+    return any(hmac.compare_digest(expected, s) for s in sigs)
 
 
 def _last9(s: str) -> str:
@@ -97,6 +132,29 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     sip_headers = body.get("sip_headers") if isinstance(body.get("sip_headers"), dict) else None
 
     workspace_id = await _resolve_workspace(db, called_number, sip_headers)
+
+    # Stamp this call's Asterisk id onto its Call row now, while we have the
+    # conversation_id in hand -- lets the (separate) post-call webhook find
+    # its way back to this exact row once the transcript/audio are ready.
+    conversation_id = str(body.get("conversation_id") or "")
+    call_id_header = None
+    if sip_headers:
+        for k, v in sip_headers.items():
+            if str(k).lower().replace("_", "-") == "x-call-id" and v:
+                call_id_header = str(v)
+                break
+    if conversation_id and call_id_header and workspace_id:
+        call = (
+            await db.execute(
+                select(Call).where(
+                    Call.workspace_id == workspace_id,
+                    Call.provider_channel_id == call_id_header,
+                )
+            )
+        ).scalars().first()
+        if call:
+            call.ai_conversation_id = conversation_id
+            await db.commit()
     # business_name is a REQUIRED variable in the agent's first message --
     # always set it to something, even when the workspace can't be resolved
     # (an unmapped test call, a misdial), or the agent errors out before it
@@ -138,6 +196,67 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
             dynamic_vars["business_info"] = kb[:4000]
 
     return {"type": "conversation_initiation_client_data", "dynamic_variables": dynamic_vars}
+
+
+@router.post("/post-call")
+async def elevenlabs_post_call(request: Request, db: AsyncSession = Depends(get_db)):
+    """ElevenLabs' Post-call webhooks (Conversational AI settings -> Webhooks
+    on their dashboard, pointed at this URL) — delivers the finished
+    transcript shortly after each AI-agent call ends, and separately the
+    conversation's own audio if that's enabled too. Both send `type` +
+    `data.conversation_id`, which is how each is matched back to the Call
+    row conversation_init already stamped. Silently no-ops on an unknown
+    conversation_id (e.g. a test call placed straight from their dashboard,
+    unrelated to any real call here) rather than erroring — this is a
+    best-effort enrichment, never something a call's own success depends on.
+    """
+    raw = await request.body()
+    sig = request.headers.get("elevenlabs-signature", "")
+    if not _verify_postcall_signature(raw, sig, settings.ELEVENLABS_POSTCALL_WEBHOOK_SECRET):
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad signature")
+
+    body = json.loads(raw)
+    wtype = body.get("type")
+    data = body.get("data") or {}
+    conversation_id = str(data.get("conversation_id") or "")
+    if not conversation_id:
+        return {"ok": True}
+
+    call = (
+        await db.execute(select(Call).where(Call.ai_conversation_id == conversation_id))
+    ).scalars().first()
+    if not call:
+        return {"ok": True}
+
+    if wtype == "post_call_transcription":
+        turns = data.get("transcript") or []
+        call.ai_transcript = [
+            {
+                "role": t.get("role"),
+                "message": t.get("message"),
+                "time_in_call_secs": t.get("time_in_call_secs"),
+            }
+            for t in turns
+            if isinstance(t, dict) and t.get("message")
+        ]
+        analysis = data.get("analysis") or {}
+        call.ai_summary = analysis.get("transcript_summary") or None
+        await db.commit()
+    elif wtype == "post_call_audio":
+        audio_b64 = data.get("full_audio")
+        if audio_b64:
+            import base64
+            import uuid
+            from pathlib import Path
+
+            media_dir = Path(__file__).resolve().parents[4] / "media" / "ai-conversations"
+            media_dir.mkdir(parents=True, exist_ok=True)
+            fname = f"{uuid.uuid4().hex}.mp3"
+            (media_dir / fname).write_bytes(base64.b64decode(audio_b64))
+            call.ai_recording_url = f"/media/ai-conversations/{fname}"
+            await db.commit()
+
+    return {"ok": True}
 
 
 @router.post("/tools/{workspace_id}/resolve-caller")

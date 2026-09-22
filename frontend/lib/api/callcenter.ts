@@ -22,6 +22,20 @@ export interface RecentCall {
   at: string;
   recorded: boolean;
   recordingUrl?: string | null;
+  hasTranscript: boolean;
+}
+
+export interface CallTranscriptTurn {
+  role: "agent" | "user" | string | null;
+  message: string;
+  timeInCallSecs?: number | null;
+}
+
+export interface CallTranscript {
+  hasTranscript: boolean;
+  summary?: string | null;
+  turns: CallTranscriptTurn[];
+  audioUrl?: string | null;
 }
 
 export interface ActiveCall {
@@ -167,6 +181,7 @@ export const callCenterApi = {
   dial: (name: string, number: string) =>
     http.post<CallOverview>("/call-center/dial", { name, number }),
   answer: (id: string) => http.post<CallOverview>(`/call-center/calls/${id}/answer`),
+  transcript: (id: string) => http.get<CallTranscript>(`/call-center/calls/${id}/transcript`),
   hangup: (id: string, outcome: CallOutcome = "completed") =>
     http.post<CallOverview>(`/call-center/calls/${id}/hangup`, { outcome }),
   flags: (id: string, flags: { muted?: boolean; on_hold?: boolean }) =>
