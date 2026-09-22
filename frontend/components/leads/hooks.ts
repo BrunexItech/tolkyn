@@ -30,6 +30,8 @@ export function useSendOutreach() {
       id: string;
       email_account_id: string;
       include_proposal?: boolean;
+      subject?: string;
+      email_body?: string;
     }) => leadsApi.send(id, body),
     onSuccess: (res, vars) => {
       qc.invalidateQueries({ queryKey: ["leads", "item", vars.id] });

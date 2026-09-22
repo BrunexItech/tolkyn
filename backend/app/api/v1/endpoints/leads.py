@@ -304,7 +304,11 @@ async def send_lead_outreach(
 ):
     """Send the drafted email (+ proposal) to this lead from a chosen sending account."""
     return await OutreachSendService(db, user_id).send_one(
-        lead_id, body.email_account_id, body.include_proposal
+        lead_id,
+        body.email_account_id,
+        body.include_proposal,
+        subject_override=body.subject,
+        body_override=body.email_body,
     )
 
 

@@ -194,8 +194,15 @@ export const leadsApi = {
     id: string,
     body: { stage?: string; monthly_value?: number; lifetime_value?: number; next_action?: string },
   ) => http.post<{ id: string }>(`/leads/${id}/convert`, body),
-  send: (id: string, body: { email_account_id: string; include_proposal?: boolean }) =>
-    http.post<import("./email").SendResult>(`/leads/${id}/send`, body),
+  send: (
+    id: string,
+    body: {
+      email_account_id: string;
+      include_proposal?: boolean;
+      subject?: string;
+      email_body?: string;
+    },
+  ) => http.post<import("./email").SendResult>(`/leads/${id}/send`, body),
   sendBulk: (body: { lead_ids: string[]; email_account_id: string; include_proposal?: boolean }) =>
     http.post<import("./email").BulkSendResult>("/leads/send-bulk", body),
 };

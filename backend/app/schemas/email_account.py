@@ -90,6 +90,8 @@ class TestEmailResult(BaseModel):
 class SendOutreachRequest(BaseModel):
     email_account_id: str
     include_proposal: bool = True
+    subject: Optional[str] = Field(None, description="Overrides the stored draft subject for this send")
+    email_body: Optional[str] = Field(None, description="Overrides the stored draft body for this send")
 
 
 class BulkSendRequest(BaseModel):

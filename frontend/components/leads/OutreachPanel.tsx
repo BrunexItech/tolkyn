@@ -52,6 +52,17 @@ export function OutreachPanel({ lead }: { lead: Lead }) {
   const [offer, setOffer] = useState(lead.offer ?? "");
   const [tab, setTab] = useState<"email" | "proposal">("email");
 
+  // Editable copies of the AI draft -- reset whenever the stored draft
+  // changes (first generate, regenerate, or after a send persists an edit),
+  // but otherwise left alone so typing isn't clobbered by unrelated re-renders.
+  const [subject, setSubject] = useState(lead.outreach_subject ?? "");
+  const [body, setBody] = useState(lead.outreach_email ?? "");
+  useEffect(() => {
+    setSubject(lead.outreach_subject ?? "");
+    setBody(lead.outreach_email ?? "");
+  }, [lead.outreach_subject, lead.outreach_email]);
+  const edited = subject !== (lead.outreach_subject ?? "") || body !== (lead.outreach_email ?? "");
+
   const run = (regenerate: boolean) =>
     gen.mutate({
       id: lead.id,
@@ -130,17 +141,32 @@ export function OutreachPanel({ lead }: { lead: Lead }) {
               <span className="text-[10px] font-semibold uppercase tracking-wide text-om-muted">
                 Subject
               </span>
-              <CopyButton
-                label="Email"
-                text={`Subject: ${lead.outreach_subject}\n\n${lead.outreach_email}`}
-              />
+              <div className="flex items-center gap-2">
+                {edited && (
+                  <button
+                    onClick={() => {
+                      setSubject(lead.outreach_subject ?? "");
+                      setBody(lead.outreach_email ?? "");
+                    }}
+                    className="text-[10px] text-om-muted transition-colors hover:text-om-text"
+                  >
+                    Reset to AI draft
+                  </button>
+                )}
+                <CopyButton label="Email" text={`Subject: ${subject}\n\n${body}`} />
+              </div>
             </div>
-            <div className="mb-2 rounded-md border border-om-border bg-om-bg/50 px-2.5 py-1.5 text-[12px] font-medium text-om-text">
-              {lead.outreach_subject}
-            </div>
-            <div className="whitespace-pre-wrap rounded-md border border-om-border bg-om-bg/50 px-2.5 py-2 text-[11.5px] leading-relaxed text-om-dim">
-              {lead.outreach_email}
-            </div>
+            <OmInput
+              value={subject}
+              onChange={(e) => setSubject(e.target.value)}
+              className="mb-2 text-[12px] font-medium"
+            />
+            <OmTextarea
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              rows={10}
+              className="text-[11.5px] leading-relaxed"
+            />
           </div>
         ) : (
           <div>
@@ -154,12 +180,12 @@ export function OutreachPanel({ lead }: { lead: Lead }) {
         )}
       </div>
 
-      <SendRow lead={lead} />
+      <SendRow lead={lead} subject={subject} body={body} />
     </div>
   );
 }
 
-function SendRow({ lead }: { lead: Lead }) {
+function SendRow({ lead, subject, body }: { lead: Lead; subject: string; body: string }) {
   const { data } = useEmailAccounts();
   const send = useSendOutreach();
   const accounts = data?.items ?? [];
@@ -220,7 +246,13 @@ function SendRow({ lead }: { lead: Lead }) {
             disabled={send.isPending || noEmail || !accountId}
             title={noEmail ? "This lead has no email address" : undefined}
             onClick={() =>
-              send.mutate({ id: lead.id, email_account_id: accountId, include_proposal: includeProposal })
+              send.mutate({
+                id: lead.id,
+                email_account_id: accountId,
+                include_proposal: includeProposal,
+                subject,
+                email_body: body,
+              })
             }
           >
             {send.isPending ? <Loader2 className="animate-spin" /> : <SendHorizontal />}

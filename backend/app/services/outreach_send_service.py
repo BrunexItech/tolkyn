@@ -26,9 +26,23 @@ class OutreachSendService:
         self.leads = LeadService(db, user_id)
         self.accounts = EmailAccountService(db, user_id)
 
-    async def send_one(self, lead_id: str, account_id: str, include_proposal: bool) -> SendResult:
+    async def send_one(
+        self,
+        lead_id: str,
+        account_id: str,
+        include_proposal: bool,
+        subject_override: str | None = None,
+        body_override: str | None = None,
+    ) -> SendResult:
         acc = await self.accounts.get_model(account_id)
         lead = await self.leads.get_owned_model(lead_id)
+        # An edit made in the outreach preview just before sending -- persist
+        # it as the lead's new draft so "Send again" and the stored history
+        # reflect what was actually sent, not the original AI draft.
+        if subject_override is not None and subject_override.strip():
+            lead.outreach_subject = subject_override.strip()
+        if body_override is not None and body_override.strip():
+            lead.outreach_email = body_override.strip()
         return await self._send(lead, acc, include_proposal)
 
     async def send_bulk(
