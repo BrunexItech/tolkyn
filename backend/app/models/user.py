@@ -108,6 +108,14 @@ class User(BaseModel):
     # access — see app.core.actor.get_actor / app.core.features.
     package_id = Column(String(36), ForeignKey("packages.id"), nullable=True, index=True)
     package = relationship("Package", foreign_keys=[package_id], lazy="selectin")
+
+    # Subsidiary switching (see app.core.actor.get_actor) -- set only when
+    # this login has chosen to act as one of its authorized subsidiary
+    # workspaces (Organization.owner_user_id == this user, Subsidiary
+    # ACTIVE), super-admin-provisioned in the Organizations screen. NULL for
+    # every account that isn't a subsidiary-controlling main account, or
+    # that hasn't switched away from acting as itself.
+    acting_as_workspace_id = Column(String(36), nullable=True)
     
     # Settings
     preferences = Column(JSON, default={}, nullable=False)

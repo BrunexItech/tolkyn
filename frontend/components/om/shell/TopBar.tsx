@@ -8,6 +8,7 @@ import { Search, Bell, ChevronDown, LogOut, User, Settings as SettingsIcon, Plug
 import { PAGE_TITLES } from "./nav";
 import { SearchPalette } from "./SearchPalette";
 import { useMobileNav } from "./AppShell";
+import { WorkspaceSwitcher } from "./WorkspaceSwitcher";
 import { useSession } from "@/components/om/session";
 import { socialApi, SUPPORTED_PLATFORMS } from "@/lib/api/social";
 import { inboxApi, type ThreadSummary } from "@/lib/api/inbox";
@@ -147,6 +148,8 @@ export function TopBar() {
           ⌘K
         </kbd>
       </button>
+
+      <WorkspaceSwitcher />
 
       {!allConnected && (
         <OmButton variant="subtle" size="sm" onClick={connectAll} className="hidden sm:inline-flex">

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.features import ALL_MODULES, MODULES
 from app.core.security import get_current_user_id
 from app.db import get_db
+from app.models.organization import Organization, OrganizationStatus, Subsidiary, SubsidiaryStatus
 from app.models.package import Package
 from app.models.team_member import ROLE_PERMISSIONS, MemberStatus, TeamMember, TeamRole
 from app.models.user import User
@@ -79,10 +80,49 @@ async def _workspace_features(db: AsyncSession, workspace_id: str) -> List[str]:
     return sorted(granted)
 
 
+async def valid_subsidiary_target(db: AsyncSession, user_id: str, target_workspace_id: str) -> bool:
+    """True if `user_id` currently has a live, super-admin-provisioned grant
+    to act as `target_workspace_id` -- i.e. it's an ACTIVE Subsidiary under
+    an ACTIVE Organization this user owns. Re-checked on every request
+    rather than trusted once, so revoking access in Super Admin takes
+    effect immediately."""
+    res = await db.execute(
+        select(Subsidiary.id)
+        .join(Organization, Organization.id == Subsidiary.organization_id)
+        .where(
+            Organization.owner_user_id == user_id,
+            Organization.status == OrganizationStatus.ACTIVE,
+            Subsidiary.workspace_id == target_workspace_id,
+            Subsidiary.status == SubsidiaryStatus.ACTIVE,
+        )
+        .limit(1)
+    )
+    return res.scalar_one_or_none() is not None
+
+
 async def get_actor(
     user_id: str = Depends(get_current_user_id),
     db: AsyncSession = Depends(get_db),
 ) -> Actor:
+    # Subsidiary switching -- checked first and independently of team
+    # membership below. Dormant (one extra indexed lookup, no-op) for every
+    # account that has never switched away from acting as itself, which is
+    # every account until a super admin provisions a subsidiary for it.
+    acting_as = (
+        await db.execute(select(User.acting_as_workspace_id).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if acting_as and acting_as != user_id:
+        if await valid_subsidiary_target(db, user_id, acting_as):
+            return Actor(
+                user_id=user_id,
+                workspace_id=acting_as,
+                role=TeamRole.OWNER,
+                permissions=["*"],
+                features=await _workspace_features(db, acting_as),
+            )
+        # Grant was revoked/expired since it was set -- fall back silently
+        # to the account's own workspace rather than erroring the request.
+
     res = await db.execute(
         select(TeamMember)
         .where(TeamMember.user_id == user_id, TeamMember.status == MemberStatus.ACTIVE)

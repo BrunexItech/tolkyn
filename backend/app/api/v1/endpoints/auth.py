@@ -19,6 +19,7 @@ from app.schemas.auth import (
     UserResponse,
 )
 from app.services.user_service import UserService
+from app.services import workspace_switch_service
 from app.core.security import get_current_user_id
 
 router = APIRouter()
@@ -262,6 +263,35 @@ async def resend_verification(
 ) -> Any:
     await UserService(db).send_verification_email(user_id)
     return MessageResponse(message="If your email still needs confirming, a new link is on its way.")
+
+
+@router.get(
+    "/workspaces",
+    summary="List workspaces this login can act as (self + any linked subsidiaries)",
+)
+async def list_workspaces(
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    """Always includes the account's own workspace first. Any further
+    entries only exist once a super admin links a subsidiary to this
+    account in Organizations -- for every other account this returns just
+    the one (self) entry, and the frontend switcher doesn't render at all."""
+    return await workspace_switch_service.list_workspaces(db, user_id)
+
+
+@router.post(
+    "/workspaces/{workspace_id}/activate",
+    response_model=MessageResponse,
+    summary="Switch this login to act as a linked subsidiary (or back to itself)",
+)
+async def activate_workspace(
+    workspace_id: str,
+    user_id: str = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+) -> Any:
+    await workspace_switch_service.activate_workspace(db, user_id, workspace_id)
+    return MessageResponse(message="Switched")
 
 
 @router.delete(

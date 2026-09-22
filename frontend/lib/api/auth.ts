@@ -66,4 +66,18 @@ export const auth = {
 
   resendVerification: (): Promise<{ message: string }> =>
     http.post("/auth/resend-verification", {}),
+
+  // Subsidiary switching -- see backend/app/services/workspace_switch_service.py.
+  // Returns just the account's own entry for every account with no linked
+  // subsidiaries, which is the common case.
+  listWorkspaces: (): Promise<WorkspaceOption[]> => http.get("/auth/workspaces"),
+  activateWorkspace: (workspaceId: string): Promise<{ message: string }> =>
+    http.post(`/auth/workspaces/${workspaceId}/activate`, {}),
 };
+
+export interface WorkspaceOption {
+  workspace_id: string;
+  name: string;
+  is_self: boolean;
+  is_current: boolean;
+}
