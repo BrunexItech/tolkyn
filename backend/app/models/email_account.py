@@ -21,6 +21,14 @@ class EmailAccount(BaseModel):
     from_name = Column(String(120), nullable=False)
     from_email = Column(String(255), nullable=False)
     reply_to = Column(String(255), nullable=True)
+    # A manager/colleague who should see every outgoing bulk send -- a real
+    # (visible-to-sender) Bcc header, added and then stripped by smtplib
+    # before transmission, same as any normal mail client's Bcc field.
+    # Unlike Cc, invisible to the recipient, so it never lands in a
+    # "reply all" -- send-visibility only, by design (explicit tradeoff the
+    # user chose over Cc, which would multiply into one email per
+    # recipient on a bulk send).
+    default_bcc = Column(String(255), nullable=True)
 
     # SMTP
     smtp_host = Column(String(255), nullable=True)

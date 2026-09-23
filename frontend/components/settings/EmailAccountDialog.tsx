@@ -31,6 +31,7 @@ const blankForm = {
   use_ssl: false,
   signature: "",
   daily_limit: 200,
+  default_bcc: "",
 };
 
 export function EmailAccountDialog({
@@ -69,6 +70,7 @@ export function EmailAccountDialog({
         use_ssl: account.use_ssl ?? false,
         signature: account.signature ?? "",
         daily_limit: account.daily_limit ?? 200,
+        default_bcc: account.default_bcc ?? "",
       });
       const match = Object.entries(PRESETS).find(([, p]) => p.host === account.smtp_host);
       setPreset(match ? match[0] : "Custom");
@@ -95,6 +97,8 @@ export function EmailAccountDialog({
   if (!form.smtp_host.trim()) errors.smtp_host = "Required";
   if (!(Number(form.smtp_port) > 0)) errors.smtp_port = "Invalid";
   if (!editing && !form.smtp_password.trim()) errors.smtp_password = "Required to connect";
+  if (form.default_bcc.trim() && !EMAIL_RE.test(form.default_bcc.trim()))
+    errors.default_bcc = "Not a valid email";
   const hasErrors = Object.keys(errors).length > 0;
 
   const submit = () => {
@@ -111,6 +115,7 @@ export function EmailAccountDialog({
       use_ssl: form.use_ssl,
       signature: form.signature.trim() || undefined,
       daily_limit: Number(form.daily_limit) || 200,
+      default_bcc: form.default_bcc.trim() || undefined,
       // Providers display app passwords in space-separated groups for
       // readability (e.g. "abcd efgh ijkl mnop") -- the password itself
       // never legitimately contains whitespace, so strip it before it
@@ -277,6 +282,21 @@ export function EmailAccountDialog({
             className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-2 text-[12px] text-om-text outline-none focus:border-om-blue/60"
             placeholder={"Sam Rivera\nCrumb & Co · crumbco.com"}
           />
+        </Field>
+        <Field
+          label="Bcc a colleague on every send (optional)"
+          hint="They get a private copy of every email this account sends — invisible to the recipient, so it's never included if they reply all."
+        >
+          <OmInput
+            type="email"
+            value={form.default_bcc}
+            onChange={(e) => set("default_bcc", e.target.value)}
+            placeholder="manager@yourdomain.com"
+            className={errCls("default_bcc")}
+          />
+          {show("default_bcc") && (
+            <p className="mt-1 text-[10px] text-om-red">{errors.default_bcc}</p>
+          )}
         </Field>
         <p
           className={cn(

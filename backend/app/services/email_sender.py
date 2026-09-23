@@ -97,6 +97,7 @@ class SmtpConfig:
     from_name: str = ""
     from_email: str = ""
     reply_to: Optional[str] = None
+    bcc: Optional[str] = None
 
 
 @dataclass
@@ -121,6 +122,15 @@ def _build_message(
     msg["Message-ID"] = make_msgid()
     if cfg.reply_to:
         msg["Reply-To"] = cfg.reply_to
+    if cfg.bcc:
+        # smtplib's send_message() reads To/Cc/Bcc headers to build the
+        # actual SMTP envelope recipient list when none is passed
+        # explicitly, then automatically STRIPS the Bcc header before the
+        # message bytes go out -- so the bcc address receives a full copy
+        # while staying completely invisible to the recipient (never in
+        # the raw source, never included in a "reply all"), same as any
+        # normal mail client's Bcc field.
+        msg["Bcc"] = cfg.bcc
     msg.set_content(body)
     if html:
         msg.add_alternative(html, subtype="html")
