@@ -48,7 +48,23 @@ function detailFrom(data: unknown, status: number): string {
   }
   if (typeof d.detail === "string" && d.detail) return d.detail;
   if (typeof d.message === "string" && d.message) return d.message;
-  if (typeof data === "string" && data) return data;
+  // A plain-string body that ISN'T one of our own clean API messages —
+  // e.g. Cloudflare's or nginx's own HTML error page when the backend
+  // never got the request at all (a 502/504/522…). Showing that raw HTML
+  // as the error message is exactly what happened before this fix: the
+  // user saw an entire Cloudflare error page rendered as a toast. Genuine
+  // short plain-text API errors are still passed through as-is.
+  if (typeof data === "string" && data) {
+    const looksLikeMarkup = /^\s*</.test(data) || data.length > 300;
+    if (!looksLikeMarkup) return data;
+  }
+  return statusFallback(status);
+}
+
+function statusFallback(status: number): string {
+  if (status >= 500) return "Something went wrong on our end. Please try again in a moment.";
+  if (status === 404) return "That couldn't be found.";
+  if (status === 403) return "You don't have permission to do that.";
   return `Request failed (${status})`;
 }
 
