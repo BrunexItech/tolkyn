@@ -71,7 +71,23 @@ async def _fetch_tts_mp3(text: str) -> bytes:
                 "Content-Type": "application/json",
                 "Accept": "audio/mpeg",
             },
-            json={"text": text, "model_id": settings.ELEVENLABS_TTS_MODEL},
+            json={
+                "text": text,
+                "model_id": settings.ELEVENLABS_TTS_MODEL,
+                # Never sent before -- ElevenLabs then falls back to a flat,
+                # neutral default (style=0, no expressiveness), which is
+                # exactly what reads as "robotic" on a monotone IVR prompt.
+                # stability slightly below their own 0.5 default adds natural
+                # variation without drifting off-voice; style>0 is the actual
+                # expressiveness knob. Confirmed via ElevenLabs' own docs on
+                # what these parameters do, not guessed.
+                "voice_settings": {
+                    "stability": 0.42,
+                    "similarity_boost": 0.8,
+                    "style": 0.35,
+                    "use_speaker_boost": True,
+                },
+            },
         )
         resp.raise_for_status()
         return resp.content
