@@ -172,12 +172,28 @@ def post_event(workspace_id: str, payload: dict, timeout: int = 5) -> bool:
 def _recording_payload(lid: str) -> Tuple[dict, Optional[Path]]:
     """The finished MixMonitor recording for this call, if the dialplan
     recorded one — read once, base64-encoded, ready to ride on the hangup
-    event. Returns ({} , None) when there's nothing to attach."""
+    event. Returns ({} , None) when there's nothing to attach.
+
+    MixMonitor doesn't always finish flushing/closing its file the instant
+    Asterisk reports the last channel hung up -- confirmed as a real gap
+    (a genuine short completed call, ~7s, silently ended up with no
+    recording attached at all despite recording being on). A very short
+    call is exactly the case most likely to hit this, since there's the
+    least time for the OS to have already written the data out. Retries a
+    few times with a brief pause rather than giving up on the first empty
+    read -- this only delays how fast the *bridge* reports the hangup
+    event to the backend (bookkeeping), never the live call audio, which
+    has already ended by this point regardless."""
     path = RECORDINGS_DIR / f"{lid}.wav"
-    try:
-        size = path.stat().st_size
-    except OSError:
-        return {}, None
+    size = 0
+    for attempt in range(5):
+        try:
+            size = path.stat().st_size
+        except OSError:
+            size = 0
+        if size > 0:
+            break
+        time.sleep(0.3)
     if size <= 0:
         return {}, None
     if size > MAX_RECORDING_BYTES:
