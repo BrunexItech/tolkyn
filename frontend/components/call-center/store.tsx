@@ -19,6 +19,7 @@ import {
 } from "@/lib/api/callcenter";
 import { feedBus } from "@/components/om/feed-bus";
 import { toast } from "@/lib/om/toast";
+import { useSipPhone } from "./useSipPhone";
 
 interface CallCenterValue {
   loading: boolean;
@@ -45,6 +46,8 @@ interface CallCenterValue {
   setAgentSip: (agentId: string, ext: string, password: string) => void;
   /** browser softphone reporting its own SIP session lifecycle */
   softphoneEvent: (kind: SoftphoneEventKind, number?: string, name?: string) => void;
+  /** the ONE shared browser SIP connection — see the comment on its creation below */
+  sip: ReturnType<typeof useSipPhone>;
   busy: boolean;
 }
 
@@ -114,6 +117,26 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
     // a stale/again event isn't worth a toast
     onError: () => undefined,
   });
+
+  // ONE shared SIP connection for the whole Call Center, not one per
+  // component that happens to need it -- registering the same extension
+  // twice (e.g. once in the Dialer, once in Recent Calls) would fight over
+  // the same softphone line. Anything that needs to actually place/answer
+  // a real call (not just log one) goes through this same `sip` object.
+  const sip = useSipPhone(softphone ?? null, (e) => {
+    if (e.type === "inbound_ring") {
+      sipEventM.mutate({ kind: "inbound_ring", number: e.from || undefined });
+    } else if (e.type === "answered") {
+      sipEventM.mutate({
+        kind: e.direction === "inbound" ? "inbound_answered" : "outbound_answered",
+        number: e.from || undefined,
+      });
+    } else if (e.type === "declined") {
+      sipEventM.mutate({ kind: "declined", number: e.from || undefined });
+    } else if (e.type === "ended") {
+      sipEventM.mutate({ kind: "ended" });
+    }
+  });
   const agentSipM = useMutation({
     mutationFn: (v: { agentId: string; ext: string; password: string }) =>
       callCenterApi.setAgentSip(v.agentId, v.ext, v.password),
@@ -154,6 +177,14 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
         // tries to resolve it from CRM/phone book/leads before falling
         // back to "Unknown caller"; hardcoding it here would skip that.
         dialM.mutate({ name: name || "", number });
+        // Placing the ACTUAL call is the browser softphone's job (see
+        // AsteriskProvider.place_call's own docstring) -- the backend call
+        // above only creates the history/Recent-Calls row. Triggered here,
+        // once, so every caller of dial() (the Dialer, the Recent Calls
+        // "call back" button, anywhere else in the future) gets a real
+        // call for free instead of having to remember this step itself,
+        // which is exactly how it was missed on the call-back button.
+        if (sip.enabled) sip.dial(number).catch(() => undefined);
         feedBus.emit(`Dialing ${name || "Unknown"} · ${number}`, "ok");
       },
       answer: (id) => {
@@ -185,10 +216,11 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
       softphone: softphone ?? null,
       setAgentSip: (agentId, ext, password) => agentSipM.mutate({ agentId, ext, password }),
       softphoneEvent: (kind, number, name) => sipEventM.mutate({ kind, number, name }),
+      sip,
       busy,
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [data, isLoading, active, busy, softphone],
+    [data, isLoading, active, busy, softphone, sip],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

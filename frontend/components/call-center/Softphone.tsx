@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import type { CallOutcome } from "@/lib/api/callcenter";
 import { useCallCenter } from "./store";
-import { useSipPhone } from "./useSipPhone";
+import type { useSipPhone } from "./useSipPhone";
 import { CallWaveform } from "./CallWaveform";
 import { formatDuration } from "@/lib/om/call-center";
 import { toast } from "@/lib/om/toast";
@@ -29,21 +29,7 @@ const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"] as con
 const SUBS: Record<string, string> = { "2": "ABC", "3": "DEF", "4": "GHI", "5": "JKL", "6": "MNO", "7": "PQRS", "8": "TUV", "9": "WXYZ" };
 
 export function Softphone() {
-  const { active, dial, softphone, softphoneEvent } = useCallCenter();
-  const sip = useSipPhone(softphone, (e) => {
-    if (e.type === "inbound_ring") {
-      softphoneEvent("inbound_ring", e.from || undefined);
-    } else if (e.type === "answered") {
-      softphoneEvent(
-        e.direction === "inbound" ? "inbound_answered" : "outbound_answered",
-        e.from || undefined,
-      );
-    } else if (e.type === "declined") {
-      softphoneEvent("declined", e.from || undefined);
-    } else if (e.type === "ended") {
-      softphoneEvent("ended");
-    }
-  });
+  const { active, dial, softphone, sip } = useCallCenter();
 
   return (
     <div className="space-y-2">
@@ -56,7 +42,7 @@ export function Softphone() {
       ) : active ? (
         <ActiveCallCard sip={sip} />
       ) : (
-        <DialerCard onDial={dial} sip={sip} />
+        <DialerCard onDial={dial} />
       )}
       <TrunkStatus softphone={softphone} sipState={sip.state} />
     </div>
@@ -72,6 +58,17 @@ function IncomingCallCard({
   onAnswer: () => void;
   onDecline: () => void;
 }) {
+  // No countdown/elapsed indicator existed here at all before -- just a
+  // static "ringing…" label. Ticks from when this card first mounted
+  // (the moment the inbound INVITE arrived), same interval pattern as the
+  // answered-call timer below.
+  const [ringingSec, setRingingSec] = useState(0);
+  useEffect(() => {
+    setRingingSec(0);
+    const id = setInterval(() => setRingingSec((s) => s + 1), 1000);
+    return () => clearInterval(id);
+  }, [from]);
+
   return (
     <Card accent="amber">
       <CardTitle icon={<PhoneIncoming />}>Incoming call</CardTitle>
@@ -84,7 +81,7 @@ function IncomingCallCard({
           {from || "Unknown caller"}
         </div>
         <div className="mt-0.5 flex items-center gap-1 text-[11px] text-om-muted">
-          <CircleDot className="size-3 om-live-dot text-om-amber" /> ringing…
+          <CircleDot className="size-3 om-live-dot text-om-amber" /> ringing… {formatDuration(ringingSec)}
         </div>
       </div>
 
@@ -145,10 +142,8 @@ function TrunkStatus({
 
 function DialerCard({
   onDial,
-  sip,
 }: {
   onDial: (name: string, number: string) => void;
-  sip: ReturnType<typeof useSipPhone>;
 }) {
   const [number, setNumber] = useState("");
 
@@ -198,7 +193,6 @@ function DialerCard({
         onClick={() => {
           const n = number.trim();
           onDial("Unknown", n);
-          if (sip.enabled) sip.dial(n).catch(() => undefined);
           setNumber("");
         }}
         className="mx-auto mt-3 flex h-11 w-full max-w-[236px] items-center justify-center gap-2 rounded-xl bg-om-green font-semibold text-black shadow-[inset_0_1px_0_rgba(255,255,255,.2)] transition-colors hover:brightness-105 disabled:opacity-40"
