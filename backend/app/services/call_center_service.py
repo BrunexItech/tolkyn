@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, status
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.call import (
@@ -28,6 +28,20 @@ _VOLUME_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+async def _lock_inbound_ring(db: AsyncSession, workspace_id: str, number: str) -> None:
+    """Two independent sources report the same real-world inbound ring —
+    the host-side AMI bridge and the browser softphone's own self-report
+    (see report_softphone's docstring: "redundant with the AMI bridge").
+    Both do a "does a row already exist for this number?" check before
+    creating one; without serializing them, they can both run that check
+    within milliseconds of each other, both find nothing yet, and both
+    create their own row -- a real, confirmed duplicate. A Postgres
+    session-scoped advisory lock, released automatically at transaction
+    end, forces the second caller to wait until the first has actually
+    committed its row, so its own check then correctly finds it."""
+    await db.execute(text("SELECT pg_advisory_xact_lock(hashtext(:key))"), {"key": f"{workspace_id}:{number}"})
 
 
 def _hour_label(h: int) -> str:
@@ -726,6 +740,7 @@ class CallCenterService:
         ):
             if existing:
                 return
+            await _lock_inbound_ring(self.db, self.workspace_id, number or "unknown")
             # a softphone report may already have queued this caller
             match = (
                 await self.db.execute(
@@ -871,6 +886,7 @@ class CallCenterService:
         num = (number or "").strip()
 
         if kind in ("inbound_ring", "ringing", "incoming"):
+            await _lock_inbound_ring(self.db, self.workspace_id, num or "unknown")
             hit = (
                 await self.db.execute(
                     select(Call).where(
