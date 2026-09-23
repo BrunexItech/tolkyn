@@ -99,7 +99,7 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; call recording — opt-in per workspace (Super Admin -> Telephony ->
  ; Record calls), mirrored into AstDB by sync_workspaces.py. 'b' = only
  ; record once the call is actually bridged, not ring time.
- same => n,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+ same => n,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${CHANNEL(linkedid)}.wav,b))
  same => n,Dial(PJSIP/${WS_EXT},${RINGTIME},rtT)
  ; if the call actually connected (agent answered, then either side hung up)
  ; end it — don't dump the caller into voicemail.
@@ -111,7 +111,7 @@ exten => ivr-voicemail,1,StopPlayTones()
  same => n,VoiceMail(${WS_EXT}@default,u)
  same => n,Hangup()
 
-exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${CHANNEL(linkedid)}.wav,b))
  ; This leg dials one shared ElevenLabs SIP destination for every workspace,
  ; so caller_id/called_number on it are just the trunk's own static
  ; identity ("tolkynagent") -- useless for the conversation-init webhook to
@@ -130,13 +130,21 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; it's a plain (non-inherited) channel var, so it wouldn't otherwise be
  ; visible on the new channel at all.
  ;
- ; X-Call-Id carries ${LINKEDID} -- the SAME id the AMI bridge already
- ; reports as channel_id / stores as Call.provider_channel_id for this call
- ; (see call_center_service.py's handle_pbx_event). ElevenLabs'
+ ; X-Call-Id carries ${CHANNEL(linkedid)} -- the SAME id the AMI bridge
+ ; already reports as channel_id / stores as Call.provider_channel_id for
+ ; this call (see call_center_service.py's handle_pbx_event). ElevenLabs'
  ; conversation-init webhook surfaces it back in sip_headers, letting us
  ; save their conversation_id onto the matching Call row -- which is what
  ; lets their post-call webhook (transcript + audio, once the call ends)
  ; find its way back to the right call in our own call log.
+ ;
+ ; NOTE: this used to read the bare ${LINKEDID}, which isn't a real
+ ; dialplan variable (it's a CDR/log field) -- an undefined variable
+ ; reference silently evaluates to empty rather than erroring, so this
+ ; header was being sent completely blank the whole time, and the exact
+ ; same bug independently broke every recording filename below (confirmed
+ ; via a real recording file literally named ".wav" with the id missing).
+ ; The correct dialplan-accessible form is ${CHANNEL(linkedid)}.
  ;
  ; Two earlier attempts at this leg, both confirmed by real test calls:
  ; (1) Answer() immediately then Dial() with no tone -- removed our ring
@@ -163,7 +171,7 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; and carries it through until ElevenLabs' real audio takes over.
  same => n,Answer()
  same => n,Wait(0.2)
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,Tb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,Tb(from-cloudone^add-workspace-header^1(${WS_ID}^${CHANNEL(linkedid)})))
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
@@ -189,7 +197,7 @@ exten => h,1,Hangup()
 [from-internal]
 ; Call recording (same opt-in as inbound, see [from-cloudone]) applies to
 ; every outbound pattern below — one subroutine so it's only written once.
-exten => rec-gate,1,ExecIf($["${DB(tolkyn/ext_record/${MYEXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
+exten => rec-gate,1,ExecIf($["${DB(tolkyn/ext_record/${MYEXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${CHANNEL(linkedid)}.wav,b))
  same => n,Return()
 
 ; Kenya: +254XXXXXXXXX -> 0XXXXXXXXX
