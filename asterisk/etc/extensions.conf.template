@@ -76,9 +76,10 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; the caller gets dead air until it finishes. Asterisk always deactivates
  ; whatever generator is currently active before starting a new one, so if
  ; the IVR has a menu prompt, the AGI's own STREAM FILE cleanly takes over
- ; from this tone with no explicit stop needed on that path; StopPlayTones()
- ; below only matters for the fallback paths where the AGI never played
- ; anything (IVR off, backend unreachable, etc).
+ ; from this tone with no explicit stop needed on that path. It's
+ ; deliberately NOT stopped unconditionally after the AGI any more (see the
+ ; ai_agent branch below for why) -- each destination that actually needs
+ ; it stopped (voicemail, the human-agent dial) stops it itself.
  same => n,Progress()
  same => n,Playtones(ring)
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
@@ -90,11 +91,11 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; through to the exact same ring-the-agent behaviour as before this existed.
  same => n,Set(WS_ID=${DB(tolkyn/ext_ws/${WS_EXT})})
  same => n,AGI(agi://127.0.0.1:4573/ivr,${WS_ID})
- same => n,StopPlayTones()
  same => n,GotoIf($["${IVR_NEXT}" = "voicemail"]?ivr-voicemail,1)
  same => n,GotoIf($["${IVR_NEXT}" = "ai_agent"]?ivr-ai-agent,1)
  same => n,GotoIf($["${IVR_NEXT}" = "transfer"]?ivr-transfer,1)
  same => n,GotoIf($["${IVR_NEXT}" = "hangup"]?ivr-hangup,1)
+ same => n,StopPlayTones()
  ; call recording — opt-in per workspace (Super Admin -> Telephony ->
  ; Record calls), mirrored into AstDB by sync_workspaces.py. 'b' = only
  ; record once the call is actually bridged, not ring time.
@@ -106,7 +107,8 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,VoiceMail(${WS_EXT}@default,u)
  same => n,Hangup()
 
-exten => ivr-voicemail,1,VoiceMail(${WS_EXT}@default,u)
+exten => ivr-voicemail,1,StopPlayTones()
+ same => n,VoiceMail(${WS_EXT}@default,u)
  same => n,Hangup()
 
 exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?MixMonitor(/var/spool/asterisk/recordings/${LINKEDID}.wav,b))
@@ -136,22 +138,24 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; lets their post-call webhook (transcript + audio, once the call ends)
  ; find its way back to the right call in our own call log.
  ;
- ; Answer the caller's own leg outright, right here, instead of leaving it
- ; unanswered/in-Progress through the Dial() below. Asterisk's 'r' ringback
- ; flag only holds until the FAR end sends its own early media (a bare
- ; 183+SDP, even carrying silence) -- confirmed Asterisk behaviour, not a
- ; guess -- and ElevenLabs' SIP trunk can send that the instant it gets the
- ; INVITE, while their own agent is still spinning up. That race is exactly
- ; what produced "silent until the agent starts talking". Answering first
- ; removes the race entirely: the call picks up instantly, and the only
- ; wait left is ElevenLabs' own genuine startup time, which we don't
- ; control but is now the shortest it can be. The 0.2s pause mirrors the
- ; same clipped-first-syllable fix already applied to STREAM FILE in
- ; ivr_agi.py -- guards against the identical class of bug (media path not
- ; fully settled the instant audio starts) on this leg too.
- same => n,Answer()
- same => n,Wait(0.2)
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,Tb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
+ ; Explicitly answering this leg before Dial() (an earlier attempt at this
+ ; fix) turned out WORSE, confirmed by a real test call: it removed our own
+ ; ring tone for this phase without replacing it with anything, so instead
+ ; of a *chance* of silence (racing ElevenLabs' own early media), it became
+ ; GUARANTEED silence for however long ElevenLabs takes to start talking.
+ ;
+ ; This leg is deliberately left UNANSWERED, still in the Progress() state
+ ; from the top of [handle], with the SAME Playtones(ring) generator from
+ ; up there still running (note there's no StopPlayTones() on this branch,
+ ; unlike voicemail/the human-agent dial) -- it plays continuously right
+ ; through this Dial() with no gap at all. Asterisk always swaps out
+ ; whatever generator is active the moment real bridged audio starts
+ ; flowing, so the tone stops and ElevenLabs' own speech takes over
+ ; cleanly the instant it's actually ready -- no silent gap, regardless of
+ ; how long their side takes. 'r' stays on as a harmless belt-and-braces
+ ; fallback (Asterisk's own ringback indication), in case the far end
+ ; sends real early media before its agent is ready to speak.
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
@@ -162,7 +166,8 @@ exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
 ; duplicating them — ${DID} is the same channel var those patterns already
 ; expect for caller ID, just set from AstDB here instead of an agent
 ; endpoint's set_var (there's no agent endpoint on this leg, it's the caller).
-exten => ivr-transfer,1,Set(DID=${DB(tolkyn/ext_did/${WS_EXT})})
+exten => ivr-transfer,1,StopPlayTones()
+ same => n,Set(DID=${DB(tolkyn/ext_did/${WS_EXT})})
  same => n,Goto(from-internal,${IVR_TARGET},1)
 
 exten => ivr-hangup,1,Hangup()
