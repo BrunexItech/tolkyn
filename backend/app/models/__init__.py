@@ -61,6 +61,7 @@ from app.models.activity_log import ActivityLog
 from app.models.video_job import VideoJob, VideoJobStatus
 from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.auth_token import AuthToken, AuthTokenKind
+from app.models.sms_optout import SmsOptOut
 
 __all__ = [
     "User",
@@ -138,4 +139,5 @@ __all__ = [
     "ImageJobStatus",
     "AuthToken",
     "AuthTokenKind",
+    "SmsOptOut",
 ]

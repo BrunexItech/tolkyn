@@ -18,6 +18,7 @@ from app.services.messaging_provider import (
     sms_ready,
     whatsapp_ready,
 )
+from app.services.sms_optout_service import suppress_opted_out
 
 try:
     import phonenumbers
@@ -333,14 +334,28 @@ class MessagingService:
         body = f"{b.body}\n\n{disclaimer.strip()}" if disclaimer and disclaimer.strip() else b.body
 
         phones = [r["phone"] for r in b.recipients]
-        results = await send_many(b.channel.value, phones, body, workspace_id=self.workspace_id)
+        skipped_rows: List[Dict[str, Any]] = []
+        if b.channel == BroadcastChannel.SMS:
+            # A number that replied STOP to a previous message never
+            # receives another one -- checked fresh on every send, not
+            # just at broadcast-creation time, same reasoning as the
+            # subsidiary-switching revalidation elsewhere in this app.
+            allowed = await suppress_opted_out(self.db, self.workspace_id, phones)
+            opted_out = set(phones) - set(allowed)
+            phones = allowed
+            skipped_rows = [
+                {"phone": p, "ok": False, "id": None, "error": "Opted out (replied STOP)", "simulated": False}
+                for p in opted_out
+            ]
 
-        rows = [
+        results = await send_many(b.channel.value, phones, body, workspace_id=self.workspace_id) if phones else []
+
+        rows = skipped_rows + [
             {"phone": r.phone, "ok": r.ok, "id": r.id, "error": r.error, "simulated": r.simulated}
             for r in results
         ]
         sent = sum(1 for r in results if r.ok)
-        failed = len(results) - sent
+        failed = len(rows) - sent
 
         b.results = rows
         b.sent_count = sent

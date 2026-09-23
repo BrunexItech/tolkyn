@@ -208,6 +208,11 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: Optional[str] = Field(default=None, description="Twilio Account SID")
     TWILIO_AUTH_TOKEN: Optional[str] = Field(default=None, description="Twilio Auth Token")
     TWILIO_SMS_FROM: Optional[str] = Field(default=None, description="Twilio SMS sender (E.164 or messaging service SID)")
+    # Verifies inbound-SMS webhooks (STOP-reply handling, see
+    # sms_optout_service.py) -- set this here and configure the matching
+    # inbound-SMS webhook URL (with ?secret=... appended) on MobileSasa's
+    # own dashboard / Twilio's console.
+    SMS_INBOUND_WEBHOOK_SECRET: str = Field(default="", description="shared secret the inbound-SMS webhook URL must carry")
     # Messaging — WhatsApp Cloud API (optional — falls back to a simulated send)
     WHATSAPP_TOKEN: Optional[str] = Field(default=None, description="Meta WhatsApp Cloud API permanent token")
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = Field(default=None, description="WhatsApp phone number ID")

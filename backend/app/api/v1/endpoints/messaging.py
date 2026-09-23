@@ -1,4 +1,6 @@
+import logging
 from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import (
     APIRouter,
@@ -7,6 +9,7 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
@@ -14,9 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
+from app.core.config import settings
 from app.core.internal_auth import verify_internal_secret
 from app.db import get_db
 from app.models.social_connection import ConnectionStatus, SocialConnection
+from app.models.user import User
 from app.schemas.messaging import (
     BroadcastCreate,
     BroadcastList,
@@ -39,12 +44,15 @@ from app.schemas.messaging import (
 from app.services import whatsapp_web_service
 from app.services.campaign_group_service import CampaignGroupService
 from app.services.messaging_service import MessagingService
+from app.services.sms_optout_service import detect_stop_keyword, record_stop_reply
 from app.services.whatsapp_web_ingest import (
     classify_thread_now,
     ingest_history_batch,
     ingest_message,
 )
 from app.services.whatsapp_web_service import WhatsAppWebError
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 # Webhook routes (worker -> backend, shared-secret auth). Registered without
@@ -277,6 +285,74 @@ async def whatsapp_web_history_webhook(
     await ingest_history_batch(
         db, body.workspace_id, [m.model_dump() for m in body.messages]
     )
+
+
+# --------------------------------------------------------------------------
+# Inbound SMS — STOP-reply handling (see sms_optout_service.py). Providers
+# post here directly, not through our own frontend, so auth is a shared
+# secret carried in the URL/header rather than verify_internal_secret
+# (same pattern as the ElevenLabs webhook) -- configure the matching
+# secret in SMS_INBOUND_WEBHOOK_SECRET and point each provider's inbound-
+# SMS webhook at the matching URL below.
+# --------------------------------------------------------------------------
+
+
+def _check_sms_webhook_secret(request: Request) -> None:
+    supplied = request.headers.get("x-webhook-secret") or request.query_params.get("secret")
+    if not settings.SMS_INBOUND_WEBHOOK_SECRET or supplied != settings.SMS_INBOUND_WEBHOOK_SECRET:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "bad webhook secret")
+
+
+async def _handle_inbound_sms(db: AsyncSession, from_phone: str, text: str, to_hint: Optional[str]) -> None:
+    keyword = detect_stop_keyword(text)
+    if not keyword or not from_phone:
+        return
+    workspace_id = None
+    if to_hint:
+        row = (
+            await db.execute(select(User.id).where(User.sms_sender_id == to_hint))
+        ).scalar_one_or_none()
+        if row:
+            workspace_id = row
+    await record_stop_reply(db, from_phone, keyword, workspace_id=workspace_id)
+
+
+@webhook_router.post("/webhook/inbound-sms/mobilesasa", status_code=status.HTTP_204_NO_CONTENT)
+async def mobilesasa_inbound_sms(request: Request, db: AsyncSession = Depends(get_db)):
+    """MobileSasa's exact inbound-webhook payload shape isn't in their
+    public docs -- read defensively across the field-name variants a
+    provider like this commonly uses, and log the raw body once so it can
+    be confirmed/adjusted against a real payload rather than guessed
+    twice."""
+    _check_sms_webhook_secret(request)
+    try:
+        body = await request.json()
+    except Exception:  # noqa: BLE001
+        body = {}
+    from_phone = str(
+        body.get("from") or body.get("sender") or body.get("phone") or body.get("msisdn") or ""
+    )
+    text = str(body.get("message") or body.get("text") or body.get("sms") or "")
+    to_hint = body.get("to") or body.get("shortcode") or body.get("senderID")
+    if not from_phone or not text:
+        logger.warning("mobilesasa inbound-sms webhook: unrecognised payload shape: %r", body)
+        return
+    await _handle_inbound_sms(db, from_phone, text, str(to_hint) if to_hint else None)
+
+
+@webhook_router.post("/webhook/inbound-sms/twilio", status_code=status.HTTP_204_NO_CONTENT)
+async def twilio_inbound_sms(request: Request, db: AsyncSession = Depends(get_db)):
+    """Twilio's inbound-message webhook is a stable, well-documented
+    form-encoded POST (From/Body/To) -- unlike MobileSasa's, this shape is
+    confirmed, not guessed."""
+    _check_sms_webhook_secret(request)
+    form = await request.form()
+    from_phone = str(form.get("From") or "")
+    text = str(form.get("Body") or "")
+    to_hint = form.get("To")
+    if not from_phone or not text:
+        return
+    await _handle_inbound_sms(db, from_phone, text, str(to_hint) if to_hint else None)
 
 
 # --------------------------------------------------------------------------
