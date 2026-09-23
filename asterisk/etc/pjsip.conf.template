@@ -140,6 +140,14 @@ rtp_symmetric = yes
 force_rport = yes
 rewrite_contact = yes
 direct_media = no
+; No jitter buffer was configured on this endpoint at all -- the standard
+; cause of "the start of the audio is sometimes clipped, inconsistent
+; between calls": early RTP packets arriving with slightly uneven timing
+; before the stream settles. Enabling Asterisk's own adaptive jitter
+; buffer smooths that out before it ever reaches the caller.
+jbenable = yes
+jbforce = yes
+jbmaxsize = 200
 
 ;--- Agent softphones (WebRTC), one per workspace ----------------------
 ; Multi-tenant: every agent's endpoint/aor/auth block lives in
