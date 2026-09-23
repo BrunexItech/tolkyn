@@ -27,6 +27,12 @@ class TelephonyConfig(BaseModel):
 
     outbound_caller_id = Column(String(40), nullable=True)     # a DID from the trunk
     record_calls = Column(Boolean, nullable=False, default=True)
+    # Off by default -- lets a workspace admin delete entries from their own
+    # call log/history. Deliberately super-admin-gated per workspace (not a
+    # self-serve toggle), same reasoning as record_calls: deleting call
+    # history is a real audit-trail decision, not something every tenant
+    # should be able to flip for themselves unsupervised.
+    allow_call_log_deletion = Column(Boolean, nullable=False, default=False)
 
     # Shared secret the PBX signs its event webhooks with (per workspace).
     webhook_secret = Column(String(80), nullable=True)

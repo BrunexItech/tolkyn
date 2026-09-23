@@ -445,7 +445,8 @@ class SuperAdminService:
         if not cfg:
             return {
                 "workspace_id": workspace_id, "provider": "simulated", "is_active": False,
-                "api_client_secret_set": False, "record_calls": True, "webhook_url": webhook_url,
+                "api_client_secret_set": False, "record_calls": True, "allow_call_log_deletion": False,
+                "webhook_url": webhook_url,
                 **agent_sip,
             }
         return {
@@ -459,6 +460,7 @@ class SuperAdminService:
             "sip_ws_url": cfg.sip_ws_url,
             "outbound_caller_id": cfg.outbound_caller_id,
             "record_calls": cfg.record_calls,
+            "allow_call_log_deletion": cfg.allow_call_log_deletion,
             "webhook_secret": cfg.webhook_secret,
             "webhook_url": webhook_url,
             **agent_sip,
@@ -476,7 +478,7 @@ class SuperAdminService:
             cfg = TelephonyConfig(workspace_id=workspace_id, webhook_secret=_secrets.token_hex(24))
             self.db.add(cfg)
         for k in ("provider", "is_active", "pbx_base_url", "api_client_id", "sip_domain",
-                  "sip_ws_url", "record_calls"):
+                  "sip_ws_url", "record_calls", "allow_call_log_deletion"):
             if k in patch and patch[k] is not None:
                 setattr(cfg, k, patch[k])
 

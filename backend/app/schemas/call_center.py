@@ -92,6 +92,7 @@ class CallOverview(BaseModel):
     active: Optional[ActiveCall] = None
     presence: str
     ivrCalls: List[IvrCall] = []
+    allowCallLogDeletion: bool = False
 
 
 class CallPoll(BaseModel):

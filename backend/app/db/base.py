@@ -200,6 +200,7 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_summary TEXT",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_recording_url VARCHAR(500)",
     "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS default_bcc VARCHAR(255)",
+    "ALTER TABLE telephony_configs ADD COLUMN IF NOT EXISTS allow_call_log_deletion BOOLEAN NOT NULL DEFAULT false",
 ]
 
 # New values for existing PG enum types. `ALTER TYPE ... ADD VALUE` cannot run

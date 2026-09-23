@@ -86,6 +86,7 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
       sip_ws_url: data.sip_ws_url ?? "",
       outbound_caller_id: data.outbound_caller_id ?? "",
       record_calls: data.record_calls,
+      allow_call_log_deletion: data.allow_call_log_deletion,
       agent_sip_extension: data.agent_sip_extension ?? "",
     });
     setSecret("");
@@ -168,6 +169,15 @@ function TelephonyForm({ workspaceId }: { workspaceId: string }) {
             onChange={(e) => set("record_calls", e.target.checked)}
           />
           Record calls
+        </label>
+
+        <label className="flex items-center gap-2 text-[12px] text-om-text">
+          <input
+            type="checkbox"
+            checked={form.allow_call_log_deletion ?? false}
+            onChange={(e) => set("allow_call_log_deletion", e.target.checked)}
+          />
+          Allow this workspace to delete entries from its own call log
         </label>
 
         {isAsterisk && pool && pool.all.length > 0 ? (

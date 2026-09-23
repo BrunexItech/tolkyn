@@ -93,6 +93,7 @@ export interface CallOverview {
   active: ActiveCall | null;
   presence: AgentStatus;
   ivrCalls: IvrCall[];
+  allowCallLogDeletion: boolean;
 }
 
 export interface IvrCall {
@@ -182,6 +183,7 @@ export const callCenterApi = {
     http.post<CallOverview>("/call-center/dial", { name, number }),
   answer: (id: string) => http.post<CallOverview>(`/call-center/calls/${id}/answer`),
   transcript: (id: string) => http.get<CallTranscript>(`/call-center/calls/${id}/transcript`),
+  deleteCall: (id: string) => http.del<CallOverview>(`/call-center/calls/${id}`),
   hangup: (id: string, outcome: CallOutcome = "completed") =>
     http.post<CallOverview>(`/call-center/calls/${id}/hangup`, { outcome }),
   flags: (id: string, flags: { muted?: boolean; on_hold?: boolean }) =>

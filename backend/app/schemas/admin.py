@@ -234,6 +234,7 @@ class TelephonyConfigResponse(BaseModel):
     sip_ws_url: Optional[str] = None
     outbound_caller_id: Optional[str] = None
     record_calls: bool = True
+    allow_call_log_deletion: bool = False
     webhook_secret: Optional[str] = None
     webhook_url: Optional[str] = None  # computed: where the PBX should POST events
     # The workspace's own call-centre line — provisioned here so a Tolkyn
@@ -259,6 +260,7 @@ class TelephonyConfigUpdate(BaseModel):
     sip_ws_url: Optional[str] = None
     outbound_caller_id: Optional[str] = None
     record_calls: Optional[bool] = None
+    allow_call_log_deletion: Optional[bool] = None
     agent_sip_extension: Optional[str] = None  # "" clears
     agent_sip_password: Optional[str] = None  # write-only; "" clears
 

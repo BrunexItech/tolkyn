@@ -318,7 +318,30 @@ class CallCenterService:
             "active": self._active_row(await self._active()),
             "presence": await self.presence(),
             "ivrCalls": await self.ivr_calls(),
+            "allowCallLogDeletion": await self._can_delete_call_logs(),
         }
+
+    async def _can_delete_call_logs(self) -> bool:
+        cfg = await get_config(self.db, self.workspace_id)
+        return bool(cfg and cfg.allow_call_log_deletion)
+
+    async def delete_call(self, call_id: str) -> None:
+        if not await self._can_delete_call_logs():
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Call log deletion isn't enabled for this workspace — ask the platform administrator to turn it on.",
+            )
+        call = (
+            await self.db.execute(
+                select(Call).where(Call.id == call_id, Call.workspace_id == self.workspace_id)
+            )
+        ).scalar_one_or_none()
+        if not call:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "Call not found")
+        if call.state != CallState.ENDED:
+            raise HTTPException(status.HTTP_400_BAD_REQUEST, "Can't delete a call that's still in progress")
+        await self.db.delete(call)
+        await self.db.commit()
 
     async def poll(self) -> Dict[str, Any]:
         """Light payload for the frontend's interval refresh."""
@@ -518,6 +541,7 @@ class CallCenterService:
 
     async def simulate_inbound(self) -> Call:
         await self._ensure_seed()
+        await self._reject_simulate_on_live_trunk()
         import random
 
         pool = [
@@ -542,9 +566,24 @@ class CallCenterService:
         await self.db.refresh(c)
         return c
 
+    async def _reject_simulate_on_live_trunk(self) -> None:
+        """A demo tool for exploring the UI before telephony is wired up --
+        once a workspace has a real, active trunk, a "test" call here would
+        create a fake entry in that workspace's ACTUAL call history/stats,
+        indistinguishable from a genuine one (Call has no is_simulated
+        flag). Enforced server-side, not just hidden in the UI, since the
+        endpoint itself has to refuse this regardless of how it's called."""
+        cfg = await get_config(self.db, self.workspace_id)
+        if cfg and cfg.is_active and cfg.provider in ("cloudone", "asterisk"):
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                "This workspace has a real phone line connected — simulated calls are disabled to avoid fake entries in your call history.",
+            )
+
     async def simulate_inbound_ivr(self) -> Call:
         """Inbound call that enters the live IVR (for end-to-end testing)."""
         await self._ensure_seed()
+        await self._reject_simulate_on_live_trunk()
         import random
 
         from app.services.ivr_service import IvrService

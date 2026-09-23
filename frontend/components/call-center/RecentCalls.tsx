@@ -12,10 +12,12 @@ import {
   Pause,
   PhoneCall,
   MessageSquareText,
+  Trash2,
 } from "lucide-react";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { TableWrap } from "@/components/om/primitives/Table";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
+import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
 import { useCallCenter } from "./store";
 import { formatDuration, type CallOutcome } from "@/lib/om/call-center";
 import { relativeTime } from "@/lib/om/format";
@@ -30,10 +32,21 @@ const OUTCOME: Record<CallOutcome, { tone: BadgeTone; label: string; Icon: typeo
 };
 
 export function RecentCalls() {
-  const { recent, dial, active } = useCallCenter();
+  const { recent, dial, active, allowCallLogDeletion, deleteCall } = useCallCenter();
+  const { confirm, dialog } = useConfirm();
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [transcriptId, setTranscriptId] = useState<string | null>(null);
+
+  const onDelete = async (id: string, name: string) => {
+    const ok = await confirm({
+      title: "Delete this call log entry?",
+      message: `The record for "${name}" — including any recording or transcript — will be permanently removed.`,
+      confirmLabel: "Delete",
+      danger: true,
+    });
+    if (ok) deleteCall(id);
+  };
 
   const togglePlay = (id: string, url: string) => {
     const el = audioRef.current;
@@ -64,6 +77,7 @@ export function RecentCalls() {
               <th>Rec.</th>
               <th>Transcript</th>
               <th />
+              {allowCallLogDeletion && <th />}
             </tr>
           </thead>
           <tbody>
@@ -136,6 +150,18 @@ export function RecentCalls() {
                       </button>
                     )}
                   </td>
+                  {allowCallLogDeletion && (
+                    <td>
+                      <button
+                        type="button"
+                        title="Delete this call log entry"
+                        onClick={() => onDelete(c.id, c.name)}
+                        className="grid size-6 place-items-center rounded-md border border-om-border text-om-faint hover:text-om-red hover:border-om-red/40"
+                      >
+                        <Trash2 className="size-3" />
+                      </button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
@@ -147,6 +173,7 @@ export function RecentCalls() {
         callerName={recent.find((c) => c.id === transcriptId)?.name || "caller"}
         onClose={() => setTranscriptId(null)}
       />
+      {dialog}
     </Card>
   );
 }

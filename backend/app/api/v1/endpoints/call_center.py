@@ -130,6 +130,20 @@ async def dismiss(
     return await svc.overview()
 
 
+@router.delete("/calls/{call_id}", response_model=CallOverview)
+async def delete_call(
+    call_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Only works when the platform administrator has enabled call-log
+    deletion for this workspace (Super Admin -> Telephony) -- see
+    CallCenterService.delete_call."""
+    svc = _svc(db, user_id)
+    await svc.delete_call(call_id)
+    return await svc.overview()
+
+
 @router.post("/presence", response_model=CallOverview)
 async def presence(
     body: PresenceRequest,

@@ -208,6 +208,7 @@ export interface TelephonyConfig {
   sip_ws_url: string | null;
   outbound_caller_id: string | null;
   record_calls: boolean;
+  allow_call_log_deletion: boolean;
   webhook_secret: string | null;
   webhook_url: string | null;
   agent_sip_extension: string | null;
@@ -230,6 +231,7 @@ export type TelephonyConfigInput = Partial<{
   sip_ws_url: string | null;
   outbound_caller_id: string | null;
   record_calls: boolean;
+  allow_call_log_deletion: boolean;
   agent_sip_extension: string | null; // "" clears
   agent_sip_password: string; // write-only; "" clears
 }>;

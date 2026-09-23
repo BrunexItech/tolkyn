@@ -39,6 +39,8 @@ interface CallCenterValue {
   saveCallerName: (callId: string, name: string) => void;
   simulateInbound: () => void;
   ivrCalls: IvrCall[];
+  allowCallLogDeletion: boolean;
+  deleteCall: (id: string) => void;
   softphone: SoftphoneConfig | null;
   setAgentSip: (agentId: string, ext: string, password: string) => void;
   /** browser softphone reporting its own SIP session lifecycle */
@@ -104,6 +106,7 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
     onError,
   });
   const inboundM = useMutation({ mutationFn: () => callCenterApi.simulateInbound(), onSuccess, onError });
+  const deleteCallM = useMutation({ mutationFn: (id: string) => callCenterApi.deleteCall(id), onSuccess, onError });
   const sipEventM = useMutation({
     mutationFn: (v: { kind: SoftphoneEventKind; number?: string; name?: string }) =>
       callCenterApi.softphoneEvent(v.kind, v.number, v.name),
@@ -177,6 +180,8 @@ export function CallCenterProvider({ children }: { children: ReactNode }) {
       },
       simulateInbound: () => inboundM.mutate(),
       ivrCalls: data?.ivrCalls ?? [],
+      allowCallLogDeletion: data?.allowCallLogDeletion ?? false,
+      deleteCall: (id) => deleteCallM.mutate(id),
       softphone: softphone ?? null,
       setAgentSip: (agentId, ext, password) => agentSipM.mutate({ agentId, ext, password }),
       softphoneEvent: (kind, number, name) => sipEventM.mutate({ kind, number, name }),
