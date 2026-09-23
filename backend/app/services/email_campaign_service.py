@@ -14,11 +14,12 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException, status
+from fastapi import BackgroundTasks, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
+from app.db.base import AsyncSessionLocal
 from app.models.customer import Customer
 from app.models.email_account import EmailAccount
 from app.models.email_campaign import EmailCampaign
@@ -191,6 +192,7 @@ class EmailCampaignService:
         ids: Optional[List[str]] = None,
         manual: Optional[List[Dict[str, str]]] = None,
         reply_to: Optional[str] = None,
+        background_tasks: Optional[BackgroundTasks] = None,
     ) -> Dict[str, Any]:
         acc = (
             await self.accounts.get_model(email_account_id)
@@ -250,58 +252,37 @@ class EmailCampaignService:
             if logo_url.startswith("/"):
                 logo_url = f"{settings.BACKEND_PUBLIC_URL.rstrip('/')}{logo_url}"
         brand_colors = user.brand_colors if user else None
+        contact_phone = user.phone if user else None
+        contact_website = user.website if user else None
 
-        sent = failed = skipped = 0
-        for r in recipients:
-            ctx = {
-                "name": r["name"] or "there",
-                "first_name": (r["name"] or "there").split(" ")[0],
-                "company": r["company"] or "",
-                "email": r["email"],
-            }
-            if not await self.accounts.can_send(acc):
-                skipped += 1
-                self.db.add(EmailSend(
-                    workspace_id=self.workspace_id, email_account_id=acc.id, email_campaign_id=campaign.id,
-                    to_email=r["email"], from_email=acc.from_email, subject=subject,
-                    status=EmailSendStatus.SKIPPED, error="Daily sending limit reached",
-                ))
-                continue
-
-            merged_subject = _merge(subject, ctx)
-            merged_body = _merge(body, ctx)
-            merged_signature = _merge(acc.signature, ctx) if acc.signature else None
-            plain_body = f"{merged_body}\n\n{merged_signature}" if merged_signature else merged_body
-            branded_html = render_branded_html(
-                merged_body,
-                logo_url=logo_url,
-                brand_colors=brand_colors,
-                signature=merged_signature,
-                contact_phone=user.phone if user else None,
-                contact_website=user.website if user else None,
+        # The actual SMTP loop (a fresh connection + up to 2000 x 1s gaps)
+        # can easily run several minutes -- WAY past Cloudflare's/nginx's
+        # proxy timeout (~100s) if it runs inside this request. The backend
+        # would keep sending regardless (the client just loses visibility),
+        # but the browser sees a bare 504 with no idea anything succeeded.
+        # Fixed by handing the loop to a true background task with its OWN
+        # db session (this request's session is gone once the response
+        # goes out) and returning the campaign row immediately -- the
+        # frontend already polls GET /campaigns for live sent/failed counts.
+        if background_tasks is not None:
+            background_tasks.add_task(
+                _run_campaign_send,
+                campaign.id, self.workspace_id, acc.id, subject, body, cfg,
+                recipients, logo_url, brand_colors, contact_phone, contact_website,
             )
+        else:
+            # No BackgroundTasks handed in (e.g. a script/test calling this
+            # directly) -- fall back to running it inline, same as before.
+            # Uses its own session (bg_db), same as the real background
+            # path, so re-fetch campaign via self.db afterward to reflect
+            # the final sent/failed/status it wrote.
+            async with AsyncSessionLocal() as bg_db:
+                await _send_recipients(
+                    bg_db, campaign.id, self.workspace_id, acc.id, subject, body, cfg,
+                    recipients, logo_url, brand_colors, contact_phone, contact_website,
+                )
+            await self.db.refresh(campaign)
 
-            outcome = await send_email(cfg, r["email"], merged_subject, plain_body, html=branded_html)
-            await self.accounts.record_send(acc, outcome.ok, outcome.error)
-            self.db.add(EmailSend(
-                workspace_id=self.workspace_id, email_account_id=acc.id, email_campaign_id=campaign.id,
-                to_email=r["email"], from_email=acc.from_email, subject=merged_subject,
-                body_preview=merged_body[:400],
-                status=EmailSendStatus.SENT if outcome.ok else EmailSendStatus.FAILED,
-                error=outcome.error, provider_message_id=outcome.message_id,
-                sent_at=datetime.now(timezone.utc) if outcome.ok else None,
-            ))
-            if outcome.ok:
-                sent += 1
-            else:
-                failed += 1
-            await self.db.commit()
-            await asyncio.sleep(_GAP_SECONDS)
-
-        campaign.sent, campaign.failed, campaign.skipped = sent, failed, skipped
-        campaign.status = "completed" if failed < campaign.total else "failed"
-        await self.db.commit()
-        await self.db.refresh(campaign)
         return _campaign_dict(campaign)
 
     async def campaign_sends(self, campaign_id: str) -> List[Dict[str, Any]]:
@@ -373,3 +354,104 @@ def _campaign_dict(c: EmailCampaign) -> Dict[str, Any]:
         "status": c.status,
         "created_at": c.created_at,
     }
+
+
+async def _run_campaign_send(
+    campaign_id: str,
+    workspace_id: str,
+    account_id: str,
+    subject: str,
+    body: str,
+    cfg,
+    recipients: List[Dict[str, Any]],
+    logo_url: Optional[str],
+    brand_colors,
+    contact_phone: Optional[str],
+    contact_website: Optional[str],
+) -> None:
+    """Entry point for FastAPI's BackgroundTasks -- opens its own DB session
+    since the triggering request's session is already closed by the time
+    this runs (background tasks fire after the response has been sent)."""
+    async with AsyncSessionLocal() as db:
+        await _send_recipients(
+            db, campaign_id, workspace_id, account_id, subject, body, cfg,
+            recipients, logo_url, brand_colors, contact_phone, contact_website,
+        )
+
+
+async def _send_recipients(
+    db: AsyncSession,
+    campaign_id: str,
+    workspace_id: str,
+    account_id: str,
+    subject: str,
+    body: str,
+    cfg,
+    recipients: List[Dict[str, Any]],
+    logo_url: Optional[str],
+    brand_colors,
+    contact_phone: Optional[str],
+    contact_website: Optional[str],
+) -> None:
+    """The actual per-recipient SMTP loop -- deliberately free-standing
+    (not a method) and takes a plain `db` session, so it can run inside a
+    background task with a session of its own rather than one tied to a
+    request that may already be gone. See send() in EmailCampaignService."""
+    accounts = EmailAccountService(db, workspace_id)
+    acc = await accounts.get_model(account_id)
+    campaign = (
+        await db.execute(select(EmailCampaign).where(EmailCampaign.id == campaign_id))
+    ).scalar_one_or_none()
+    if not campaign:
+        return
+
+    sent = failed = skipped = 0
+    for r in recipients:
+        ctx = {
+            "name": r["name"] or "there",
+            "first_name": (r["name"] or "there").split(" ")[0],
+            "company": r["company"] or "",
+            "email": r["email"],
+        }
+        if not await accounts.can_send(acc):
+            skipped += 1
+            db.add(EmailSend(
+                workspace_id=workspace_id, email_account_id=acc.id, email_campaign_id=campaign.id,
+                to_email=r["email"], from_email=acc.from_email, subject=subject,
+                status=EmailSendStatus.SKIPPED, error="Daily sending limit reached",
+            ))
+            continue
+
+        merged_subject = _merge(subject, ctx)
+        merged_body = _merge(body, ctx)
+        merged_signature = _merge(acc.signature, ctx) if acc.signature else None
+        plain_body = f"{merged_body}\n\n{merged_signature}" if merged_signature else merged_body
+        branded_html = render_branded_html(
+            merged_body,
+            logo_url=logo_url,
+            brand_colors=brand_colors,
+            signature=merged_signature,
+            contact_phone=contact_phone,
+            contact_website=contact_website,
+        )
+
+        outcome = await send_email(cfg, r["email"], merged_subject, plain_body, html=branded_html)
+        await accounts.record_send(acc, outcome.ok, outcome.error)
+        db.add(EmailSend(
+            workspace_id=workspace_id, email_account_id=acc.id, email_campaign_id=campaign.id,
+            to_email=r["email"], from_email=acc.from_email, subject=merged_subject,
+            body_preview=merged_body[:400],
+            status=EmailSendStatus.SENT if outcome.ok else EmailSendStatus.FAILED,
+            error=outcome.error, provider_message_id=outcome.message_id,
+            sent_at=datetime.now(timezone.utc) if outcome.ok else None,
+        ))
+        if outcome.ok:
+            sent += 1
+        else:
+            failed += 1
+        await db.commit()
+        await asyncio.sleep(_GAP_SECONDS)
+
+    campaign.sent, campaign.failed, campaign.skipped = sent, failed, skipped
+    campaign.status = "completed" if failed < campaign.total else "failed"
+    await db.commit()

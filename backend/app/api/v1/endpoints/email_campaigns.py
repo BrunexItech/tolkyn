@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -197,6 +197,7 @@ async def import_recipients_csv(
 @router.post("/campaigns", response_model=CampaignRow)
 async def send_campaign(
     body: SendCampaignRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
@@ -207,5 +208,6 @@ async def send_campaign(
         source=body.source,
         ids=body.ids,
         manual=[m.model_dump() for m in body.manual] if body.manual else None,
+        background_tasks=background_tasks,
         reply_to=body.reply_to,
     )
