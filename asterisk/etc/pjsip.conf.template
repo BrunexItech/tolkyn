@@ -143,11 +143,15 @@ direct_media = no
 ; No jitter buffer was configured on this endpoint at all -- the standard
 ; cause of "the start of the audio is sometimes clipped, inconsistent
 ; between calls": early RTP packets arriving with slightly uneven timing
-; before the stream settles. Enabling Asterisk's own adaptive jitter
-; buffer smooths that out before it ever reaches the caller.
+; before the stream settles. jbenable alone is ADAPTIVE -- it only
+; actually buffers when real jitter shows up on a given call, so calls
+; with a clean RTP path play with no added delay at all. jbforce (removed
+; here after a real test call) instead forces the buffer on for every
+; single call regardless of need, which is what made the agent noticeably
+; slower to start talking -- that's the buffering delay working exactly
+; as designed, just paid on calls that never needed it.
 jbenable = yes
-jbforce = yes
-jbmaxsize = 200
+jbmaxsize = 100
 
 ;--- Agent softphones (WebRTC), one per workspace ----------------------
 ; Multi-tenant: every agent's endpoint/aor/auth block lives in
