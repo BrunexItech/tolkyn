@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import BackgroundTasks, HTTPException, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
@@ -319,8 +319,43 @@ class EmailCampaignService:
                 .order_by(EmailCampaign.created_at.desc())
                 .limit(limit)
             )
-        ).scalars()
-        return [_campaign_dict(c) for c in rows]
+        ).scalars().all()
+        if not rows:
+            return []
+
+        # The stored sent/failed/skipped columns on EmailCampaign are only
+        # written once, at the very end of the send loop (see
+        # _send_recipients). If that loop is ever interrupted partway
+        # through -- a crash, or the old pre-background-task request
+        # timeout -- those columns get stuck at 0 forever even though the
+        # real per-recipient EmailSend rows (what campaign_sends() shows)
+        # already reflect what actually happened. Recomputing live from
+        # those rows means the badge here can never drift from the truth,
+        # regardless of any interruption past or future.
+        campaign_ids = [c.id for c in rows]
+        count_rows = await self.db.execute(
+            select(EmailSend.email_campaign_id, EmailSend.status, func.count())
+            .where(EmailSend.email_campaign_id.in_(campaign_ids))
+            .group_by(EmailSend.email_campaign_id, EmailSend.status)
+        )
+        live: Dict[str, Dict[str, int]] = {}
+        for cid, send_status, cnt in count_rows.all():
+            key = send_status.value if hasattr(send_status, "value") else str(send_status)
+            live.setdefault(cid, {})[key] = cnt
+
+        out = []
+        for c in rows:
+            d = _campaign_dict(c)
+            counts = live.get(c.id)
+            if counts:  # a campaign with no EmailSend rows yet keeps its stored (0) totals
+                sent = counts.get("sent", 0)
+                failed = counts.get("failed", 0)
+                skipped = counts.get("skipped", 0)
+                d["sent"], d["failed"], d["skipped"] = sent, failed, skipped
+                if sent + failed + skipped >= c.total:
+                    d["status"] = "completed" if failed < c.total else "failed"
+            out.append(d)
+        return out
 
     async def delete_campaign(self, campaign_id: str) -> None:
         campaign = (
