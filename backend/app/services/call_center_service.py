@@ -1,3 +1,4 @@
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
@@ -21,6 +22,7 @@ from app.models.user import User
 from app.services.call_center_seed import build_agents
 from app.services.telephony import TelephonyError, get_config, get_provider
 
+logger = logging.getLogger(__name__)
 _VOLUME_HOURS = [8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
 
 
@@ -460,6 +462,10 @@ class CallCenterService:
         real call recording is always the more specific signal)."""
         audio_b64 = d.get("recording_b64")
         if not audio_b64:
+            # Previously silent -- can't tell from the backend's own logs
+            # whether the bridge ever sent a recording at all, only that
+            # this call ended up without one.
+            logger.info("hangup event for call %s carried no recording_b64", c.id)
             return
         import base64
         import uuid
@@ -471,8 +477,10 @@ class CallCenterService:
         fname = f"{uuid.uuid4().hex}.{ext}"
         try:
             (media_dir / fname).write_bytes(base64.b64decode(audio_b64))
-        except Exception:  # noqa: BLE001 — a bad upload shouldn't lose the call record
+        except Exception as exc:  # noqa: BLE001 — a bad upload shouldn't lose the call record
+            logger.warning("failed to save recording for call %s: %s", c.id, exc)
             return
+        logger.info("saved recording for call %s -> %s", c.id, fname)
         c.recording_url = f"/media/call-recordings/{fname}"
         c.recorded = True
 

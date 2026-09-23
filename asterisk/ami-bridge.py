@@ -195,6 +195,10 @@ def _recording_payload(lid: str) -> Tuple[dict, Optional[Path]]:
             break
         time.sleep(0.3)
     if size <= 0:
+        # Previously silent -- made this an unconditional log line since a
+        # recording going missing needs to be diagnosable from the log
+        # alone, not re-discovered by noticing it's absent days later.
+        log(f"no recording found for {path} after retrying — recording may be off for this call, or MixMonitor never started")
         return {}, None
     if size > MAX_RECORDING_BYTES:
         log(f"recording {path} is {size} bytes — over the cap, skipping")
@@ -204,6 +208,7 @@ def _recording_payload(lid: str) -> Tuple[dict, Optional[Path]]:
     except OSError as e:
         log("recording read error:", e)
         return {}, None
+    log(f"attaching recording {path} ({size} bytes) to hangup event")
     return {"recording_b64": base64.b64encode(data).decode(), "format": "wav"}, path
 
 
