@@ -138,24 +138,32 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; lets their post-call webhook (transcript + audio, once the call ends)
  ; find its way back to the right call in our own call log.
  ;
- ; Explicitly answering this leg before Dial() (an earlier attempt at this
- ; fix) turned out WORSE, confirmed by a real test call: it removed our own
- ; ring tone for this phase without replacing it with anything, so instead
- ; of a *chance* of silence (racing ElevenLabs' own early media), it became
- ; GUARANTEED silence for however long ElevenLabs takes to start talking.
+ ; Two earlier attempts at this leg, both confirmed by real test calls:
+ ; (1) Answer() immediately then Dial() with no tone -- removed our ring
+ ; tone without replacing it, so silence went from a *chance* to a
+ ; *guarantee*. (2) Never answering at all, just riding Progress()'s early
+ ; media with a continuous Playtones() into Dial() -- fixed the silence,
+ ; but then surfaced a NEW, workspace-dependent symptom: a workspace whose
+ ; IVR has a menu step (so the AGI already formally answers the channel
+ ; while the caller is navigating it) worked perfectly; a workspace that
+ ; goes straight to the AI agent (channel never formally answered before
+ ; now) had its first words clipped. The common factor: whether the
+ ; early-media -> answered transition happens BEFORE real speech starts,
+ ; or AT THE SAME INSTANT it does. A menu flow already crossed that
+ ; transition well earlier; a no-menu flow was crossing it for the first
+ ; time exactly as ElevenLabs' audio arrived.
  ;
- ; This leg is deliberately left UNANSWERED, still in the Progress() state
- ; from the top of [handle], with the SAME Playtones(ring) generator from
- ; up there still running (note there's no StopPlayTones() on this branch,
- ; unlike voicemail/the human-agent dial) -- it plays continuously right
- ; through this Dial() with no gap at all. Asterisk always swaps out
- ; whatever generator is active the moment real bridged audio starts
- ; flowing, so the tone stops and ElevenLabs' own speech takes over
- ; cleanly the instant it's actually ready -- no silent gap, regardless of
- ; how long their side takes. 'r' stays on as a harmless belt-and-braces
- ; fallback (Asterisk's own ringback indication), in case the far end
- ; sends real early media before its agent is ready to speak.
- same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtTb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
+ ; Fix: make every flow cross that transition the same way, early and on
+ ; our own synthetic tone, never on real speech. Answer() here always
+ ; (safe even if the AGI already answered during a menu -- Answer() on an
+ ; already-answered channel is a no-op) while Playtones(ring) is STILL
+ ; actively playing (started at the top of [handle], never stopped on
+ ; this branch) -- so the transition itself has audio under it, then a
+ ; short settle pause, then Dial() picks up the same still-playing tone
+ ; and carries it through until ElevenLabs' real audio takes over.
+ same => n,Answer()
+ same => n,Wait(0.2)
+ same => n,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,Tb(from-cloudone^add-workspace-header^1(${WS_ID}^${LINKEDID})))
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
