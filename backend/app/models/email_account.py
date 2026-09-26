@@ -21,12 +21,13 @@ class EmailAccount(BaseModel):
     from_name = Column(String(120), nullable=False)
     from_email = Column(String(255), nullable=False)
     reply_to = Column(String(255), nullable=True)
-    # A manager/colleague copied on every send. A real, visible Cc header
-    # (deliberately NOT Bcc): the whole point is that if the customer hits
-    # "Reply All", this person is on the reply too and can answer it. The
-    # tradeoff, accepted explicitly: on a bulk send they get one email per
-    # recipient, and each recipient can see this address.
-    default_cc = Column(String(255), nullable=True)
+    # Colleagues copied on every send: one or several addresses, stored as a
+    # comma-separated string (normalised by the schema validator). A real,
+    # visible Cc header, deliberately NOT Bcc -- if the customer hits "Reply
+    # All", these people are on the reply too and can answer it. Accepted
+    # tradeoff: on a bulk send each gets one email per recipient, and every
+    # recipient can see these addresses.
+    default_cc = Column(String(1000), nullable=True)
 
     # SMTP
     smtp_host = Column(String(255), nullable=True)

@@ -208,6 +208,7 @@ _SCHEMA_PATCHES = [
     "THEN ALTER TABLE email_accounts RENAME COLUMN default_bcc TO default_cc; "
     "END IF; END $$",
     "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS default_cc VARCHAR(255)",
+    "ALTER TABLE email_accounts ALTER COLUMN default_cc TYPE VARCHAR(1000)",
     "ALTER TABLE telephony_configs ADD COLUMN IF NOT EXISTS allow_call_log_deletion BOOLEAN NOT NULL DEFAULT false",
 ]
 

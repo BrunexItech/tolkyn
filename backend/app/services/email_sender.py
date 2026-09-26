@@ -124,12 +124,16 @@ def _build_message(
         msg["Reply-To"] = cfg.reply_to
     # A real, visible Cc: smtplib's send_message() adds Cc addresses to the
     # SMTP envelope automatically, and the header stays in the message --
-    # which is exactly what makes a customer's "Reply All" include this
-    # person (a Bcc would be invisible to the customer's mail client and
-    # could never be in a reply). Skipped when the Cc is the recipient
-    # themselves, so nobody gets the same message twice.
-    if cfg.cc and cfg.cc.strip().lower() != to_email.strip().lower():
-        msg["Cc"] = cfg.cc
+    # which is exactly what makes a customer's "Reply All" include these
+    # people (a Bcc would be invisible to the customer's mail client and
+    # could never be in a reply). cfg.cc may hold several comma-separated
+    # addresses; the recipient themselves is dropped from it so nobody
+    # gets the same message twice.
+    if cfg.cc:
+        to_key = to_email.strip().lower()
+        cc_list = [a.strip() for a in cfg.cc.split(",") if a.strip() and a.strip().lower() != to_key]
+        if cc_list:
+            msg["Cc"] = ", ".join(cc_list)
     msg.set_content(body)
     if html:
         msg.add_alternative(html, subtype="html")

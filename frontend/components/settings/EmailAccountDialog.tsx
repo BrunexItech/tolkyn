@@ -18,6 +18,7 @@ const PRESETS: Record<string, { host: string; port: number; tls: boolean; ssl: b
 };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_CC = 10; // keep in step with MAX_CC_ADDRESSES in schemas/email_account.py
 
 const blankForm = {
   label: "",
@@ -97,8 +98,12 @@ export function EmailAccountDialog({
   if (!form.smtp_host.trim()) errors.smtp_host = "Required";
   if (!(Number(form.smtp_port) > 0)) errors.smtp_port = "Invalid";
   if (!editing && !form.smtp_password.trim()) errors.smtp_password = "Required to connect";
-  if (form.default_cc.trim() && !EMAIL_RE.test(form.default_cc.trim()))
-    errors.default_cc = "Not a valid email";
+  {
+    const ccList = form.default_cc.split(/[,;\n]+/).map((a) => a.trim()).filter(Boolean);
+    const badCc = ccList.find((a) => !EMAIL_RE.test(a));
+    if (badCc) errors.default_cc = `"${badCc}" isn't a valid email`;
+    else if (new Set(ccList.map((a) => a.toLowerCase())).size > MAX_CC) errors.default_cc = `At most ${MAX_CC} addresses`;
+  }
   const hasErrors = Object.keys(errors).length > 0;
 
   const submit = () => {
@@ -115,7 +120,10 @@ export function EmailAccountDialog({
       use_ssl: form.use_ssl,
       signature: form.signature.trim() || undefined,
       daily_limit: Number(form.daily_limit) || 200,
-      default_cc: form.default_cc.trim() || undefined,
+      // Always sent (blank included): an omitted key means "leave it alone"
+      // server-side, so sending undefined here made an existing Cc
+      // impossible to remove. A blank string is normalised to "none".
+      default_cc: form.default_cc.trim(),
       // Providers display app passwords in space-separated groups for
       // readability (e.g. "abcd efgh ijkl mnop") -- the password itself
       // never legitimately contains whitespace, so strip it before it
@@ -284,14 +292,13 @@ export function EmailAccountDialog({
           />
         </Field>
         <Field
-          label="Cc a colleague on every send (optional)"
-          hint="They're copied on every email this account sends, and the recipient can see them — so if a customer hits Reply All, this person gets the reply too. On a bulk send they'll receive one email per recipient."
+          label="Cc colleagues on every send (optional)"
+          hint="Separate several addresses with commas. They're copied on every email this account sends and the recipient can see them — so if a customer hits Reply All, they get the reply too. On a bulk send each person receives one email per recipient."
         >
           <OmInput
-            type="email"
             value={form.default_cc}
             onChange={(e) => set("default_cc", e.target.value)}
-            placeholder="manager@yourdomain.com"
+            placeholder="manager@yourdomain.com, owner@yourdomain.com"
             className={errCls("default_cc")}
           />
           {show("default_cc") && (
