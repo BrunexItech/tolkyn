@@ -47,7 +47,7 @@ class EmailAccountService:
             from_name=acc.from_name,
             from_email=acc.from_email,
             reply_to=acc.reply_to,
-            default_bcc=acc.default_bcc,
+            default_cc=acc.default_cc,
             smtp_host=acc.smtp_host,
             smtp_port=acc.smtp_port,
             smtp_username=acc.smtp_username,
@@ -83,7 +83,7 @@ class EmailAccountService:
             from_name=acc.from_name,
             from_email=acc.from_email,
             reply_to=acc.reply_to,
-            bcc=acc.default_bcc,
+            cc=acc.default_cc,
         )
 
     # ----------------------------------------------------------------- CRUD
@@ -105,7 +105,7 @@ class EmailAccountService:
             from_name=data.from_name,
             from_email=str(data.from_email),
             reply_to=str(data.reply_to) if data.reply_to else None,
-            default_bcc=str(data.default_bcc) if data.default_bcc else None,
+            default_cc=str(data.default_cc) if data.default_cc else None,
             smtp_host=data.smtp_host,
             smtp_port=data.smtp_port,
             smtp_username=data.smtp_username or str(data.from_email),
@@ -139,7 +139,7 @@ class EmailAccountService:
         pw = patch.pop("smtp_password", None)
         make_default = patch.pop("is_default", None)
         for k, v in patch.items():
-            if k in ("from_email", "reply_to", "default_bcc") and v is not None:
+            if k in ("from_email", "reply_to", "default_cc") and v is not None:
                 v = str(v)
             setattr(acc, k, v)
         if pw:

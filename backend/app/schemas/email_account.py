@@ -16,7 +16,7 @@ class EmailAccountCreate(BaseModel):
     from_name: str = Field(..., min_length=1, max_length=120)
     from_email: EmailStr
     reply_to: Optional[EmailStr] = None
-    default_bcc: Optional[EmailStr] = None
+    default_cc: Optional[EmailStr] = None
 
     smtp_host: Optional[str] = None
     smtp_port: int = 587
@@ -35,7 +35,7 @@ class EmailAccountUpdate(BaseModel):
     from_name: Optional[str] = None
     from_email: Optional[EmailStr] = None
     reply_to: Optional[EmailStr] = None
-    default_bcc: Optional[EmailStr] = None
+    default_cc: Optional[EmailStr] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None
     smtp_username: Optional[str] = None
@@ -54,7 +54,7 @@ class EmailAccountResponse(BaseModel):
     from_name: str
     from_email: str
     reply_to: Optional[str] = None
-    default_bcc: Optional[str] = None
+    default_cc: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None
     smtp_username: Optional[str] = None

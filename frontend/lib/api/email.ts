@@ -7,7 +7,7 @@ export interface EmailAccount {
   from_name: string;
   from_email: string;
   reply_to: string | null;
-  default_bcc: string | null;
+  default_cc: string | null;
   smtp_host: string | null;
   smtp_port: number | null;
   smtp_username: string | null;
@@ -32,7 +32,7 @@ export interface EmailAccountCreate {
   from_name: string;
   from_email: string;
   reply_to?: string;
-  default_bcc?: string;
+  default_cc?: string;
   smtp_host?: string;
   smtp_port?: number;
   smtp_username?: string;

@@ -97,7 +97,7 @@ class SmtpConfig:
     from_name: str = ""
     from_email: str = ""
     reply_to: Optional[str] = None
-    bcc: Optional[str] = None
+    cc: Optional[str] = None
 
 
 @dataclass
@@ -122,15 +122,14 @@ def _build_message(
     msg["Message-ID"] = make_msgid()
     if cfg.reply_to:
         msg["Reply-To"] = cfg.reply_to
-    if cfg.bcc:
-        # smtplib's send_message() reads To/Cc/Bcc headers to build the
-        # actual SMTP envelope recipient list when none is passed
-        # explicitly, then automatically STRIPS the Bcc header before the
-        # message bytes go out -- so the bcc address receives a full copy
-        # while staying completely invisible to the recipient (never in
-        # the raw source, never included in a "reply all"), same as any
-        # normal mail client's Bcc field.
-        msg["Bcc"] = cfg.bcc
+    # A real, visible Cc: smtplib's send_message() adds Cc addresses to the
+    # SMTP envelope automatically, and the header stays in the message --
+    # which is exactly what makes a customer's "Reply All" include this
+    # person (a Bcc would be invisible to the customer's mail client and
+    # could never be in a reply). Skipped when the Cc is the recipient
+    # themselves, so nobody gets the same message twice.
+    if cfg.cc and cfg.cc.strip().lower() != to_email.strip().lower():
+        msg["Cc"] = cfg.cc
     msg.set_content(body)
     if html:
         msg.add_alternative(html, subtype="html")

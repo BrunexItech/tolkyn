@@ -31,7 +31,7 @@ const blankForm = {
   use_ssl: false,
   signature: "",
   daily_limit: 200,
-  default_bcc: "",
+  default_cc: "",
 };
 
 export function EmailAccountDialog({
@@ -70,7 +70,7 @@ export function EmailAccountDialog({
         use_ssl: account.use_ssl ?? false,
         signature: account.signature ?? "",
         daily_limit: account.daily_limit ?? 200,
-        default_bcc: account.default_bcc ?? "",
+        default_cc: account.default_cc ?? "",
       });
       const match = Object.entries(PRESETS).find(([, p]) => p.host === account.smtp_host);
       setPreset(match ? match[0] : "Custom");
@@ -97,8 +97,8 @@ export function EmailAccountDialog({
   if (!form.smtp_host.trim()) errors.smtp_host = "Required";
   if (!(Number(form.smtp_port) > 0)) errors.smtp_port = "Invalid";
   if (!editing && !form.smtp_password.trim()) errors.smtp_password = "Required to connect";
-  if (form.default_bcc.trim() && !EMAIL_RE.test(form.default_bcc.trim()))
-    errors.default_bcc = "Not a valid email";
+  if (form.default_cc.trim() && !EMAIL_RE.test(form.default_cc.trim()))
+    errors.default_cc = "Not a valid email";
   const hasErrors = Object.keys(errors).length > 0;
 
   const submit = () => {
@@ -115,7 +115,7 @@ export function EmailAccountDialog({
       use_ssl: form.use_ssl,
       signature: form.signature.trim() || undefined,
       daily_limit: Number(form.daily_limit) || 200,
-      default_bcc: form.default_bcc.trim() || undefined,
+      default_cc: form.default_cc.trim() || undefined,
       // Providers display app passwords in space-separated groups for
       // readability (e.g. "abcd efgh ijkl mnop") -- the password itself
       // never legitimately contains whitespace, so strip it before it
@@ -284,18 +284,18 @@ export function EmailAccountDialog({
           />
         </Field>
         <Field
-          label="Bcc a colleague on every send (optional)"
-          hint="They get a private copy of every email this account sends — invisible to the recipient, so it's never included if they reply all."
+          label="Cc a colleague on every send (optional)"
+          hint="They're copied on every email this account sends, and the recipient can see them — so if a customer hits Reply All, this person gets the reply too. On a bulk send they'll receive one email per recipient."
         >
           <OmInput
             type="email"
-            value={form.default_bcc}
-            onChange={(e) => set("default_bcc", e.target.value)}
+            value={form.default_cc}
+            onChange={(e) => set("default_cc", e.target.value)}
             placeholder="manager@yourdomain.com"
-            className={errCls("default_bcc")}
+            className={errCls("default_cc")}
           />
-          {show("default_bcc") && (
-            <p className="mt-1 text-[10px] text-om-red">{errors.default_bcc}</p>
+          {show("default_cc") && (
+            <p className="mt-1 text-[10px] text-om-red">{errors.default_cc}</p>
           )}
         </Field>
         <p

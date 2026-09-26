@@ -199,7 +199,15 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_transcript JSONB",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_summary TEXT",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_recording_url VARCHAR(500)",
-    "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS default_bcc VARCHAR(255)",
+    # default_bcc became default_cc (a colleague copied visibly so a "reply
+    # all" reaches them). Rename in place so any address already saved
+    # carries over; idempotent on every later startup and on fresh DBs.
+    "DO $$ BEGIN "
+    "IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'email_accounts' AND column_name = 'default_bcc') "
+    "AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'email_accounts' AND column_name = 'default_cc') "
+    "THEN ALTER TABLE email_accounts RENAME COLUMN default_bcc TO default_cc; "
+    "END IF; END $$",
+    "ALTER TABLE email_accounts ADD COLUMN IF NOT EXISTS default_cc VARCHAR(255)",
     "ALTER TABLE telephony_configs ADD COLUMN IF NOT EXISTS allow_call_log_deletion BOOLEAN NOT NULL DEFAULT false",
 ]
 
