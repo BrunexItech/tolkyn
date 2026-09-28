@@ -67,6 +67,18 @@ class User(BaseModel):
     daily_image_limit = Column(Integer, nullable=True)
     daily_video_limit = Column(Integer, nullable=True)
 
+    # Billing period, set manually by the super admin (no payment provider
+    # integration exists in this codebase) -- both NULL by default, so no
+    # existing account is affected until the super admin actually sets
+    # them. subscription_ends_at is checked once, right alongside the daily
+    # caps above (see core/limits.py), not as a second parallel system --
+    # past it, image/video generation is blocked outright regardless of
+    # whether today's daily count was even reached. The user-facing side
+    # is deliberately minimal: a plain "ends in N days" reminder in the
+    # last 3 days, never a usage number or a cost figure.
+    subscription_started_at = Column(DateTime(timezone=True), nullable=True)
+    subscription_ends_at = Column(DateTime(timezone=True), nullable=True)
+
     # Custom bulk-SMS sender name (super admin controlled, paid add-on). NULL
     # = this workspace's SMS sends use the platform's shared default sender
     # (MOBILESASA_SENDER_ID) — set this only once the workspace has paid for

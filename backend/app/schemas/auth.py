@@ -122,6 +122,10 @@ class UserResponse(BaseModel):
     location: Optional[str] = Field(None, description="Location")
     website: Optional[str] = Field(None, description="Website URL")
     sms_disclaimer: Optional[str] = Field(None, description="Text appended to every outgoing Bulk SMS")
+    # Read-only here -- only the super admin sets this (see admin.py). No
+    # usage numbers or cost ever go in this response; the frontend shows a
+    # plain days-remaining reminder in the final 3 days, nothing else.
+    subscription_ends_at: Optional[datetime] = Field(None, description="When the current billing period ends, if the super admin has set one")
     role: UserRole = Field(..., description="User role")
     status: UserStatus = Field(..., description="User status")
     is_email_verified: bool = Field(..., description="Email verification status")

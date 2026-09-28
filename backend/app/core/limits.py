@@ -68,6 +68,14 @@ async def count_today(db: AsyncSession, workspace_id: str, kind: Kind) -> int:
 
 
 async def enforce_daily_limit(db: AsyncSession, user: User, kind: Kind) -> None:
+    ends_at = getattr(user, "subscription_ends_at", None)
+    if ends_at is not None:
+        deadline = ends_at if ends_at.tzinfo else ends_at.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= deadline:
+            raise HTTPException(
+                status.HTTP_403_FORBIDDEN,
+                "Your subscription has ended. Contact your platform administrator to renew it.",
+            )
     cap = effective_daily_limit(user, kind)
     if cap is None:
         return

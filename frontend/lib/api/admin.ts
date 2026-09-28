@@ -146,6 +146,8 @@ export interface PlatformUser {
   video_budget_usd: number | null;
   daily_image_limit: number | null;
   daily_video_limit: number | null;
+  subscription_started_at: string | null;
+  subscription_ends_at: string | null;
   sms_sender_id: string | null;
   sms_provider_token_set: boolean;
   module_overrides: Record<string, boolean>;
@@ -306,11 +308,14 @@ export interface UserUsageSummary {
   broadcasts_sent: number;
   automations: number;
   connected_accounts: number;
+  connected_platforms: string[];
   video_jobs: number;
   video_seconds_generated: number;
   video_spend_usd: number;
   image_jobs: number;
   image_spend_usd: number;
+  subscription_started_at: string | null;
+  subscription_ends_at: string | null;
   last_login_at: string | null;
   member_since: string;
 }
@@ -393,6 +398,8 @@ export const adminApi = {
       video_budget_usd: number | null;
       daily_image_limit: number | null;
       daily_video_limit: number | null;
+      subscription_started_at: string | null;
+      subscription_ends_at: string | null;
       sms_sender_id: string | null;
       sms_provider_token: string | null;
       module_overrides: Record<string, boolean>;

@@ -16,6 +16,10 @@ export interface Me {
   location?: string | null;
   website?: string | null;
   sms_disclaimer?: string | null;
+  // Set only by the super admin. Never paired with any usage/cost figure —
+  // the frontend shows a plain days-remaining reminder in the final 3
+  // days, nothing else.
+  subscription_ends_at?: string | null;
   timezone: string;
   language: string;
   created_at: string;

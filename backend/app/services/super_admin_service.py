@@ -285,6 +285,10 @@ class SuperAdminService:
         if "daily_video_limit" in patch:
             v = patch["daily_video_limit"]
             user.daily_video_limit = None if v is None else max(0, int(v))
+        if "subscription_started_at" in patch:
+            user.subscription_started_at = patch["subscription_started_at"]
+        if "subscription_ends_at" in patch:
+            user.subscription_ends_at = patch["subscription_ends_at"]
         if "sms_sender_id" in patch:
             v = (patch["sms_sender_id"] or "").strip()
             user.sms_sender_id = v[:20] or None
@@ -589,6 +593,15 @@ class SuperAdminService:
             )
         ).first()
 
+        connected_platforms = (
+            await self.db.execute(
+                select(SocialConnection.platform).where(
+                    SocialConnection.workspace_id == workspace_id,
+                    SocialConnection.status == ConnectionStatus.CONNECTED,
+                )
+            )
+        ).scalars().all()
+
         return {
             "user_id": user_id,
             "leads": await count(Lead),
@@ -596,12 +609,15 @@ class SuperAdminService:
             "posts_published": await count(Post, Post.status == PostStatus.PUBLISHED),
             "broadcasts_sent": await count(Broadcast),
             "automations": await count(Automation),
-            "connected_accounts": await count(SocialConnection, SocialConnection.status == ConnectionStatus.CONNECTED),
+            "connected_accounts": len(connected_platforms),
+            "connected_platforms": sorted(connected_platforms),
             "video_jobs": video_row[0] or 0,
             "video_seconds_generated": video_row[1] or 0,
             "video_spend_usd": float(video_row[2] or 0.0),
             "image_jobs": image_row[0] or 0,
             "image_spend_usd": float(image_row[1] or 0.0),
+            "subscription_started_at": user.subscription_started_at,
+            "subscription_ends_at": user.subscription_ends_at,
             "last_login_at": user.last_login_at,
             "member_since": user.created_at,
         }

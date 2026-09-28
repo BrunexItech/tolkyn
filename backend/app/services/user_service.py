@@ -30,6 +30,7 @@ def user_response(user: User) -> UserResponse:
         location=user.location,
         website=user.website,
         sms_disclaimer=user.sms_disclaimer,
+        subscription_ends_at=user.subscription_ends_at,
         role=user.role,
         status=user.status,
         is_email_verified=user.is_email_verified,

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { usePathname } from "next/navigation";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { SubscriptionEndingBanner } from "./SubscriptionEndingBanner";
 import { BrandLoader } from "./BrandLoader";
 import { NavProgress } from "./NavProgress";
 import { useSession } from "@/components/om/session";
@@ -69,6 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
           <div className="flex flex-1 flex-col overflow-hidden">
             <TopBar />
+            <SubscriptionEndingBanner />
             <main className="om-scroll flex-1 overflow-y-auto px-4 py-3.5">{children}</main>
           </div>
         </div>

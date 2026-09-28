@@ -101,6 +101,8 @@ class PlatformUserResponse(BaseModel):
     video_budget_usd: Optional[float] = None
     daily_image_limit: Optional[int] = None
     daily_video_limit: Optional[int] = None
+    subscription_started_at: Optional[datetime] = None
+    subscription_ends_at: Optional[datetime] = None
     sms_sender_id: Optional[str] = None  # null = platform's shared default sender
     sms_provider_token_set: bool = False  # never return the token itself
     module_overrides: Dict[str, bool] = {}
@@ -133,6 +135,8 @@ class PlatformUserUpdate(BaseModel):
     video_budget_usd: Optional[float] = None
     daily_image_limit: Optional[int] = None  # null = inherit package; 0 = blocked
     daily_video_limit: Optional[int] = None
+    subscription_started_at: Optional[datetime] = None  # when payment was made
+    subscription_ends_at: Optional[datetime] = None  # past this, generation is blocked (core/limits.py)
     sms_sender_id: Optional[str] = None  # "" or null to clear (back to the shared default sender)
     sms_provider_token: Optional[str] = None  # write-only; "" clears; unset key leaves it untouched
     module_overrides: Optional[Dict[str, bool]] = None  # {module: grant?}
@@ -273,11 +277,14 @@ class UserUsageSummary(BaseModel):
     broadcasts_sent: int
     automations: int
     connected_accounts: int
+    connected_platforms: List[str] = []
     video_jobs: int = 0
     video_seconds_generated: int = 0
     video_spend_usd: float = 0.0
     image_jobs: int = 0
     image_spend_usd: float = 0.0  # estimate, not exact billed cost — see core/image_pricing.py
+    subscription_started_at: Optional[datetime] = None
+    subscription_ends_at: Optional[datetime] = None
     last_login_at: Optional[datetime] = None
     member_since: datetime
 

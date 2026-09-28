@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Check, Clapperboard, ImageIcon, LayoutGrid, MessageSquare } from "lucide-react";
+import { CalendarClock, Check, Clapperboard, ImageIcon, LayoutGrid, MessageSquare } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
 import { LoadingState, Spinner } from "@/components/om/primitives/Spinner";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
@@ -26,6 +26,12 @@ const STATUS_TONE: Record<string, BadgeTone> = {
   inactive: "muted",
 };
 
+/** ISO datetime -> the plain YYYY-MM-DD an <input type="date"> needs. */
+function toDateInput(iso: string | null | undefined): string {
+  if (!iso) return "";
+  return iso.slice(0, 10);
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-om-faint">{children}</div>
@@ -45,15 +51,27 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
   const [budgetInput, setBudgetInput] = useState("");
   const [imgLimit, setImgLimit] = useState("");
   const [vidLimit, setVidLimit] = useState("");
+  const [paidAt, setPaidAt] = useState("");
+  const [endsAt, setEndsAt] = useState("");
   const [senderId, setSenderId] = useState("");
   const [providerToken, setProviderToken] = useState("");
   useEffect(() => {
     setBudgetInput(user?.video_budget_usd != null ? String(user.video_budget_usd) : "");
     setImgLimit(user?.daily_image_limit != null ? String(user.daily_image_limit) : "");
     setVidLimit(user?.daily_video_limit != null ? String(user.daily_video_limit) : "");
+    setPaidAt(toDateInput(user?.subscription_started_at));
+    setEndsAt(toDateInput(user?.subscription_ends_at));
     setSenderId(user?.sms_sender_id ?? "");
     setProviderToken(""); // write-only — never pre-filled, and cleared when switching users
-  }, [user?.id, user?.video_budget_usd, user?.daily_image_limit, user?.daily_video_limit, user?.sms_sender_id]);
+  }, [
+    user?.id,
+    user?.video_budget_usd,
+    user?.daily_image_limit,
+    user?.daily_video_limit,
+    user?.subscription_started_at,
+    user?.subscription_ends_at,
+    user?.sms_sender_id,
+  ]);
 
   const commitLimit = (kind: "image" | "video", raw: string) => {
     if (!user) return;
@@ -63,6 +81,15 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
     const key = kind === "image" ? "daily_image_limit" : "daily_video_limit";
     if (value === (user[key] ?? null)) return;
     update.mutate({ id: user.id, [key]: value });
+  };
+
+  const commitDate = (key: "subscription_started_at" | "subscription_ends_at", raw: string) => {
+    if (!user) return;
+    // <input type="date"> only carries a calendar day -- midnight UTC on
+    // that day is the natural, unambiguous instant to store it as.
+    const iso = raw ? `${raw}T00:00:00Z` : null;
+    if (toDateInput(user[key]) === raw) return; // unchanged, don't fire a request
+    update.mutate({ id: user.id, [key]: iso });
   };
 
   const setModule = (key: string, mode: "default" | "on" | "off") => {
@@ -274,6 +301,42 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
           <div>
             <SectionLabel>
               <span className="inline-flex items-center gap-1">
+                <CalendarClock className="size-3" /> Billing period
+              </span>
+            </SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="mb-1 text-[10px] text-om-muted">Payment date</div>
+                <input
+                  type="date"
+                  value={paidAt}
+                  onChange={(e) => setPaidAt(e.target.value)}
+                  onBlur={() => commitDate("subscription_started_at", paidAt)}
+                  className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-violet/60"
+                />
+              </div>
+              <div>
+                <div className="mb-1 text-[10px] text-om-muted">Period ends</div>
+                <input
+                  type="date"
+                  value={endsAt}
+                  onChange={(e) => setEndsAt(e.target.value)}
+                  onBlur={() => commitDate("subscription_ends_at", endsAt)}
+                  className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-violet/60"
+                />
+              </div>
+            </div>
+            <p className="mt-1.5 text-[10px] text-om-faint">
+              Blank = no expiry (today&apos;s behaviour, unchanged). Once the end date passes, image
+              and video generation are blocked for this account until it&apos;s extended. The client
+              only ever sees a plain days-remaining reminder in the final 3 days — never a usage
+              count or a cost figure.
+            </p>
+          </div>
+
+          <div>
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1">
                 <MessageSquare className="size-3" /> Bulk SMS sender ID
               </span>
             </SectionLabel>
@@ -349,6 +412,24 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
                     <div className="text-[9.5px] text-om-muted">{label}</div>
                   </div>
                 ))}
+              </div>
+            )}
+            {usage && (
+              <div className="mt-2 space-y-1.5 text-[10.5px] text-om-dim">
+                <div>
+                  <span className="text-om-muted">Connected accounts: </span>
+                  {usage.connected_platforms.length ? usage.connected_platforms.join(", ") : "none"}
+                </div>
+                <div>
+                  <span className="text-om-muted">Member since: </span>
+                  {shortDateTime(usage.member_since)}
+                </div>
+                <div>
+                  <span className="text-om-muted">Billing period: </span>
+                  {usage.subscription_started_at ? shortDateTime(usage.subscription_started_at) : "—"}
+                  {" → "}
+                  {usage.subscription_ends_at ? shortDateTime(usage.subscription_ends_at) : "no expiry set"}
+                </div>
               </div>
             )}
           </div>
