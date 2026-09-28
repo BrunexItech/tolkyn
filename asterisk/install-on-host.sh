@@ -245,6 +245,26 @@ systemctl enable asterisk >/dev/null 2>&1 || true
 systemctl restart asterisk
 sleep 4
 
+# --- 5b. verify the two static endpoints actually loaded ----------------
+# A single bad option anywhere in a [section] makes Asterisk's sorcery
+# parser silently drop the WHOLE object -- `pjsip reload`'s own summary
+# output never mentions it, only the full debug log does. That let a
+# broken jitter-buffer setting on [elevenlabs] sit unnoticed for days,
+# quietly dropping every call to it, until a live test call surfaced it.
+# Checked here, loudly, every single deploy, so a config mistake is caught
+# at deploy time instead of being discovered days later on a real call.
+echo "==> verifying static PJSIP endpoints actually loaded"
+for ep in cloudone elevenlabs; do
+  if asterisk -rx "pjsip show endpoint $ep" | grep -q "Unable to find object"; then
+    echo
+    echo "  !!! '$ep' FAILED TO LOAD -- a config option Asterisk didn't recognise silently deleted this whole endpoint."
+    echo "  !!! Check for the real reason: grep -i '$ep' /var/log/asterisk/full | grep -iE 'error|warning'"
+    echo
+  else
+    echo "   ok: $ep"
+  fi
+done
+
 if [ -n "${PBX_AMI_PASSWORD:-}" ] && [ -n "${PBX_EVENT_WEBHOOK_SECRET:-}" ]; then
   echo "==> starting the call-event bridge"
   systemctl restart tolkyn-ami-bridge || true
