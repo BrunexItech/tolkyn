@@ -176,6 +176,14 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
  same => n,Set(PJSIP_HEADER(add,X-Call-Id)=${ARG2})
+ ; chan_pjsip has no jitter-buffer endpoint config at all (see
+ ; pjsip.conf.template's own note on the outage this caused) -- the
+ ; real mechanism is this dialplan function, and same as the SIP
+ ; headers above, it has to be set on THIS (the new, outbound)
+ ; channel to affect the audio it reads from ElevenLabs, not the
+ ; caller's channel. "adaptive" only actually buffers when real
+ ; jitter shows up on a given call.
+ same => n,Set(JITTERBUFFER(adaptive)=default)
  same => n,Return()
 
 ; Reuses [from-internal]'s own number-normalisation patterns rather than
