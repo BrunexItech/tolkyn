@@ -32,3 +32,11 @@ class EmailReply(BaseModel):
 
     received_at = Column(DateTime(timezone=True), nullable=True)
     is_read = Column(Boolean, nullable=False, default=False)
+
+    # Set once, at ingestion time, when this reply looks like a mailbox
+    # provider's own bounce notification and the actual failed recipient
+    # could be confidently identified (see email_bounce_service.py) -- lets
+    # the Replies list show "Bounced: someone@x.com" plainly instead of the
+    # generic "Mail Delivery Subsystem" subject line, and is also recorded
+    # into EmailBounce so future sends skip that address automatically.
+    bounced_email = Column(String(255), nullable=True)

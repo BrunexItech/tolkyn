@@ -111,6 +111,7 @@ class ReplyRow(BaseModel):
     attachments: Optional[List[AttachmentRow]] = None
     received_at: Optional[datetime] = None
     is_read: bool
+    bounced_email: Optional[str] = None
 
 
 class UnreadCount(BaseModel):

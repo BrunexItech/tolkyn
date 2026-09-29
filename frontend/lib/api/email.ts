@@ -106,6 +106,7 @@ export interface ReplyRow {
   attachments: AttachmentRow[] | null;
   received_at: string | null;
   is_read: boolean;
+  bounced_email: string | null;
 }
 
 export interface EmailCampaignRow {

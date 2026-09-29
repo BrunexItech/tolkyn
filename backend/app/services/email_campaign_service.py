@@ -27,6 +27,7 @@ from app.models.email_send import EmailSend, EmailSendStatus
 from app.models.lead import Lead
 from app.models.user import User
 from app.services.email_account_service import EmailAccountService
+from app.services.email_bounce_service import bounced_set
 from app.services.email_sender import render_branded_html, send_email
 
 _GAP_SECONDS = 1.0
@@ -440,6 +441,12 @@ async def _send_recipients(
     if not campaign:
         return
 
+    # Addresses that have bounced before (from a real "Mail Delivery
+    # Subsystem" reply we parsed -- see email_bounce_service.py) are skipped
+    # here rather than re-attempted, same "checked fresh on every send"
+    # reasoning already used for SMS opt-outs (messaging_service.send).
+    bounced = await bounced_set(db, workspace_id, [r["email"] for r in recipients])
+
     sent = failed = skipped = 0
     for r in recipients:
         ctx = {
@@ -448,6 +455,14 @@ async def _send_recipients(
             "company": r["company"] or "",
             "email": r["email"],
         }
+        if r["email"] in bounced:
+            skipped += 1
+            db.add(EmailSend(
+                workspace_id=workspace_id, email_account_id=acc.id, email_campaign_id=campaign.id,
+                to_email=r["email"], from_email=acc.from_email, subject=subject,
+                status=EmailSendStatus.SKIPPED, error="Address previously bounced",
+            ))
+            continue
         if not await accounts.can_send(acc):
             skipped += 1
             db.add(EmailSend(

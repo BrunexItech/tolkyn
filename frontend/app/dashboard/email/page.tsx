@@ -433,9 +433,17 @@ export default function BulkEmailPage() {
                               <span className="ml-auto shrink-0 text-[9.5px] text-om-faint">{relativeTime(r.received_at)}</span>
                             )}
                           </span>
-                          {r.subject && <span className="truncate text-[10.5px] text-om-muted">{r.subject}</span>}
-                          {r.body_preview && (
-                            <span className="line-clamp-1 text-[10px] text-om-faint">{r.body_preview}</span>
+                          {r.bounced_email ? (
+                            <span className="truncate text-[10.5px] font-medium text-om-red">
+                              Bounced: {r.bounced_email}
+                            </span>
+                          ) : (
+                            <>
+                              {r.subject && <span className="truncate text-[10.5px] text-om-muted">{r.subject}</span>}
+                              {r.body_preview && (
+                                <span className="line-clamp-1 text-[10px] text-om-faint">{r.body_preview}</span>
+                              )}
+                            </>
                           )}
                         </button>
                       </li>

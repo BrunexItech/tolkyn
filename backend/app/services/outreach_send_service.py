@@ -9,6 +9,7 @@ from app.models.email_send import EmailSend, EmailSendStatus
 from app.models.lead import Lead
 from app.schemas.email_account import BulkSendResult, SendResult
 from app.services.email_account_service import EmailAccountService
+from app.services.email_bounce_service import bounced_set
 from app.services.email_sender import send_email
 from app.services.lead_service import LeadService
 
@@ -73,6 +74,8 @@ class OutreachSendService:
             return await self._log_skip(lead, acc, "No email address for this lead")
         if not lead.outreach_email:
             return await self._log_skip(lead, acc, "No email drafted — generate outreach first")
+        if await bounced_set(self.db, self.workspace_id, [lead.email]):
+            return await self._log_skip(lead, acc, "Address previously bounced")
         if not await self.accounts.can_send(acc):
             return await self._log_skip(lead, acc, "Daily sending limit reached for this account")
 

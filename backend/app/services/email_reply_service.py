@@ -32,6 +32,12 @@ from app.core.crypto import decrypt
 from app.models.email_account import EmailAccount
 from app.models.email_reply import EmailReply
 from app.services.email_account_service import EmailAccountService
+from app.services.email_bounce_service import (
+    extract_bounced_address,
+    looks_like_bounce,
+    record_bounce,
+    sent_addresses,
+)
 from app.services.email_sender import send_email
 
 logger = logging.getLogger(__name__)
@@ -215,6 +221,12 @@ async def _poll_account(db: AsyncSession, acc: EmailAccount) -> int:
         return 0
 
     new_count = 0
+    # Fetched once per poll, not per message -- every address this
+    # workspace has genuinely sent to, used to confidently identify which
+    # one a bounce notification is actually about (see
+    # email_bounce_service.extract_bounced_address for why this is more
+    # robust than parsing any one provider's bounce wording).
+    sent = await sent_addresses(db, acc.workspace_id)
     for m in messages:
         if m["message_id"]:
             exists = await db.execute(
@@ -224,6 +236,11 @@ async def _poll_account(db: AsyncSession, acc: EmailAccount) -> int:
             )
             if exists.scalar_one_or_none():
                 continue
+        bounced_email = None
+        if looks_like_bounce(m["from_email"], m["from_name"], m["subject"]):
+            bounced_email = extract_bounced_address(m["body_preview"] or "", sent)
+            if bounced_email:
+                await record_bounce(db, acc.workspace_id, bounced_email)
         db.add(EmailReply(
             workspace_id=acc.workspace_id,
             email_account_id=acc.id,
@@ -235,6 +252,7 @@ async def _poll_account(db: AsyncSession, acc: EmailAccount) -> int:
             body_html=m["body_html"],
             attachments=m["attachments"],
             received_at=m["received_at"],
+            bounced_email=bounced_email,
         ))
         new_count += 1
 
@@ -266,6 +284,7 @@ def _row_dict(r: EmailReply) -> Dict[str, Any]:
         "attachments": r.attachments,
         "received_at": r.received_at,
         "is_read": r.is_read,
+        "bounced_email": r.bounced_email,
     }
 
 
