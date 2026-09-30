@@ -279,13 +279,26 @@ def _negative_with_brand(
     return f"{base}, {_NEG_BRANDING}".strip(" ,") if base else _NEG_BRANDING
 
 
-def _segment_uses_logo_asset(model: VeoModel, seg_seconds: int, has_logo: bool) -> bool:
+def _segment_uses_logo_asset(
+    model: VeoModel, seg_seconds: int, has_logo: bool, has_ref_image: bool = False
+) -> bool:
     """Whether a segment of this length can carry the logo through Veo's own
     reference-image branding: needs a logo, a model that supports it (not
-    Lite), and — per Google's API — an 8-second segment exactly. Shared by
-    _start_segment (to decide what to send Veo) and _finish_job (to decide
-    what the fallback watermark still needs to cover) so the two can't drift."""
-    return has_logo and model.supports_reference_images and seg_seconds == NATIVE_MAX_DURATION
+    Lite), an 8-second segment exactly, and — per Google's API — no starting/
+    continuation image already going out for this segment. Veo's API 400s
+    with "Unsupported video generation request" when an instance carries
+    both `image` (a hero frame, or the previous segment's last frame feeding
+    a later segment for continuity) and `referenceImages` (the logo asset)
+    at once — real error seen on a 16s job's *second* segment, which always
+    carries a continuation image. Shared by _start_segment (to decide what
+    to send Veo) and _finish_job (to decide what the fallback watermark
+    still needs to cover) so the two can't drift."""
+    return (
+        has_logo
+        and model.supports_reference_images
+        and seg_seconds == NATIVE_MAX_DURATION
+        and not has_ref_image
+    )
 
 
 def _image_mime(path: Path) -> str:
@@ -334,7 +347,7 @@ async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
     ref_path = _resolve_media_path(ref_url)
     ref_bytes = ref_path.read_bytes() if ref_path else None
 
-    using_logo_asset = _segment_uses_logo_asset(model, seg_seconds, has_logo)
+    using_logo_asset = _segment_uses_logo_asset(model, seg_seconds, has_logo, ref_bytes is not None)
     asset_images = [{"bytes": logo_path.read_bytes(), "mime": _image_mime(logo_path)}] if using_logo_asset else None
 
     job.operation_name = await gemini.start_generation(
@@ -402,8 +415,15 @@ async def _finish_job(db: AsyncSession, job: VideoJob) -> None:
         plan = job.segment_plan or [job.duration_seconds]
         unbranded_windows: list[tuple[float, float]] = []
         cursor = 0.0
-        for seg_seconds in plan:
-            if not _segment_uses_logo_asset(model, seg_seconds, True):
+        for i, seg_seconds in enumerate(plan):
+            # Segment 0 only carries a starting image if the hero-frame
+            # feature was used; every later segment always gets seeded with
+            # the previous one's last frame (see _poll_job) -- same
+            # has_ref_image rule _start_segment used when actually sending
+            # this segment to Veo, so the watermark fallback can't drift
+            # from what Veo really did with the logo reference image.
+            has_ref_image = bool(job.reference_image_url) if i == 0 else True
+            if not _segment_uses_logo_asset(model, seg_seconds, True, has_ref_image):
                 unbranded_windows.append((cursor, cursor + seg_seconds))
             cursor += seg_seconds
 
