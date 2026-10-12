@@ -100,7 +100,14 @@ export const messagingApi = {
   update: (id: string, body: BroadcastInput) => http.patch<Broadcast>(`/messaging/broadcasts/${id}`, body),
   remove: (id: string) => http.del<void>(`/messaging/broadcasts/${id}`),
   send: (id: string) => http.post<Broadcast>(`/messaging/broadcasts/${id}/send`),
+  voiceJobs: (id: string) => http.get<VoiceJobRow[]>(`/messaging/broadcasts/${id}/voice-jobs`),
 };
+
+export interface VoiceJobRow {
+  phone: string;
+  status: "queued" | "dispatched" | "failed";
+  error: string | null;
+}
 
 export interface WhatsAppWebStatus {
   status: "disconnected" | "connecting" | "qr" | "linking" | "connected" | "logged_out";

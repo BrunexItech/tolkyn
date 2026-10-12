@@ -63,6 +63,12 @@ class BroadcastResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class VoiceJobRow(BaseModel):
+    phone: str
+    status: str  # queued | dispatched | failed
+    error: Optional[str] = None
+
+
 class BroadcastList(BaseModel):
     items: List[BroadcastResponse]
 

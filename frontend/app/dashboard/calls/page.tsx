@@ -5,7 +5,6 @@ import { CallCenterProvider } from "@/components/call-center/store";
 import { CallActions } from "@/components/call-center/CallActions";
 import { CallStats } from "@/components/call-center/CallStats";
 import { Softphone } from "@/components/call-center/Softphone";
-import { AgentLineSettings } from "@/components/call-center/AgentLineSettings";
 import { CallQueue } from "@/components/call-center/CallQueue";
 import { AgentPresence } from "@/components/call-center/AgentPresence";
 import { CallVolumeCard } from "@/components/call-center/CallVolumeCard";
@@ -27,7 +26,6 @@ export default function CallCenterPage() {
         <div className="grid gap-3 lg:grid-cols-[340px_1fr]">
           <div className="space-y-3">
             <Softphone />
-            <AgentLineSettings />
           </div>
           <div className="space-y-3">
             <Grid cols={2}>

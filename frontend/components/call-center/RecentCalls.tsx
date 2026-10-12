@@ -13,6 +13,8 @@ import {
   PhoneCall,
   MessageSquareText,
   Trash2,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 import { Card, CardTitle } from "@/components/om/primitives/Card";
 import { TableWrap } from "@/components/om/primitives/Table";
@@ -37,6 +39,7 @@ export function RecentCalls() {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
   const [transcriptId, setTranscriptId] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
 
   const onDelete = async (id: string, name: string) => {
     const ok = await confirm({
@@ -63,7 +66,25 @@ export function RecentCalls() {
 
   return (
     <Card>
-      <CardTitle icon={<History />}>Recent calls</CardTitle>
+      <CardTitle
+        icon={<History />}
+        action={
+          <button
+            type="button"
+            onClick={() => setOpen((v) => !v)}
+            className="flex items-center gap-1 text-[10.5px] text-om-muted hover:text-om-text"
+          >
+            {!open && recent.length > 0 && <span>{recent.length}</span>}
+            {open ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+          </button>
+        }
+      >
+        <button type="button" onClick={() => setOpen((v) => !v)} className="text-left hover:text-om-text">
+          Recent calls
+        </button>
+      </CardTitle>
+      {!open ? null : (
+      <>
       <audio ref={audioRef} onEnded={() => setPlayingId(null)} className="hidden" />
       <TableWrap>
         <table>
@@ -174,6 +195,8 @@ export function RecentCalls() {
         onClose={() => setTranscriptId(null)}
       />
       {dialog}
+      </>
+      )}
     </Card>
   );
 }

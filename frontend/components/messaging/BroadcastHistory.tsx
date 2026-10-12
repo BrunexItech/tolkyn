@@ -7,7 +7,7 @@ import { EmptyState } from "@/components/om/primitives/EmptyState";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
 import { OmButton } from "@/components/om/primitives/OmButton";
 import { useConfirm } from "@/components/om/primitives/ConfirmDialog";
-import { useBroadcasts, useSendBroadcast, useDeleteBroadcast } from "./hooks";
+import { useBroadcasts, useSendBroadcast, useDeleteBroadcast, useVoiceJobs } from "./hooks";
 import type { BroadcastChannel, BroadcastStatus } from "@/lib/api/messaging";
 import { relativeTime } from "@/lib/om/format";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,46 @@ const TONE: Record<BroadcastStatus, BadgeTone> = {
   partial: "amber",
   failed: "red",
 };
+
+const VOICE_JOB_TONE: Record<string, BadgeTone> = {
+  queued: "muted",
+  dispatched: "green",
+  failed: "red",
+};
+
+const VOICE_JOB_LABEL: Record<string, string> = {
+  queued: "Queued",
+  dispatched: "Dialed",
+  failed: "Failed",
+};
+
+function VoiceJobsList({ broadcastId }: { broadcastId: string }) {
+  const { data, isLoading } = useVoiceJobs(broadcastId);
+  if (isLoading) return <p className="text-[10.5px] text-om-faint">Loading call status…</p>;
+  if (!data || data.length === 0) return null;
+  return (
+    <div className="rounded-md border border-om-border bg-white/[0.02]">
+      <div className="border-b border-om-border px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-om-muted">
+        Call status
+      </div>
+      <p className="px-2 pt-1.5 text-[10px] text-om-faint">
+        &ldquo;Dialed&rdquo; means Asterisk was told to call this number — not confirmation someone answered
+        or heard the message.
+      </p>
+      <div className="om-scroll max-h-40 divide-y divide-white/[0.04] overflow-y-auto">
+        {data.map((j, i) => (
+          <div key={`${j.phone}-${i}`} className="flex items-center gap-2 px-2 py-1">
+            <span className="shrink-0 font-mono text-[10px] text-om-dim">{j.phone}</span>
+            <StatusBadge tone={VOICE_JOB_TONE[j.status] ?? "muted"} className="ml-auto">
+              {VOICE_JOB_LABEL[j.status] ?? j.status}
+            </StatusBadge>
+            {j.error && <span className="shrink-0 text-[10px] text-om-red">{j.error}</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 export function BroadcastHistory({ channel, accent }: { channel: BroadcastChannel; accent: string }) {
   const { data } = useBroadcasts(channel);
@@ -92,6 +132,10 @@ export function BroadcastHistory({ channel, accent }: { channel: BroadcastChanne
                       <p className="rounded-md bg-om-amber/10 px-2 py-1 text-[10px] text-om-amber">
                         Test mode — these messages were not actually delivered.
                       </p>
+                    )}
+
+                    {channel === "voice" && b.status !== "draft" && expanded && (
+                      <VoiceJobsList broadcastId={b.id} />
                     )}
 
                     {b.failed_count > 0 && b.results.some((r) => !r.ok) && (

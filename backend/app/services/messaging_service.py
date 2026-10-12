@@ -280,6 +280,27 @@ class MessagingService:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "Broadcast not found")
         return b
 
+    async def voice_jobs(self, bid: str) -> List[Dict[str, Any]]:
+        """Per-recipient dial status for a Voice Broadcast -- the equivalent
+        of SMS/WhatsApp's `results`, which Voice never populates since its
+        send path queues jobs for ami-bridge.py rather than getting a
+        result back immediately. Scoped to this workspace via the same
+        ownership check as get()."""
+        from app.models.voice_call_job import VoiceCallJob
+
+        await self.get(bid)  # 404s if this broadcast isn't ours
+        rows = (
+            await self.db.execute(
+                select(VoiceCallJob)
+                .where(VoiceCallJob.broadcast_id == bid, VoiceCallJob.workspace_id == self.workspace_id)
+                .order_by(VoiceCallJob.created_at.asc())
+            )
+        ).scalars().all()
+        return [
+            {"phone": j.phone, "status": j.status.value, "error": j.error}
+            for j in rows
+        ]
+
     def _clean_recipients(self, raw: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         out: List[Dict[str, Any]] = []
         seen: set[str] = set()

@@ -25,6 +25,14 @@ export function useBroadcasts(channel: BroadcastChannel) {
   });
 }
 
+export function useVoiceJobs(broadcastId: string | null) {
+  return useQuery({
+    queryKey: [...KEY, "voice-jobs", broadcastId],
+    queryFn: () => messagingApi.voiceJobs(broadcastId as string),
+    enabled: !!broadcastId,
+  });
+}
+
 export function useMessagingContacts(filters: ContactFilters, enabled = true) {
   return useQuery({
     queryKey: [...KEY, "contacts", filters],

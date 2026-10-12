@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import (
     APIRouter,
@@ -36,6 +36,7 @@ from app.schemas.messaging import (
     ContactList,
     CsvImportResult,
     MessagingSummary,
+    VoiceJobRow,
     WhatsAppWebHistoryWebhook,
     WhatsAppWebMessageWebhook,
     WhatsAppWebStatus,
@@ -153,6 +154,15 @@ async def send_broadcast(
     db: AsyncSession = Depends(get_db),
 ):
     return BroadcastResponse.model_validate(await MessagingService(db, user_id).send(bid))
+
+
+@router.get("/broadcasts/{bid}/voice-jobs", response_model=List[VoiceJobRow])
+async def broadcast_voice_jobs(
+    bid: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    return await MessagingService(db, user_id).voice_jobs(bid)
 
 
 # --------------------------------------------------------------------------
