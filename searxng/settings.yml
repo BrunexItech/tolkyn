@@ -1,0 +1,15 @@
+# Self-hosted meta-search for Lead Discovery -- queries 70+ real search
+# engines instead of scraping DuckDuckGo's HTML page directly (see
+# backend/app/services/web_search.py), free, no API key, no per-query cost.
+# `use_default_settings: true` loads SearXNG's own defaults for everything
+# not overridden here -- keeps this file small and safe across upgrades.
+use_default_settings: true
+
+server:
+  secret_key: "980e2fe6af791e333f1e5c0429fd87bddfbb3b026a78a754aeb2f0bd773a3ff5"
+  limiter: false  # internal-only (not exposed to the internet), no rate-limit UI needed
+
+search:
+  formats:
+    - html
+    - json  # off by default -- web_search.py reads this as structured results, not scraped HTML

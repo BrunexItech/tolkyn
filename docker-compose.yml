@@ -85,6 +85,7 @@ services:
       REDIS_HOST: redis
       REDIS_PORT: 6379
       WHATSAPP_WORKER_URL: http://whatsapp-worker:4001
+      SEARXNG_URL: http://searxng:8080
       INTERNAL_SHARED_SECRET: ${INTERNAL_SHARED_SECRET:?set INTERNAL_SHARED_SECRET in .env}
       # call-centre TURN — handed to the browser softphone via /call-center/softphone
       PBX_TURN_URL: ${PBX_TURN_URL:-}
@@ -193,6 +194,17 @@ services:
       timeout: 10s
       retries: 5
       start_period: 20s
+
+  searxng:
+    image: searxng/searxng:latest
+    restart: unless-stopped
+    environment:
+      - SEARXNG_BASE_URL=http://searxng:8080/
+    volumes:
+      - ./searxng/settings.yml:/etc/searxng/settings.yml:ro
+    networks: [internal]
+    # No published ports — only the backend (same docker network) talks to
+    # this, same as postgres/redis.
 
   nginx:
     image: nginx:1.27-alpine

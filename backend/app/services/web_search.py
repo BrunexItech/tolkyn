@@ -1,4 +1,12 @@
-"""Keyless web search via the DuckDuckGo HTML endpoint. Best-effort."""
+"""Candidate-site search for Lead Discovery.
+
+Two paths: a self-hosted SearXNG instance (queries 70+ real search engines
+at once, see docker-compose.yml's `searxng` service + searxng/settings.yml)
+when SEARXNG_URL is configured, falling back to scraping DuckDuckGo's HTML
+page directly (the original, still fully working, approach) when it isn't
+configured or a query to it fails for any reason -- this is purely additive,
+nothing about the DuckDuckGo path changed.
+"""
 import asyncio
 import re
 from typing import List
@@ -6,6 +14,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import httpx
 from bs4 import BeautifulSoup
+
+from app.core.config import settings
 
 _UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -38,8 +48,30 @@ def _clean(url: str) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-async def search_domains(queries: List[str], per_query: int = 10, limit: int = 60) -> List[str]:
-    """Return a de-duplicated list of candidate site roots for the given queries."""
+async def _search_domains_searxng(queries: List[str], per_query: int, limit: int) -> List[str]:
+    found: list[str] = []
+    seen: set[str] = set()
+    base = settings.SEARXNG_URL.rstrip("/")
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        async def one(q: str) -> None:
+            try:
+                r = await client.get(f"{base}/search", params={"q": q, "format": "json"})
+                r.raise_for_status()
+                for item in (r.json().get("results") or [])[: per_query * 3]:
+                    root = _clean(item.get("url", ""))
+                    if root and root not in seen:
+                        seen.add(root)
+                        found.append(root)
+            except Exception as exc:  # noqa: BLE001
+                print(f"[web_search] searxng query failed ({q}): {exc}")
+
+        await asyncio.gather(*(one(q) for q in queries[:10]))
+
+    return found[:limit]
+
+
+async def _search_domains_ddg(queries: List[str], per_query: int, limit: int) -> List[str]:
     found: list[str] = []
     seen: set[str] = set()
 
@@ -59,8 +91,21 @@ async def search_domains(queries: List[str], per_query: int = 10, limit: int = 6
                         seen.add(root)
                         found.append(root)
             except Exception as exc:  # noqa: BLE001
-                print(f"[web_search] query failed ({q}): {exc}")
+                print(f"[web_search] ddg query failed ({q}): {exc}")
 
         await asyncio.gather(*(one(q) for q in queries[:10]))
 
     return found[:limit]
+
+
+async def search_domains(queries: List[str], per_query: int = 10, limit: int = 60) -> List[str]:
+    """Return a de-duplicated list of candidate site roots for the given
+    queries. Tries SearXNG first when configured (wider net, many engines);
+    falls back to DuckDuckGo on any failure or empty result, or always when
+    SearXNG isn't configured at all."""
+    if settings.SEARXNG_URL:
+        found = await _search_domains_searxng(queries, per_query, limit)
+        if found:
+            return found
+        print("[web_search] searxng returned nothing — falling back to duckduckgo")
+    return await _search_domains_ddg(queries, per_query, limit)

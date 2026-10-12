@@ -183,6 +183,11 @@ class Settings(BaseSettings):
     # Geo targeting (optional — falls back to keyless OpenStreetMap/Nominatim)
     GEOAPIFY_API_KEY: Optional[str] = Field(default=None, description="Geoapify key (free tier)")
 
+    # Self-hosted meta-search for Lead Discovery (see services/web_search.py)
+    # -- blank means "not deployed yet", falls back to scraping DuckDuckGo's
+    # HTML page directly, same as before this was added.
+    SEARXNG_URL: str = Field(default="", description="e.g. http://searxng:8080 (docker-compose service name)")
+
     # Media intelligence — live web/news search (optional — falls back to model knowledge)
     TAVILY_API_KEY: Optional[str] = Field(default=None, description="Tavily search key (built for AI)")
     SERPER_API_KEY: Optional[str] = Field(default=None, description="Serper.dev Google search key")
