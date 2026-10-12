@@ -89,6 +89,7 @@ class CsvImportResult(BaseModel):
 class MessagingSummary(BaseModel):
     sms_broadcasts: int
     whatsapp_broadcasts: int
+    voice_broadcasts: int
     messages_sent: int
     messages_failed: int
     sms_provider: str

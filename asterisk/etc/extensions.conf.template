@@ -256,3 +256,24 @@ exten => *80,1,Dial(PJSIP/${ELEVENLABS_SIP_USER}@elevenlabs,30,rtT)
  same => n,Hangup()
 
 exten => h,1,Hangup()
+
+; Voice Broadcast — entered by an AMI Originate action sent from the host's
+; ami-bridge.py (_voice_broadcast_loop), never dialed into directly. That
+; Originate targets the Cloud One trunk channel itself (Channel:
+; PJSIP/<number>@cloudone) with Context=voice-broadcast, Exten=s — so this
+; only runs once the OUTBOUND leg actually answers. CallerID is set by the
+; Originate action's own CallerID field, not here.
+;
+; AMD (Answering Machine Detection, Asterisk's own built-in app) decides
+; whether a real person or a machine/voicemail picked up -- the message
+; (${AUDIO_FILE}, set as an Originate Variable, already fetched onto this
+; host by ami-bridge.py before the Originate was sent) only plays for a
+; confirmed human. A machine/voicemail/uncertain result just hangs up —
+; never leaves a message on an answering machine.
+[voice-broadcast]
+exten => s,1,Answer()
+ same => n,AMD()
+ same => n,GotoIf($["${AMDSTATUS}" = "HUMAN"]?play:done)
+ same => n(play),Playback(${AUDIO_FILE})
+ same => n,Hangup()
+ same => n(done),Hangup()

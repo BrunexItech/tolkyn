@@ -221,6 +221,7 @@ _SCHEMA_PATCHES = [
 _ENUM_VALUE_PATCHES = [
     # SQLAlchemy stores Enum members by NAME, so the value must be upper-case.
     ("customersource", "SOCIAL"),
+    ("broadcastchannel", "VOICE"),
 ]
 
 

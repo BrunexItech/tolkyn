@@ -71,7 +71,7 @@ export function BroadcastComposer({
     <>
       {!bare && (
         <CardTitle icon={<Send />} color={accent}>
-          New {channel === "sms" ? "SMS" : "WhatsApp"} broadcast
+          New {channel === "sms" ? "SMS" : channel === "voice" ? "Voice" : "WhatsApp"} broadcast
         </CardTitle>
       )}
 
@@ -79,7 +79,7 @@ export function BroadcastComposer({
         <OmInput value={name} onChange={(e) => setName(e.target.value)} placeholder="March promo" />
       </Field>
 
-      <Field label="Message">
+      <Field label={channel === "voice" ? "Message (read aloud by voice)" : "Message"}>
         <textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
@@ -87,6 +87,8 @@ export function BroadcastComposer({
           placeholder={
             channel === "whatsapp"
               ? "Hi! Thanks for being a customer — here's what's new this week…"
+              : channel === "voice"
+              ? "Hi, this is a message from [business]. We wanted to let you know…"
               : "Short and clear works best for SMS."
           }
           className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-2 text-[12.5px] leading-relaxed text-om-text outline-none placeholder:text-om-muted focus:border-om-blue/60"
@@ -99,6 +101,11 @@ export function BroadcastComposer({
             </span>
           )}
         </div>
+        {channel === "voice" && (
+          <p className="mt-1.5 text-[10px] text-om-faint">
+            Only plays once a real person answers — a voicemail or answering machine never hears it.
+          </p>
+        )}
       </Field>
 
       <RecipientPicker value={recipients} onChange={setRecipients} accent={accent} />

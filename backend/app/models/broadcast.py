@@ -9,6 +9,7 @@ from app.db.base import BaseModel
 class BroadcastChannel(str, enum.Enum):
     SMS = "sms"
     WHATSAPP = "whatsapp"
+    VOICE = "voice"
 
 
 class BroadcastStatus(str, enum.Enum):

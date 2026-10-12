@@ -1,6 +1,6 @@
 import { http, qs } from "./http";
 
-export type BroadcastChannel = "sms" | "whatsapp";
+export type BroadcastChannel = "sms" | "whatsapp" | "voice";
 export type BroadcastStatus = "draft" | "sending" | "sent" | "partial" | "failed";
 
 export interface BroadcastRecipient {
@@ -64,6 +64,7 @@ export interface CsvImportResult {
 export interface MessagingSummary {
   sms_broadcasts: number;
   whatsapp_broadcasts: number;
+  voice_broadcasts: number;
   messages_sent: number;
   messages_failed: number;
   sms_provider: string;

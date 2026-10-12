@@ -17,7 +17,7 @@ export function NewBroadcastButton({
   fg?: string;
 }) {
   const [open, setOpen] = useState(false);
-  const label = channel === "sms" ? "SMS" : "WhatsApp";
+  const label = channel === "sms" ? "SMS" : channel === "voice" ? "Voice" : "WhatsApp";
 
   return (
     <>

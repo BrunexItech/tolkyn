@@ -53,8 +53,15 @@ AMI_PORT = int(os.environ.get("PBX_AMI_PORT", "5038"))
 AMI_USER = os.environ.get("PBX_AMI_USER", "tolkyn-bridge")
 AMI_PASS = os.environ.get("PBX_AMI_PASSWORD", "")
 BACKEND = os.environ.get("PBX_EVENT_BACKEND_URL", "http://127.0.0.1:8090/api/v1").rstrip("/")
+BACKEND_ROOT = BACKEND[: -len("/api/v1")] if BACKEND.endswith("/api/v1") else BACKEND
 SECRET = os.environ.get("PBX_EVENT_WEBHOOK_SECRET", "")
 ROUTING_URL = f"{BACKEND}/call-center/pbx-routing"
+VOICE_JOBS_URL = f"{BACKEND}/internal/voice-jobs"
+# Same cache dir ivr_agi.py already fetches rendered TTS prompts into —
+# Voice Broadcast audio goes through the identical render_and_cache()
+# pipeline on the backend, so there's no collision (content-hash filenames)
+# and no new directory/permissions to set up on this host.
+VOICE_SOUNDS_DIR = Path("/usr/share/asterisk/sounds/tolkyn-ivr")
 
 # Legacy single-tenant fallback — only used when the routing table has never
 # had anything in it (i.e. no workspace has been assigned a DID + extension
@@ -117,6 +124,117 @@ def _routing_loop() -> None:
         except Exception as e:  # noqa: BLE001 — keep polling regardless
             log("routing refresh error:", e)
         time.sleep(30)
+
+
+# --- Voice Broadcast: originate outbound calls over the live AMI socket ----
+# The only thing in this whole app with a real AMI connection to Asterisk —
+# see MessagingService._send_voice (backend) for where jobs get queued, and
+# [voice-broadcast] in extensions.conf.template for the AMD-gated playback.
+_sock_lock = threading.Lock()
+_ami_sock: Optional[socket.socket] = None
+
+
+def fetch_audio(rel_path: str) -> Optional[str]:
+    """Downloads + caches the rendered message audio locally; returns the
+    Asterisk STREAM FILE argument (no extension), or None on failure.
+    Identical to ivr_agi.py's own fetch_audio — same backend endpoint, same
+    cache dir, kept as a separate copy since this script has no shared
+    module to import it from (pure stdlib, no local package)."""
+    key = re.sub(r"[^a-zA-Z0-9_-]", "", Path(rel_path).stem)
+    if not key:
+        return None
+    dest = VOICE_SOUNDS_DIR / f"{key}.wav"
+    if dest.is_file() and dest.stat().st_size > 0:
+        return f"tolkyn-ivr/{key}"
+    try:
+        VOICE_SOUNDS_DIR.mkdir(parents=True, exist_ok=True)
+        with urllib.request.urlopen(f"{BACKEND_ROOT}/media/{rel_path}", timeout=10) as resp:
+            data = resp.read()
+        if not data:
+            return None
+        dest.write_bytes(data)
+        return f"tolkyn-ivr/{key}"
+    except Exception as e:  # noqa: BLE001
+        log("voice audio fetch failed:", rel_path, e)
+        return None
+
+
+def _to_cloudone_user(phone: str) -> str:
+    """E.164 -> whatever the [cloudone] trunk's own PJSIP user part expects,
+    mirroring extensions.conf.template's [from-internal] dial patterns
+    exactly (Originate creates the trunk channel directly, bypassing that
+    pattern-matching dialplan entirely, so the same translation has to
+    happen here instead)."""
+    d = phone.strip()
+    if d.startswith("+254"):
+        return "0" + d[4:]
+    if d.startswith("254"):
+        return "0" + d[3:]
+    if d.startswith("+"):
+        return d[1:]  # international, sent as-is per _+X.
+    return d
+
+
+def _report_job_result(job_id: str, status: str, error: str = "") -> None:
+    body = json.dumps({"status": status, "error": error[:500]}).encode()
+    req = urllib.request.Request(
+        f"{VOICE_JOBS_URL}/{job_id}/result",
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json", "X-Webhook-Secret": SECRET},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10):
+            pass
+    except Exception as e:  # noqa: BLE001 — best effort; the job just looks stuck, never retried destructively
+        log("voice job result report failed:", job_id, e)
+
+
+def _originate(phone: str, caller_id: Optional[str], audio_key: str) -> bool:
+    channel = f"PJSIP/{_to_cloudone_user(phone)}@cloudone"
+    action = (
+        "Action: Originate\r\n"
+        f"Channel: {channel}\r\n"
+        "Context: voice-broadcast\r\n"
+        "Exten: s\r\n"
+        "Priority: 1\r\n"
+        f"Callerid: {caller_id or ''}\r\n"
+        f"Variable: AUDIO_FILE={audio_key}\r\n"
+        "Async: true\r\n"
+        "\r\n"
+    )
+    with _sock_lock:
+        if _ami_sock is None:
+            return False
+        try:
+            _ami_sock.sendall(action.encode())
+        except OSError as e:
+            log("originate send failed:", e)
+            return False
+    return True
+
+
+def _voice_broadcast_loop() -> None:
+    while True:
+        try:
+            req = urllib.request.Request(
+                f"{VOICE_JOBS_URL}/pending?limit=3", headers={"X-Webhook-Secret": SECRET}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                jobs = json.loads(resp.read())
+            for job in jobs:
+                audio_key = fetch_audio(job["audio_rel_path"])
+                if not audio_key:
+                    _report_job_result(job["id"], "failed", "could not fetch audio")
+                    continue
+                ok = _originate(job["phone"], job.get("caller_id"), audio_key)
+                if not ok:
+                    _report_job_result(job["id"], "failed", "AMI not connected")
+                # a successful Originate send needs no result report — the
+                # pending-jobs claim already marked it dispatched
+        except Exception as e:  # noqa: BLE001 — keep polling regardless
+            log("voice broadcast poll error:", e)
+        time.sleep(8)
 
 
 def workspace_for_did(exten: str) -> str:
@@ -426,6 +544,7 @@ def read_packet(buf: bytearray, sock: socket.socket) -> Optional[Dict[str, str]]
 
 
 def run_once() -> None:
+    global _ami_sock
     with socket.create_connection((AMI_HOST, AMI_PORT), timeout=10) as sock:
         sock.settimeout(None)
         buf = bytearray()
@@ -444,22 +563,32 @@ def run_once() -> None:
             return
         log("AMI connected as", AMI_USER, "-> backend", BACKEND)
 
-        last_ping = time.time()
-        while True:
-            pkt = read_packet(buf, sock)
-            if pkt is None:
-                log("AMI socket closed")
-                return
-            ev = pkt.get("Event")
-            if ev in HANDLERS:
-                try:
-                    HANDLERS[ev](pkt)
-                except Exception as e:  # noqa: BLE001
-                    log("handler error", ev, e)
-            now = time.time()
-            if now - last_ping > 60:
-                sock.sendall(b"Action: Ping\r\n\r\n")
-                last_ping = now
+        with _sock_lock:
+            _ami_sock = sock
+        try:
+            last_ping = time.time()
+            while True:
+                pkt = read_packet(buf, sock)
+                if pkt is None:
+                    log("AMI socket closed")
+                    return
+                ev = pkt.get("Event")
+                if ev in HANDLERS:
+                    try:
+                        HANDLERS[ev](pkt)
+                    except Exception as e:  # noqa: BLE001
+                        log("handler error", ev, e)
+                now = time.time()
+                if now - last_ping > 60:
+                    with _sock_lock:
+                        sock.sendall(b"Action: Ping\r\n\r\n")
+                    last_ping = now
+        finally:
+            # a dead/closing socket must never look usable to the voice
+            # broadcast thread — it would send into nothing and report a
+            # false "dispatched" the main loop can't actually back up.
+            with _sock_lock:
+                _ami_sock = None
 
 
 def main() -> None:
@@ -467,6 +596,7 @@ def main() -> None:
         log("PBX_AMI_PASSWORD and PBX_EVENT_WEBHOOK_SECRET must be set — exiting")
         sys.exit(1)
     threading.Thread(target=_routing_loop, daemon=True).start()
+    threading.Thread(target=_voice_broadcast_loop, daemon=True).start()
     backoff = 2
     while True:
         try:

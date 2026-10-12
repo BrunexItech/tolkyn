@@ -63,6 +63,7 @@ from app.models.image_job import ImageJob, ImageJobStatus
 from app.models.auth_token import AuthToken, AuthTokenKind
 from app.models.sms_optout import SmsOptOut
 from app.models.email_bounce import EmailBounce
+from app.models.voice_call_job import VoiceCallJob, VoiceCallJobStatus
 
 __all__ = [
     "User",
@@ -142,4 +143,6 @@ __all__ = [
     "AuthTokenKind",
     "SmsOptOut",
     "EmailBounce",
+    "VoiceCallJob",
+    "VoiceCallJobStatus",
 ]

@@ -360,6 +360,9 @@ class MessagingService:
         ).scalar_one_or_none()
         body = f"{b.body}\n\n{disclaimer.strip()}" if disclaimer and disclaimer.strip() else b.body
 
+        if b.channel == BroadcastChannel.VOICE:
+            return await self._send_voice(b, body)
+
         phones = [r["phone"] for r in b.recipients]
         skipped_rows: List[Dict[str, Any]] = []
         if b.channel == BroadcastChannel.SMS:
@@ -421,13 +424,60 @@ class MessagingService:
         await self.db.refresh(b)
         return b
 
+    async def _send_voice(self, b: Broadcast, body: str) -> Broadcast:
+        """Voice Broadcast doesn't send anything itself -- it renders the
+        message to speech once, queues one VoiceCallJob per recipient, and
+        leaves the actual dialing to the host's ami-bridge.py (the only
+        thing with a live AMI connection to Asterisk). See
+        voice_call_job.py and ami-bridge.py's _voice_broadcast_loop.
+
+        Only AMD-confirmed humans ever hear the message -- see the
+        [voice-broadcast] dialplan context."""
+        from app.services.ivr_tts import render_and_cache
+        from app.services.telephony import get_config
+        from app.models.voice_call_job import VoiceCallJob
+
+        audio_rel_path = await render_and_cache(body)
+        if not audio_rel_path:
+            b.status = BroadcastStatus.FAILED
+            b.results = [{"phone": r["phone"], "ok": False, "error": "Could not render voice message", "id": None, "simulated": False} for r in b.recipients]
+            b.failed_count = len(b.recipients)
+            await self.db.commit()
+            await self.db.refresh(b)
+            return b
+
+        cfg = await get_config(self.db, self.workspace_id)
+        caller_id = cfg.outbound_caller_id if cfg else None
+
+        for r in b.recipients:
+            self.db.add(VoiceCallJob(
+                workspace_id=self.workspace_id,
+                broadcast_id=b.id,
+                phone=r["phone"],
+                caller_id=caller_id,
+                audio_rel_path=audio_rel_path,
+            ))
+        # "sent" here means "queued for dialing", not "a human heard it" --
+        # v1 doesn't yet track true call outcome (see VoiceCallJob's own
+        # docstring), so the broadcast history shows attempts, not results.
+        b.sent_count = len(b.recipients)
+        b.status = BroadcastStatus.SENT
+        b.sent_at = datetime.now(timezone.utc)
+        b.provider = "asterisk"
+        b.simulated = 0
+        await self.db.commit()
+        await self.db.refresh(b)
+        return b
+
     async def summary(self) -> Dict[str, Any]:
         items = await self.list()
         sms = [b for b in items if b.channel == BroadcastChannel.SMS]
         wa = [b for b in items if b.channel == BroadcastChannel.WHATSAPP]
+        voice = [b for b in items if b.channel == BroadcastChannel.VOICE]
         return {
             "sms_broadcasts": len(sms),
             "whatsapp_broadcasts": len(wa),
+            "voice_broadcasts": len(voice),
             "messages_sent": sum(b.sent_count for b in items),
             "messages_failed": sum(b.failed_count for b in items),
             "sms_provider": "live" if sms_ready() else "simulated",
