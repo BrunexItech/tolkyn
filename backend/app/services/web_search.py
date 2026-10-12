@@ -38,7 +38,7 @@ def _clean(url: str) -> str | None:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
-async def search_domains(queries: List[str], per_query: int = 8, limit: int = 20) -> List[str]:
+async def search_domains(queries: List[str], per_query: int = 10, limit: int = 60) -> List[str]:
     """Return a de-duplicated list of candidate site roots for the given queries."""
     found: list[str] = []
     seen: set[str] = set()
@@ -61,6 +61,6 @@ async def search_domains(queries: List[str], per_query: int = 8, limit: int = 20
             except Exception as exc:  # noqa: BLE001
                 print(f"[web_search] query failed ({q}): {exc}")
 
-        await asyncio.gather(*(one(q) for q in queries[:5]))
+        await asyncio.gather(*(one(q) for q in queries[:10]))
 
     return found[:limit]

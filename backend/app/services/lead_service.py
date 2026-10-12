@@ -301,6 +301,27 @@ class LeadService:
         )
         return res.scalar_one_or_none()
 
+    async def known_domains(self) -> set[str]:
+        """Every website host already saved as a Lead in this workspace --
+        checked by LeadDiscovery *before* scanning a candidate site, so a
+        business already found in an earlier search doesn't get re-scanned
+        and re-scored for nothing, only to be dropped at save time anyway."""
+        from urllib.parse import urlparse
+
+        res = await self.db.execute(
+            select(Lead.website_url).where(
+                Lead.workspace_id == self.workspace_id, Lead.website_url.isnot(None)
+            )
+        )
+        hosts: set[str] = set()
+        for (url,) in res.all():
+            if not url:
+                continue
+            host = urlparse(url if "://" in url else f"https://{url}").netloc.lower().replace("www.", "")
+            if host:
+                hosts.add(host)
+        return hosts
+
     async def _is_duplicate(self, email: Optional[str], name: str, company: Optional[str]) -> bool:
         if email:
             res = await self.db.execute(

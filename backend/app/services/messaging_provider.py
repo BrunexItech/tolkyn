@@ -16,7 +16,7 @@ import asyncio
 import re
 import uuid
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import httpx
 
@@ -239,10 +239,20 @@ def _extract_error(r: httpx.Response) -> str:
 
 
 async def send_many(
-    channel: str, to_list: List[str], body: str, *, concurrency: int = 4, workspace_id: Optional[str] = None
+    channel: str,
+    to_list: List[str],
+    body: str,
+    *,
+    concurrency: int = 4,
+    workspace_id: Optional[str] = None,
+    per_recipient: Optional[Dict[str, str]] = None,
 ) -> List[SendResult]:
+    """`per_recipient`, when given, is {phone: its own personalized message}
+    -- a phone missing from it (or the arg left out entirely, as every
+    caller before this one does) falls back to the shared `body`, so this
+    is purely additive and changes nothing for an existing caller."""
     if channel == "whatsapp":
-        fn = lambda phone: send_whatsapp(phone, body, workspace_id=workspace_id)  # noqa: E731
+        fn = lambda phone: send_whatsapp(phone, (per_recipient or {}).get(phone, body), workspace_id=workspace_id)  # noqa: E731
         if not whatsapp_ready() and workspace_id:
             # Routing through the self-hosted session — its anti-ban pacing
             # (whatsapp-worker/src/antiban.js) assumes sends arrive one at a
@@ -250,7 +260,7 @@ async def send_many(
             # that pacing instead of respecting it.
             concurrency = 1
     else:
-        fn = lambda phone: send_sms(phone, body, workspace_id=workspace_id)  # noqa: E731
+        fn = lambda phone: send_sms(phone, (per_recipient or {}).get(phone, body), workspace_id=workspace_id)  # noqa: E731
 
     sem = asyncio.Semaphore(max(1, concurrency))
 

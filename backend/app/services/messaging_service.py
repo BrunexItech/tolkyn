@@ -25,6 +25,20 @@ try:
 except ImportError:  # pragma: no cover
     phonenumbers = None
 
+_MERGE_RE = re.compile(r"\{\{\s*([a-z_]+)\s*\}\}", re.IGNORECASE)
+
+
+def _merge(text: str, ctx: Dict[str, str]) -> str:
+    """Same {{name}}/{{first_name}} substitution Bulk Email already does
+    (email_campaign_service._merge) -- a no-op string if the message has no
+    placeholders, so this changes nothing for a broadcast that doesn't use
+    them."""
+    def sub(m: "re.Match") -> str:
+        key = m.group(1).lower()
+        return str(ctx.get(key, m.group(0)))
+
+    return _MERGE_RE.sub(sub, text or "")
+
 
 def _country_code_from_phone(phone: str) -> Optional[str]:
     """Most leads/customers never have their `country` field filled in
@@ -180,12 +194,21 @@ class MessagingService:
         s = (search or "").lower().strip()
 
         area_country_codes: Optional[set] = None
+        area_cities: set = set()
         if target_area_ids:
             from app.services.geo_service import GeoService
 
             areas = await GeoService(self.db, self.user_id).list_areas()
-            area_country_codes = {
-                a.country_code for a in areas if a.id in target_area_ids and a.country_code
+            chosen_areas = [a for a in areas if a.id in target_area_ids]
+            area_country_codes = {a.country_code for a in chosen_areas if a.country_code}
+            # City-level precision where we can get it: a contact whose
+            # saved city matches the target area's city/label is a real
+            # match, not just "somewhere in the same country" -- falls back
+            # to country-only below for contacts with no city on file
+            # (Customer has no city field at all yet) or areas drawn at
+            # country level.
+            area_cities = {
+                (a.city or a.label or "").strip().lower() for a in chosen_areas if a.city or a.label
             }
 
         if source in ("all", "lead"):
@@ -201,7 +224,7 @@ class MessagingService:
                 rows.append({
                     "name": l.name, "company": l.company, "phone": phone,
                     "country": l.country, "country_code": _country_code_from_phone(phone),
-                    "source": "lead", "ref_id": l.id,
+                    "city": l.city, "source": "lead", "ref_id": l.id,
                 })
 
         if source in ("all", "customer"):
@@ -216,6 +239,7 @@ class MessagingService:
                 rows.append({
                     "name": c.name, "company": c.company, "phone": phone,
                     "country": c.country, "country_code": _country_code_from_phone(phone),
+                    "city": None,  # Customer has no city field (yet)
                     "source": "customer", "ref_id": c.id,
                 })
 
@@ -228,8 +252,11 @@ class MessagingService:
             seen.add(r["phone"])
             if s and s not in f"{r['name']} {r['company'] or ''} {r['phone']}".lower():
                 continue
-            if area_country_codes is not None and r.get("country_code") not in area_country_codes:
-                continue
+            if area_country_codes is not None:
+                r_city = (r.get("city") or "").strip().lower()
+                city_match = bool(r_city) and r_city in area_cities
+                if not city_match and r.get("country_code") not in area_country_codes:
+                    continue
             uniq.append(r)
         return uniq[:limit]
 
@@ -348,7 +375,27 @@ class MessagingService:
                 for p in opted_out
             ]
 
-        results = await send_many(b.channel.value, phones, body, workspace_id=self.workspace_id) if phones else []
+        # {{name}} / {{first_name}} per recipient, same merge-field pattern
+        # already proven in Bulk Email -- a recipient with no name on file
+        # just gets "there", and a body with no placeholders at all comes
+        # back unchanged, so this is a no-op for every broadcast that
+        # doesn't use them.
+        per_recipient = {
+            r["phone"]: _merge(body, {
+                "name": (r.get("name") or "there"),
+                "first_name": (r.get("name") or "there").split(" ")[0],
+            })
+            for r in b.recipients
+        }
+
+        results = (
+            await send_many(
+                b.channel.value, phones, body,
+                workspace_id=self.workspace_id, per_recipient=per_recipient,
+            )
+            if phones
+            else []
+        )
 
         rows = skipped_rows + [
             {"phone": r.phone, "ok": r.ok, "id": r.id, "error": r.error, "simulated": r.simulated}

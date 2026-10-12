@@ -46,8 +46,15 @@ def _key(num: phonenumbers.PhoneNumber) -> str:
     return phonenumbers.format_number(num, phonenumbers.PhoneNumberFormat.E164)
 
 
-def extract_phones(html: str, page_url: str, *, limit: int = 3) -> List[str]:
-    region = _region_for(page_url)
+def extract_phones(html: str, page_url: str, *, limit: int = 3, region_hint: Optional[str] = None) -> List[str]:
+    # A caller-supplied region (e.g. the country of a Geo Targeting area the
+    # search was scoped to) beats the TLD guess -- a generic .com/.co site
+    # for an African/local business otherwise silently falls back to
+    # _DEFAULT_REGION ("US"), which makes libphonenumber reject a real local
+    # number as invalid (or, rarer, validate a wrong one) -- this is why a
+    # visibly-present number could get missed even though it's right there
+    # on the page.
+    region = (region_hint or "").strip().upper() or _region_for(page_url)
     soup = BeautifulSoup(html, "html.parser")
 
     ordered: List[str] = []

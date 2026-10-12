@@ -23,7 +23,9 @@ def _root(url: str) -> str:
     return f"{p.scheme}://{p.netloc}"
 
 
-async def scan_site(url: str, *, timeout: float = 12.0) -> Optional[Dict[str, Any]]:
+async def scan_site(
+    url: str, *, timeout: float = 12.0, region_hint: Optional[str] = None
+) -> Optional[Dict[str, Any]]:
     """Fetch a site's homepage + a couple of contact pages and extract a lead record."""
     root = _root(url)
     pages: List[str] = [root] + [urljoin(root + "/", p.lstrip("/")) for p in _CONTACT_PATHS]
@@ -36,7 +38,7 @@ async def scan_site(url: str, *, timeout: float = 12.0) -> Optional[Dict[str, An
     fetched = 0
 
     def collect_phones(html: str, page_url: str) -> None:
-        for ph in extract_phones(html, page_url):
+        for ph in extract_phones(html, page_url, region_hint=region_hint):
             digits = "".join(c for c in ph if c.isdigit())
             if digits not in phones_seen:
                 phones_seen.add(digits)
@@ -115,13 +117,15 @@ def _clean_emails(emails: set[str]) -> List[str]:
     return out
 
 
-async def scan_many(urls: List[str], *, concurrency: int = 6) -> List[Dict[str, Any]]:
+async def scan_many(
+    urls: List[str], *, concurrency: int = 6, region_hint: Optional[str] = None
+) -> List[Dict[str, Any]]:
     sem = asyncio.Semaphore(concurrency)
 
     async def guarded(u: str) -> Optional[Dict[str, Any]]:
         async with sem:
             try:
-                return await scan_site(u)
+                return await scan_site(u, region_hint=region_hint)
             except Exception:
                 return None
 

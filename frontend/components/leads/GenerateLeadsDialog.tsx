@@ -198,6 +198,8 @@ export function GenerateLeadsDialog({
               <option value={6}>Up to 6</option>
               <option value={12}>Up to 12</option>
               <option value={20}>Up to 20</option>
+              <option value={35}>Up to 35</option>
+              <option value={50}>Up to 50</option>
             </select>
           </Field>
         </div>

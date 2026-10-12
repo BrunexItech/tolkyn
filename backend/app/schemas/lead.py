@@ -219,7 +219,7 @@ class LeadDiscoverRequest(BaseModel):
     offer: str = Field("", description="What YOUR business offers (used for emails + proposals)")
     from_company: str = Field("", description="Your business name (the sender)")
     from_website: str = Field("", description="Your business website")
-    max_results: int = Field(default=12, ge=1, le=25)
+    max_results: int = Field(default=12, ge=1, le=50)
     target_area_ids: List[str] = Field(
         default_factory=list, description="Saved Geo Targeting areas to scope this search to"
     )

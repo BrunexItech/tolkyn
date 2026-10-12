@@ -52,10 +52,20 @@ async def discover_leads(
 ):
     """Describe the leads you want; Tolkyn searches the web and saves the matches."""
     area_labels: list[str] = []
+    region_hint: str | None = None
     if body.target_area_ids:
         areas = await GeoService(db, user_id).list_areas()
         chosen = {a.id: a for a in areas if a.id in body.target_area_ids}
         area_labels = [chosen[i].label for i in body.target_area_ids if i in chosen]
+        # Phone numbers on a scanned site are validated against this country
+        # instead of guessing from the site's domain ending -- a generic
+        # .com for a business in the targeted area otherwise defaults to a
+        # US-shaped guess, which makes a real local number fail validation.
+        for i in body.target_area_ids:
+            area = chosen.get(i)
+            if area and area.country_code:
+                region_hint = area.country_code
+                break
 
     result = await LeadDiscovery(db, user_id).run(
         body.prompt,
@@ -64,6 +74,7 @@ async def discover_leads(
         from_website=body.from_website,
         max_results=body.max_results,
         area_labels=area_labels,
+        region_hint=region_hint,
     )
     return LeadDiscoverResponse(
         success=result["success"],

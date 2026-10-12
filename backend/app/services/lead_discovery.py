@@ -40,8 +40,9 @@ class LeadDiscovery:
         from_company: str = "",
         from_website: str = "",
         max_results: int = 12,
-        max_scan: int = 18,
+        max_scan: int = 40,
         area_labels: List[str] | None = None,
+        region_hint: str | None = None,
     ) -> Dict[str, Any]:
         self._offer = offer
         self._from_company = from_company
@@ -83,9 +84,21 @@ class LeadDiscovery:
         except Exception as exc:  # noqa: BLE001
             print(f"[LeadDiscovery] web search skipped: {exc}")
 
-        roots = roots[:max_scan]
+        # Don't spend a scan (and an AI scoring call) re-examining a company
+        # already in this workspace -- the old duplicate check only ran at
+        # the very end (save time), after the expensive work was already
+        # done. Checking known domains up front is the same end result,
+        # just without wasting the scan/search budget getting there.
+        known = await self.leads.known_domains()
+        roots = [r for r in roots if urlparse(r).netloc.lower().replace("www.", "") not in known]
 
-        scanned = await scan_many(roots)
+        # Scale the scan budget with how many leads were actually asked for
+        # -- a fixed cap regardless of max_results meant asking for more
+        # leads didn't actually widen the search.
+        effective_max_scan = max(max_scan, max_results * 3)
+        roots = roots[:effective_max_scan]
+
+        scanned = await scan_many(roots, region_hint=region_hint)
         unique = self._dedupe(scanned)
 
         summarized = await summarize_many(unique, prompt, target_profile)
