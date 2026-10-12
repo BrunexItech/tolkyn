@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 class BroadcastChannel(str, Enum):
     SMS = "sms"
     WHATSAPP = "whatsapp"
+    VOICE = "voice"
 
 
 class BroadcastStatus(str, Enum):
