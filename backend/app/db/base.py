@@ -245,9 +245,25 @@ async def init_db():
             except Exception as exc:  # pragma: no cover - best effort in dev
                 print(f"[init_db] enum patch skipped ({type_name}={value}): {exc}")
 
-    # Create tables
+    # Create tables. Gunicorn boots several workers at once, each running
+    # init_db() independently -- when a brand-new table's model defines a
+    # brand-new Postgres ENUM type, two workers can both see it doesn't
+    # exist yet and race to CREATE TYPE (Postgres has no CREATE TYPE IF NOT
+    # EXISTS), which raises a duplicate-key error and would otherwise crash
+    # that worker's startup entirely. Confirmed against a real multi-worker
+    # boot (VoiceCallJobStatus) -- one worker won the race, the other
+    # crashed and gunicorn auto-restarted it, which then succeeded since
+    # the type already existed by then. Retrying once here does the same
+    # recovery without needing a whole worker crash/restart cycle to do it.
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(BaseModel.metadata.create_all)
+    except Exception as exc:
+        print(f"[init_db] create_all raced with another worker, retrying once: {exc}")
+        async with engine.begin() as conn:
+            await conn.run_sync(BaseModel.metadata.create_all)
+
     async with engine.begin() as conn:
-        await conn.run_sync(BaseModel.metadata.create_all)
         for stmt in _SCHEMA_PATCHES:
             try:
                 await conn.execute(_sql_text(stmt))
