@@ -142,7 +142,12 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     call_id_header = None
     if sip_headers:
         for k, v in sip_headers.items():
-            if str(k).lower().replace("_", "-") == "x-call-id" and v:
+            # Renamed from X-Call-Id -- confirmed via real diagnostic
+            # logging that name never once arrived back in sip_headers
+            # (while X-Workspace-Id, set the same way, always did),
+            # consistent with colliding with SIP's own mandatory Call-ID
+            # header. See extensions.conf.template's add-workspace-header.
+            if str(k).lower().replace("_", "-") == "x-tolkyn-call-id" and v:
                 call_id_header = str(v)
                 break
     # Temporary diagnostic -- ai_conversation_id has never once been stamped

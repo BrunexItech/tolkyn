@@ -130,13 +130,20 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  ; it's a plain (non-inherited) channel var, so it wouldn't otherwise be
  ; visible on the new channel at all.
  ;
- ; X-Call-Id carries ${CHANNEL(linkedid)} -- the SAME id the AMI bridge
- ; already reports as channel_id / stores as Call.provider_channel_id for
- ; this call (see call_center_service.py's handle_pbx_event). ElevenLabs'
- ; conversation-init webhook surfaces it back in sip_headers, letting us
- ; save their conversation_id onto the matching Call row -- which is what
- ; lets their post-call webhook (transcript + audio, once the call ends)
- ; find its way back to the right call in our own call log.
+ ; X-Tolkyn-Call-Id carries ${CHANNEL(linkedid)} -- the SAME id the AMI
+ ; bridge already reports as channel_id / stores as Call.provider_channel_id
+ ; for this call (see call_center_service.py's handle_pbx_event).
+ ; ElevenLabs' conversation-init webhook surfaces it back in sip_headers,
+ ; letting us save their conversation_id onto the matching Call row --
+ ; which is what lets us pull the transcript back afterward (see
+ ; elevenlabs_conversations.py) and find our way to the right call.
+ ;
+ ; Named X-Tolkyn-Call-Id, not the shorter X-Call-Id first tried -- Call-ID
+ ; is itself a mandatory, standard SIP header present on every request
+ ; (RFC 3261), and the original name never once made it back in sip_headers
+ ; despite X-Workspace-Id (set the exact same way, same Gosub) always
+ ; arriving fine -- confirmed via real diagnostic logging on a live call,
+ ; consistent with it being dropped for colliding with the real header.
  ;
  ; NOTE: this used to read the bare ${LINKEDID}, which isn't a real
  ; dialplan variable (it's a CDR/log field) -- an undefined variable
@@ -175,7 +182,7 @@ exten => ivr-ai-agent,1,ExecIf($["${DB(tolkyn/ext_record/${WS_EXT})}" = "1"]?Mix
  same => n,Hangup()
 
 exten => add-workspace-header,1,Set(PJSIP_HEADER(add,X-Workspace-Id)=${ARG1})
- same => n,Set(PJSIP_HEADER(add,X-Call-Id)=${ARG2})
+ same => n,Set(PJSIP_HEADER(add,X-Tolkyn-Call-Id)=${ARG2})
  ; chan_pjsip has no jitter-buffer endpoint config at all (see
  ; pjsip.conf.template's own note on the outage this caused) -- the
  ; real mechanism is this dialplan function, and same as the SIP
