@@ -1007,10 +1007,47 @@ _TRANSCRIPT_MIN_AGE = timedelta(seconds=45)
 _TRANSCRIPT_GIVE_UP_AFTER = timedelta(hours=6)
 
 
+def _transcript_email_lines(call: Call, summary: Optional[str]) -> List[str]:
+    lines: List[str] = []
+    if summary:
+        lines.append(f"Summary: {summary}")
+    lines.append(f"Caller: {call.contact_name or 'Unknown'} ({call.number})")
+    lines.append("")
+    for turn in call.ai_transcript or []:
+        speaker = "Sandra" if turn.get("role") == "agent" else "Caller"
+        msg = (turn.get("message") or "").strip()
+        if msg:
+            lines.append(f"{speaker}: {msg}")
+    return lines
+
+
+async def _email_transcript(db: AsyncSession, call: Call) -> None:
+    """Sends the finished conversation to the workspace's registered
+    account email -- the person this AI answered a call on behalf of was,
+    by definition, not the one on the line, so this is how they actually
+    see what was said (including anything personal a caller shared)."""
+    from app.services.platform_mailer import send_branded
+
+    user = (
+        await db.execute(select(User.email).where(User.id == call.workspace_id))
+    ).scalar_one_or_none()
+    if not user:
+        return
+    await send_branded(
+        user,
+        f"AI call transcript — {call.contact_name or call.number}",
+        heading="Call handled by your AI assistant",
+        body_lines=_transcript_email_lines(call, call.ai_summary),
+        footnote="Sent automatically whenever your AI receptionist finishes a call, "
+        "so nothing discussed — including anything personal a caller shared — is missed.",
+    )
+
+
 async def sync_pending_transcripts(db: AsyncSession) -> int:
     """Every ended AI-agent call that doesn't have a transcript yet gets its
-    conversation fetched directly from ElevenLabs' API. Returns how many
-    were filled in, for scheduler logging."""
+    conversation fetched directly from ElevenLabs' API, then emailed to the
+    workspace's registered address. Returns how many were filled in, for
+    scheduler logging."""
     from app.services.elevenlabs_conversations import fetch_conversation
 
     now = _now()
@@ -1038,6 +1075,9 @@ async def sync_pending_transcripts(db: AsyncSession) -> int:
         call.ai_transcript = result["transcript"]
         call.ai_summary = result.get("summary")
         filled += 1
-    if filled:
         await db.commit()
+        try:
+            await _email_transcript(db, call)
+        except Exception as exc:  # noqa: BLE001 — the transcript is saved either way
+            logger.warning("transcript email failed for call %s: %r", call.id, exc)
     return filled
