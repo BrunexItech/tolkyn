@@ -148,7 +148,7 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
     # Temporary diagnostic -- ai_conversation_id has never once been stamped
     # on a real Call row, so logging every piece of this match rather than
     # guessing which one is actually missing/wrong.
-    logger.info(
+    logger.warning(
         "conversation-init stamp attempt: conversation_id=%r call_id_header=%r "
         "workspace_id=%r sip_headers_keys=%r",
         conversation_id, call_id_header, workspace_id,
@@ -166,7 +166,7 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
         if call:
             call.ai_conversation_id = conversation_id
             await db.commit()
-            logger.info("conversation-init: stamped call %s with conversation_id=%s", call.id, conversation_id)
+            logger.warning("conversation-init: stamped call %s with conversation_id=%s", call.id, conversation_id)
         else:
             logger.warning(
                 "conversation-init: no Call row matched workspace_id=%s provider_channel_id=%s",
