@@ -17,6 +17,12 @@ ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
 ReadOnlyPaths=/opt/tolkyn
+# Voice Broadcast fetches rendered TTS audio onto this host before
+# originating each call (see _voice_broadcast_loop in ami-bridge.py) --
+# same directory, same exception tolkyn-ivr-agi.service already carries
+# for the identical IVR-prompt use case. Everything else stays read-only
+# under ProtectSystem=strict; this is the one path that needs a write.
+ReadWritePaths=/usr/share/asterisk/sounds
 
 [Install]
 WantedBy=multi-user.target
