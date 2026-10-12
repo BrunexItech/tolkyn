@@ -656,6 +656,7 @@ class CallCenterService:
         return {
             "configured": creds.configured,
             "provider": cfg.provider,
+            "did": cfg.outbound_caller_id,
             "ws_url": creds.ws_url,
             "domain": creds.domain,
             "extension": creds.extension,

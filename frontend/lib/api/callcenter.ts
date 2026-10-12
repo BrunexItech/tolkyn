@@ -166,6 +166,7 @@ export interface SoftphoneConfig {
   /** true only when a real SIP trunk is active AND this agent has a line assigned */
   configured: boolean;
   provider: string; // simulated | cloudone | asterisk
+  did: string | null; // this workspace's assigned phone number
   ws_url: string | null;
   domain: string | null;
   extension: string | null;

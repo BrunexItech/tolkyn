@@ -146,12 +146,24 @@ function DialerCard({
   onDial: (name: string, number: string) => void;
 }) {
   const [number, setNumber] = useState("");
+  const { softphone } = useCallCenter();
 
   const press = (k: string) => setNumber((n) => (n.length < 20 ? n + k : n));
 
   return (
     <Card accent="blue">
-      <CardTitle icon={<PhoneOutgoing />}>Dialer</CardTitle>
+      <CardTitle
+        icon={<PhoneOutgoing />}
+        action={
+          softphone?.did ? (
+            <span className="font-mono text-[10.5px] text-om-muted" title="Your assigned number">
+              {softphone.did}
+            </span>
+          ) : undefined
+        }
+      >
+        Dialer
+      </CardTitle>
 
       <div className="mb-3 flex h-11 items-center justify-between rounded-lg border border-om-border bg-om-bg/60 px-3">
         <input

@@ -134,6 +134,7 @@ class SoftphoneEvent(BaseModel):
 class SoftphoneConfig(BaseModel):
     configured: bool
     provider: str = "simulated"
+    did: Optional[str] = None  # this workspace's assigned phone number
     ws_url: Optional[str] = None
     domain: Optional[str] = None
     extension: Optional[str] = None
