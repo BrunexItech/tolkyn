@@ -18,7 +18,12 @@ secret = ${PBX_AMI_PASSWORD}
 deny = 0.0.0.0/0.0.0.0
 permit = 127.0.0.1/255.255.255.255
 ; read: call+cdr channel/bridge/hangup events; system for connectivity.
-; write: 'call' only, reserved for server-side originate later — no config,
-; no command, no system-exec.
+; write: 'call' (hangup/redirect) + 'originate' (Voice Broadcast's
+; AMI Originate action -- its own permission class since Asterisk 1.6.1,
+; separate from 'call'; without it Originate is silently rejected with
+; "Permission denied", which a fire-and-forget sendall() never sees, so
+; it looks like success on our side while Asterisk drops it entirely --
+; confirmed against a real deploy). Still no config, no command, no
+; system-exec.
 read = call,cdr,dialplan,system
-write = call
+write = call,originate
