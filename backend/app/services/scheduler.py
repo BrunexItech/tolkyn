@@ -25,6 +25,7 @@ from app.services.post_service import PostService
 from app.services.social_lead_service import SocialLeadService
 from app.services.email_reply_service import poll_all_accounts as poll_email_replies
 from app.services.video_service import advance_pending_jobs
+from app.services.call_center_service import sync_pending_transcripts
 
 _task: "asyncio.Task | None" = None
 
@@ -73,6 +74,7 @@ async def run_due_posts_once() -> int:
     await _advance_image_jobs()
     await _scan_social_leads_once()
     await _poll_email_replies()
+    await _sync_call_transcripts()
     return published
 
 
@@ -137,6 +139,20 @@ async def _advance_video_jobs() -> None:
                 print(f"[scheduler] advanced {n} video generation job(s)")
         except Exception as exc:  # pragma: no cover - best effort
             print(f"[scheduler] video job sweep error: {exc}")
+
+
+async def _sync_call_transcripts() -> None:
+    """Pulls finished AI-agent calls' transcripts straight from ElevenLabs'
+    API (see call_center_service.sync_pending_transcripts) -- the reliable
+    alternative to their post-call webhook, which has proven to never
+    actually fire despite being correctly configured on their end."""
+    async with AsyncSessionLocal() as db:
+        try:
+            n = await sync_pending_transcripts(db)
+            if n:
+                print(f"[scheduler] synced {n} call transcript(s)")
+        except Exception as exc:  # pragma: no cover - best effort
+            print(f"[scheduler] call transcript sync error: {exc}")
 
 
 async def _run_scheduled_automations() -> None:

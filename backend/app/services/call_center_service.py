@@ -991,3 +991,53 @@ class CallCenterService:
                     return await self._end_call(ring, "missed")
             return None
         return None
+
+
+# ==========================================================================
+# Transcript sync — polled by services/scheduler.py. Pull-based alternative
+# to ElevenLabs' post-call webhook (see elevenlabs_conversations.py for why).
+# ==========================================================================
+
+# ElevenLabs can take a little while to finish processing a call into a
+# transcript -- give it a head start rather than hammering an id that
+# isn't ready yet. Stop trying after a few hours; a conversation ElevenLabs
+# never finishes processing by then almost certainly never will, and this
+# keeps the sweep from re-querying the same dead id forever.
+_TRANSCRIPT_MIN_AGE = timedelta(seconds=45)
+_TRANSCRIPT_GIVE_UP_AFTER = timedelta(hours=6)
+
+
+async def sync_pending_transcripts(db: AsyncSession) -> int:
+    """Every ended AI-agent call that doesn't have a transcript yet gets its
+    conversation fetched directly from ElevenLabs' API. Returns how many
+    were filled in, for scheduler logging."""
+    from app.services.elevenlabs_conversations import fetch_conversation
+
+    now = _now()
+    cutoff_old = now - _TRANSCRIPT_GIVE_UP_AFTER
+    cutoff_recent = now - _TRANSCRIPT_MIN_AGE
+
+    rows = (
+        await db.execute(
+            select(Call).where(
+                Call.ai_conversation_id.isnot(None),
+                Call.ai_transcript.is_(None),
+                Call.state == CallState.ENDED,
+                Call.ended_at.isnot(None),
+                Call.ended_at >= cutoff_old,
+                Call.ended_at <= cutoff_recent,
+            )
+        )
+    ).scalars().all()
+
+    filled = 0
+    for call in rows:
+        result = await fetch_conversation(call.ai_conversation_id)
+        if not result or not result.get("transcript"):
+            continue  # not ready yet (or genuinely empty) — try again next sweep
+        call.ai_transcript = result["transcript"]
+        call.ai_summary = result.get("summary")
+        filled += 1
+    if filled:
+        await db.commit()
+    return filled
