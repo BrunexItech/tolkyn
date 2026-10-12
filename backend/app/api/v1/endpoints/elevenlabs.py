@@ -32,6 +32,7 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import logging
 import re
 import time
 from typing import Any, Dict, Optional
@@ -49,6 +50,7 @@ from app.services.contact_lookup import resolve_contact_name, save_known_caller
 from app.services.ivr_service import IvrService
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _check_secret(request: Request) -> None:
@@ -143,6 +145,15 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
             if str(k).lower().replace("_", "-") == "x-call-id" and v:
                 call_id_header = str(v)
                 break
+    # Temporary diagnostic -- ai_conversation_id has never once been stamped
+    # on a real Call row, so logging every piece of this match rather than
+    # guessing which one is actually missing/wrong.
+    logger.info(
+        "conversation-init stamp attempt: conversation_id=%r call_id_header=%r "
+        "workspace_id=%r sip_headers_keys=%r",
+        conversation_id, call_id_header, workspace_id,
+        list(sip_headers.keys()) if sip_headers else None,
+    )
     if conversation_id and call_id_header and workspace_id:
         call = (
             await db.execute(
@@ -155,6 +166,12 @@ async def conversation_init(request: Request, db: AsyncSession = Depends(get_db)
         if call:
             call.ai_conversation_id = conversation_id
             await db.commit()
+            logger.info("conversation-init: stamped call %s with conversation_id=%s", call.id, conversation_id)
+        else:
+            logger.warning(
+                "conversation-init: no Call row matched workspace_id=%s provider_channel_id=%s",
+                workspace_id, call_id_header,
+            )
     # business_name is a REQUIRED variable in the agent's first message --
     # always set it to something, even when the workspace can't be resolved
     # (an unmapped test call, a misdial), or the agent errors out before it
