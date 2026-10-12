@@ -30,8 +30,17 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --no-index --find-links=/wheels -r requirements.txt \
     && rm -rf /wheels
 
+# Chromium for site_scanner.py's Playwright fallback (a site whose contact
+# info only appears after JavaScript runs, which the plain httpx+
+# BeautifulSoup scan can't see at all) -- --with-deps pulls in the system
+# libraries Chromium needs, while root still has apt access here (before
+# USER appuser below). Fixed browsers path so ownership is explicit rather
+# than depending on appuser's home directory.
+ENV PLAYWRIGHT_BROWSERS_PATH=/app/.playwright
+RUN playwright install --with-deps chromium
+
 COPY . .
-RUN mkdir -p /app/media && chown -R appuser:appuser /app
+RUN mkdir -p /app/media /app/.playwright && chown -R appuser:appuser /app
 
 USER appuser
 

@@ -1,5 +1,6 @@
 """Shallow site scan: homepage + likely contact pages -> merged contact record."""
 import asyncio
+import logging
 from typing import Any, Dict, List, Optional
 from urllib.parse import urljoin, urlparse
 
@@ -7,6 +8,8 @@ import httpx
 
 from app.services.crawler.lead_extractor import LeadExtractor
 from app.services.phone_extractor import extract_phones
+
+logger = logging.getLogger(__name__)
 
 _UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
@@ -21,6 +24,65 @@ def _root(url: str) -> str:
         url = "https://" + url
     p = urlparse(url)
     return f"{p.scheme}://{p.netloc}"
+
+
+async def _scan_with_playwright(
+    url: str, *, region_hint: Optional[str] = None, timeout_ms: float = 15000
+) -> Optional[Dict[str, Any]]:
+    """Fallback for a site whose contact info only appears after
+    JavaScript runs -- invisible to the plain httpx+BeautifulSoup fetch
+    above. Renders the page in headless Chromium and feeds the resulting
+    HTML through the exact same extractor the fast path uses. Any failure
+    here (missing browser, sandbox issue, timeout, crash) returns None --
+    this is strictly a best-effort extra pass, never something the rest of
+    discovery depends on."""
+    try:
+        from playwright.async_api import async_playwright
+    except ImportError:
+        return None
+
+    root = _root(url)
+    try:
+        async with async_playwright() as pw:
+            browser = await pw.chromium.launch(args=["--no-sandbox"])
+            try:
+                page = await browser.new_page(user_agent=_UA)
+                await page.goto(root, timeout=timeout_ms, wait_until="networkidle")
+                html = await page.content()
+            finally:
+                await browser.close()
+    except Exception as exc:  # noqa: BLE001 — never block discovery on this
+        logger.warning("playwright scan failed for %s: %r", root, exc)
+        return None
+
+    base = _extractor.extract_from_html(html, root)
+    phones: List[str] = []
+    seen: set[str] = set()
+    for ph in extract_phones(html, root, region_hint=region_hint):
+        digits = "".join(c for c in ph if c.isdigit())
+        if digits not in seen:
+            seen.add(digits)
+            phones.append(ph)
+    emails = sorted(_clean_emails(set(base.get("emails") or [])))
+    if not emails and not phones and not base.get("company"):
+        return None
+
+    return {
+        "company": base.get("company") or base.get("domain") or root,
+        "domain": base.get("domain") or urlparse(root).netloc,
+        "website": root,
+        "source_url": root,
+        "title": base.get("title", ""),
+        "description": base.get("description", ""),
+        "keywords": base.get("keywords") or [],
+        "headers": base.get("headers") or [],
+        "emails": emails,
+        "email": emails[0] if emails else None,
+        "phones": phones[:3],
+        "phone": phones[0] if phones else None,
+        "social_links": base.get("social_links") or {},
+        "pages_scanned": 1,
+    }
 
 
 async def scan_site(
@@ -82,7 +144,10 @@ async def scan_site(
     emails = sorted(_clean_emails(merged_emails))
     phones = phones_ordered[:3]
     if not emails and not phones and not base.get("company"):
-        return None
+        # The plain fetch found nothing at all -- try once more with a real
+        # rendered browser, in case the contact info only appears after
+        # JavaScript runs. Still returns None if that also finds nothing.
+        return await _scan_with_playwright(root, region_hint=region_hint)
 
     return {
         "company": base.get("company") or base.get("domain") or root,
