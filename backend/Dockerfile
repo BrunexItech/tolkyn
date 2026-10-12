@@ -1,5 +1,11 @@
+# Pinned to Debian 12 (bookworm) explicitly, not the floating python:3.11-slim
+# tag -- that tag recently moved to Debian 13 (trixie), which Playwright's
+# `install --with-deps` doesn't recognise yet (it falls back to guessing
+# Ubuntu 20.04 package names, two of which don't exist on trixie's repos and
+# hard-fail the build). Bookworm has been officially supported since
+# Playwright 1.37, well before the 1.46 pinned in requirements.txt.
 # --- builder: compile wheels once, keep build tools out of the final image ---
-FROM python:3.11-slim AS builder
+FROM python:3.11-slim-bookworm AS builder
 
 WORKDIR /build
 
@@ -12,7 +18,7 @@ COPY requirements.txt .
 RUN pip wheel --no-cache-dir --wheel-dir /wheels -r requirements.txt
 
 # ------------------------------- runtime -------------------------------
-FROM python:3.11-slim AS runtime
+FROM python:3.11-slim-bookworm AS runtime
 
 # libpq5 is the psycopg2 runtime lib; curl backs the container healthcheck;
 # ffmpeg composites the brand-logo watermark onto generated videos.
