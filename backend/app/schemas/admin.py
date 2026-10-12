@@ -105,6 +105,7 @@ class PlatformUserResponse(BaseModel):
     subscription_ends_at: Optional[datetime] = None
     sms_sender_id: Optional[str] = None  # null = platform's shared default sender
     sms_provider_token_set: bool = False  # never return the token itself
+    tts_voice_id: Optional[str] = None  # null = platform's shared default ElevenLabs voice
     module_overrides: Dict[str, bool] = {}
     package_id: Optional[str] = None
     package_name: Optional[str] = None
@@ -139,6 +140,7 @@ class PlatformUserUpdate(BaseModel):
     subscription_ends_at: Optional[datetime] = None  # past this, generation is blocked (core/limits.py)
     sms_sender_id: Optional[str] = None  # "" or null to clear (back to the shared default sender)
     sms_provider_token: Optional[str] = None  # write-only; "" clears; unset key leaves it untouched
+    tts_voice_id: Optional[str] = None  # "" or null to clear (back to the shared default voice)
     module_overrides: Optional[Dict[str, bool]] = None  # {module: grant?}
     package_id: Optional[str] = None  # "" or null to clear (grandfathered to full access)
 

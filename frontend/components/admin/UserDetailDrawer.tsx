@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CalendarClock, Check, Clapperboard, ImageIcon, LayoutGrid, MessageSquare } from "lucide-react";
+import { CalendarClock, Check, Clapperboard, ImageIcon, LayoutGrid, MessageSquare, Mic } from "lucide-react";
 import { Drawer } from "@/components/om/primitives/Drawer";
 import { LoadingState, Spinner } from "@/components/om/primitives/Spinner";
 import { StatusBadge, type BadgeTone } from "@/components/om/primitives/StatusBadge";
@@ -55,6 +55,7 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
   const [endsAt, setEndsAt] = useState("");
   const [senderId, setSenderId] = useState("");
   const [providerToken, setProviderToken] = useState("");
+  const [voiceId, setVoiceId] = useState("");
   useEffect(() => {
     setBudgetInput(user?.video_budget_usd != null ? String(user.video_budget_usd) : "");
     setImgLimit(user?.daily_image_limit != null ? String(user.daily_image_limit) : "");
@@ -63,6 +64,7 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
     setEndsAt(toDateInput(user?.subscription_ends_at));
     setSenderId(user?.sms_sender_id ?? "");
     setProviderToken(""); // write-only — never pre-filled, and cleared when switching users
+    setVoiceId(user?.tts_voice_id ?? "");
   }, [
     user?.id,
     user?.video_budget_usd,
@@ -71,6 +73,7 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
     user?.subscription_started_at,
     user?.subscription_ends_at,
     user?.sms_sender_id,
+    user?.tts_voice_id,
   ]);
 
   const commitLimit = (kind: "image" | "video", raw: string) => {
@@ -121,6 +124,13 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
     const value = senderId.trim().slice(0, 20) || null;
     if (value === (user.sms_sender_id ?? null)) return;
     update.mutate({ id: user.id, sms_sender_id: value });
+  };
+
+  const commitVoiceId = () => {
+    if (!user) return;
+    const value = voiceId.trim().slice(0, 64) || null;
+    if (value === (user.tts_voice_id ?? null)) return;
+    update.mutate({ id: user.id, tts_voice_id: value });
   };
 
   const commitProviderToken = () => {
@@ -383,6 +393,28 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
                 blank and it sends through the platform&apos;s own account. Write-only: never shown again once saved.
               </p>
             </div>
+          </div>
+
+          <div>
+            <SectionLabel>
+              <span className="inline-flex items-center gap-1">
+                <Mic className="size-3" /> TTS voice (IVR + Voice Broadcast)
+              </span>
+            </SectionLabel>
+            <input
+              type="text"
+              value={voiceId}
+              onChange={(e) => setVoiceId(e.target.value)}
+              onBlur={commitVoiceId}
+              onKeyDown={(e) => e.key === "Enter" && (e.currentTarget as HTMLInputElement).blur()}
+              placeholder="Shared default voice"
+              maxLength={64}
+              className="w-full rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 font-mono text-[12px] text-om-text outline-none focus:border-om-violet/60"
+            />
+            <p className="mt-1.5 text-[10px] text-om-faint">
+              An ElevenLabs Voice ID (from their Voice Library or this client&apos;s own cloned voice). Blank =
+              every IVR prompt and Voice Broadcast from this account uses the platform&apos;s shared default voice.
+            </p>
           </div>
 
           <div>

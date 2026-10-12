@@ -458,7 +458,10 @@ class MessagingService:
         from app.services.telephony import get_config
         from app.models.voice_call_job import VoiceCallJob
 
-        audio_rel_path = await render_and_cache(body)
+        voice_id = (
+            await self.db.execute(select(User.tts_voice_id).where(User.id == self.workspace_id))
+        ).scalar_one_or_none()
+        audio_rel_path = await render_and_cache(body, voice_id)
         if not audio_rel_path:
             b.status = BroadcastStatus.FAILED
             b.results = [{"phone": r["phone"], "ok": False, "error": "Could not render voice message", "id": None, "simulated": False} for r in b.recipients]

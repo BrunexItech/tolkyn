@@ -91,6 +91,12 @@ class User(BaseModel):
     # NULL = send with the platform's shared MOBILESASA_TOKEN as usual.
     sms_provider_token_enc = Column(String(600), nullable=True)
 
+    # Custom ElevenLabs TTS voice for this workspace's IVR prompts + Voice
+    # Broadcast messages (super admin controlled, same paid-add-on pattern
+    # as sms_sender_id above). NULL = both use the platform's shared
+    # default voice (ELEVENLABS_IVR_VOICE_ID) as before.
+    tts_voice_id = Column(String(64), nullable=True)
+
     # User-editable text appended to every outgoing Bulk SMS (Settings ->
     # Bulk SMS). NULL/blank = nothing appended -- never forced on a
     # workspace that hasn't set one. See services/messaging_service.py.

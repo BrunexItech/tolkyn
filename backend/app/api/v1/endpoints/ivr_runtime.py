@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import settings
 from app.db import get_db
 from app.models.call import Call, CallDirection, CallState
+from app.models.user import User
 from app.services.contact_lookup import resolve_contact_name
 from app.services.ivr_service import IvrService
 from app.services.ivr_tts import render_and_cache
@@ -52,9 +53,14 @@ async def _to_agi(db: AsyncSession, directive: Dict[str, Any], workspace_id: str
     it's done — a fixed vocabulary the dialplan branches on."""
     action = directive.get("action")
 
+    if action in ("ivr_prompt", "ivr_reprompt", "message"):
+        voice_id = (
+            await db.execute(select(User.tts_voice_id).where(User.id == workspace_id))
+        ).scalar_one_or_none()
+
     if action in ("ivr_prompt", "ivr_reprompt"):
         flow = await IvrService(db, workspace_id).get_flow(create=False)
-        say = await render_and_cache(str(directive.get("prompt") or ""))
+        say = await render_and_cache(str(directive.get("prompt") or ""), voice_id)
         return {
             "then": "menu",
             "call_id": call.id,
@@ -72,7 +78,7 @@ async def _to_agi(db: AsyncSession, directive: Dict[str, Any], workspace_id: str
         return {"then": "voicemail"}
 
     if action == "message":
-        say = await render_and_cache(str(directive.get("text") or ""))
+        say = await render_and_cache(str(directive.get("text") or ""), voice_id)
         return {"then": "hangup", "say": say}
 
     if action == "transfer":

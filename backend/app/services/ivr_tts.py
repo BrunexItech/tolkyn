@@ -27,24 +27,30 @@ _MEDIA_DIR = Path(__file__).resolve().parents[2] / "media" / "ivr-audio"
 _TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 
-def _cache_key(text: str) -> str:
-    raw = f"{settings.ELEVENLABS_IVR_VOICE_ID}|{settings.ELEVENLABS_TTS_MODEL}|{text}"
+def _cache_key(text: str, voice_id: str) -> str:
+    raw = f"{voice_id}|{settings.ELEVENLABS_TTS_MODEL}|{text}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-async def render_and_cache(text: str) -> Optional[str]:
+async def render_and_cache(text: str, voice_id: Optional[str] = None) -> Optional[str]:
     """Returns the media-relative path (e.g. "ivr-audio/<hash>.wav") for this
     prompt's audio, rendering + caching it first if needed. None if TTS isn't
     configured or rendering fails — callers should fall back to silence
-    (still collecting DTMF) rather than breaking the call."""
+    (still collecting DTMF) rather than breaking the call.
+
+    `voice_id`: a workspace's own custom voice (User.tts_voice_id), when it
+    has one set — falls back to the platform's shared default otherwise, so
+    every existing caller (that doesn't pass this) behaves exactly as
+    before."""
     text = (text or "").strip()
     if not text:
         return None
     if not settings.ELEVENLABS_API_KEY:
         logger.warning("ELEVENLABS_API_KEY not set — IVR prompts won't have audio")
         return None
+    resolved_voice_id = (voice_id or "").strip() or settings.ELEVENLABS_IVR_VOICE_ID
 
-    key = _cache_key(text)
+    key = _cache_key(text, resolved_voice_id)
     _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     wav_path = _MEDIA_DIR / f"{key}.wav"
     rel_path = f"ivr-audio/{key}.wav"
@@ -52,7 +58,7 @@ async def render_and_cache(text: str) -> Optional[str]:
         return rel_path
 
     try:
-        mp3_bytes = await _fetch_tts_mp3(text)
+        mp3_bytes = await _fetch_tts_mp3(text, resolved_voice_id)
         wav_bytes = await _mp3_to_wav8k(mp3_bytes)
     except Exception as e:  # noqa: BLE001 — a bad render shouldn't break the call
         logger.warning("IVR TTS render failed: %s", e)
@@ -62,10 +68,10 @@ async def render_and_cache(text: str) -> Optional[str]:
     return rel_path
 
 
-async def _fetch_tts_mp3(text: str) -> bytes:
+async def _fetch_tts_mp3(text: str, voice_id: str) -> bytes:
     async with httpx.AsyncClient(timeout=20) as client:
         resp = await client.post(
-            _TTS_URL.format(voice_id=settings.ELEVENLABS_IVR_VOICE_ID),
+            _TTS_URL.format(voice_id=voice_id),
             headers={
                 "xi-api-key": settings.ELEVENLABS_API_KEY,
                 "Content-Type": "application/json",
