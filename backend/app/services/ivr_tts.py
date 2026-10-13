@@ -113,18 +113,26 @@ async def _mp3_to_wav8k(mp3_bytes: bytes) -> bytes:
         # it ambiguous risks a file that "converts successfully" but that
         # Asterisk can't actually play (silently, with no error either side).
         #
-        # 200ms of silence padded onto the start (adelay) -- a voice whose
-        # raw render starts speaking at frame 1, with zero natural lead-in,
-        # has nothing protecting its first syllable from Asterisk's own
-        # playback-start overhead, regardless of the channel-settle pause
-        # ivr_agi.py already does before calling STREAM FILE at all. A
-        # voice with its own natural lead-in was never at risk; this one
-        # is a safety margin for one that isn't, confirmed by a real
-        # report of "hello, welcome to Tolkyn" losing its opening words
-        # specifically after switching to a new custom voice.
+        # 3s of silence padded onto the start (adelay) -- NOT a small
+        # playback-start safety margin any more (200ms, tried first, didn't
+        # help). Real evidence from a live test call: the source file and
+        # the actually-transmitted RTP both confirmed complete and correct
+        # from frame 1 (direct MixMonitor capture + direct file analysis),
+        # yet the caller consistently lost the exact same ~2.8s of real
+        # speech ("Hello, thank you for calling Tolkyn,") no matter how
+        # much dialplan/AGI pre-roll timing was changed, or whether the
+        # call used early media before answering or answered immediately.
+        # That fixed, timing-independent loss points to Asterisk's internal
+        # handoff from the Playtones() ring generator to file-based STREAM
+        # FILE playback -- a different audio engine switch the caller's
+        # jitter buffer has to re-sync around, consistently eating a fixed
+        # amount of whatever plays right after. Padding the file itself
+        # with enough silence to outlast that fixed loss means it eats
+        # silence, not real words -- a content-level fix for a transport-
+        # level problem that no dialplan timing change could solve.
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", src.name,
-            "-af", "adelay=200:all=1",
+            "-af", "adelay=3000:all=1",
             "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le", "-f", "wav", dst.name,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
