@@ -7,20 +7,24 @@ Prompt -> leads.
 4. Summarise / score each company against the user's intent.
 5. Persist the best matches to the caller's workspace.
 """
+import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 from urllib.parse import urlparse
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.lead import LeadSource, LeadStatus
-from app.schemas.lead import LeadCreate
+from app.models.lead_discovery_job import LeadDiscoveryJob, LeadDiscoveryJobStatus
+from app.schemas.lead import LeadCreate, LeadDiscoverResponse, LeadDiscoverStats, LeadResponse
 from app.services.discovery_ai import plan_search, summarize_many
 from app.services.lead_service import LeadService
 from app.services.site_scanner import scan_many
 from app.services.web_search import search_domains
 
 _RATING_TO_SCORE = {"hot": "hot", "warm": "warm", "cold": "cold"}
+logger = logging.getLogger(__name__)
 
 
 class LeadDiscovery:
@@ -201,3 +205,64 @@ class LeadDiscovery:
             "from_company": self._from_company,
             "from_website": self._from_website,
         }
+
+
+async def run_discovery_job(job_id: str) -> None:
+    """Runs one Lead Discovery job to completion and saves the result onto
+    its own row -- called via FastAPI's BackgroundTasks right after the
+    POST /leads/discover endpoint returns, so the HTTP request that started
+    it is never held open for the duration of the actual search (see
+    LeadDiscoveryJob's own docstring for why that matters). Uses its own DB
+    session since the request's session is long gone by the time this runs."""
+    from app.db.base import AsyncSessionLocal
+    from app.services.geo_service import GeoService
+
+    async with AsyncSessionLocal() as db:
+        job = (
+            await db.execute(select(LeadDiscoveryJob).where(LeadDiscoveryJob.id == job_id))
+        ).scalar_one_or_none()
+        if not job:
+            return
+        job.status = LeadDiscoveryJobStatus.RUNNING
+        await db.commit()
+
+        req = job.request or {}
+        try:
+            area_labels: list[str] = []
+            region_hint: str | None = None
+            target_area_ids = req.get("target_area_ids") or []
+            if target_area_ids:
+                areas = await GeoService(db, job.workspace_id).list_areas()
+                chosen = {a.id: a for a in areas if a.id in target_area_ids}
+                area_labels = [chosen[i].label for i in target_area_ids if i in chosen]
+                for i in target_area_ids:
+                    area = chosen.get(i)
+                    if area and area.country_code:
+                        region_hint = area.country_code
+                        break
+
+            result = await LeadDiscovery(db, job.workspace_id).run(
+                req.get("prompt", ""),
+                offer=req.get("offer", ""),
+                from_company=req.get("from_company", ""),
+                from_website=req.get("from_website", ""),
+                max_results=req.get("max_results", 12),
+                area_labels=area_labels,
+                region_hint=region_hint,
+            )
+            response = LeadDiscoverResponse(
+                success=result["success"],
+                prompt=result["prompt"],
+                target_profile=result["target_profile"],
+                message=result["message"],
+                stats=LeadDiscoverStats(**result["stats"]),
+                leads=[LeadResponse.model_validate(lead) for lead in result["leads"]],
+            )
+            job.result = response.model_dump(mode="json")
+            job.status = LeadDiscoveryJobStatus.DONE
+        except Exception as exc:  # noqa: BLE001 -- surface it on the job, never crash the background task silently
+            logger.exception("Lead Discovery job %s failed", job_id)
+            job.error = str(exc)[:500]
+            job.status = LeadDiscoveryJobStatus.FAILED
+        job.finished_at = datetime.now(timezone.utc)
+        await db.commit()

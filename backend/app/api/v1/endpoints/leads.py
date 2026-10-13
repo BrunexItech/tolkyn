@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_db
@@ -18,8 +18,8 @@ from app.schemas.lead import (
     LeadGenerateResponse,
     LeadGenerateStats,
     LeadDiscoverRequest,
-    LeadDiscoverResponse,
-    LeadDiscoverStats,
+    LeadDiscoverJobStarted,
+    LeadDiscoverJobStatus,
     LeadOutreachRequest,
     LeadOutreach,
 )
@@ -32,57 +32,62 @@ from app.schemas.email_account import (
 )
 from app.services.lead_service import LeadService
 from app.services.lead_pipeline import LeadPipeline
-from app.services.lead_discovery import LeadDiscovery
-from app.services.geo_service import GeoService
+from app.services.lead_discovery import run_discovery_job
 from app.services.outreach_ai import generate_outreach
 from app.services.outreach_send_service import OutreachSendService
 from app.services.customer_service import CustomerService
 from app.models.user import User
+from app.models.lead_discovery_job import LeadDiscoveryJob
 from sqlalchemy import select
 
 router = APIRouter()
 
 
 # ── discovery (prompt -> leads) ───────────────────────────────────────────
-@router.post("/discover", response_model=LeadDiscoverResponse)
+# Runs as a background job, not inline on this request -- scanning real
+# external sites plus several AI calls routinely took well over Cloudflare's
+# own ~100s proxy timeout (this site is confirmed behind Cloudflare, whose
+# limit nginx's own config can't touch), surfacing as a 504 no matter how
+# the search itself was tuned. The frontend polls GET /discover/{job_id}
+# instead, which is never at risk of a proxy timeout.
+@router.post("/discover", response_model=LeadDiscoverJobStarted, status_code=status.HTTP_202_ACCEPTED)
 async def discover_leads(
     body: LeadDiscoverRequest,
+    background_tasks: BackgroundTasks,
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
-    """Describe the leads you want; Tolkyn searches the web and saves the matches."""
-    area_labels: list[str] = []
-    region_hint: str | None = None
-    if body.target_area_ids:
-        areas = await GeoService(db, user_id).list_areas()
-        chosen = {a.id: a for a in areas if a.id in body.target_area_ids}
-        area_labels = [chosen[i].label for i in body.target_area_ids if i in chosen]
-        # Phone numbers on a scanned site are validated against this country
-        # instead of guessing from the site's domain ending -- a generic
-        # .com for a business in the targeted area otherwise defaults to a
-        # US-shaped guess, which makes a real local number fail validation.
-        for i in body.target_area_ids:
-            area = chosen.get(i)
-            if area and area.country_code:
-                region_hint = area.country_code
-                break
+    """Describe the leads you want; Tolkyn searches the web and saves the
+    matches in the background. Returns a job_id immediately -- poll
+    GET /discover/{job_id} for progress/result."""
+    job = LeadDiscoveryJob(workspace_id=user_id, request=body.model_dump())
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+    background_tasks.add_task(run_discovery_job, job.id)
+    return LeadDiscoverJobStarted(job_id=job.id)
 
-    result = await LeadDiscovery(db, user_id).run(
-        body.prompt,
-        offer=body.offer,
-        from_company=body.from_company,
-        from_website=body.from_website,
-        max_results=body.max_results,
-        area_labels=area_labels,
-        region_hint=region_hint,
-    )
-    return LeadDiscoverResponse(
-        success=result["success"],
-        prompt=result["prompt"],
-        target_profile=result["target_profile"],
-        message=result["message"],
-        stats=LeadDiscoverStats(**result["stats"]),
-        leads=result["leads"],
+
+@router.get("/discover/{job_id}", response_model=LeadDiscoverJobStatus)
+async def get_discover_job(
+    job_id: str,
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    job = (
+        await db.execute(
+            select(LeadDiscoveryJob).where(
+                LeadDiscoveryJob.id == job_id, LeadDiscoveryJob.workspace_id == user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if not job:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Job not found")
+    return LeadDiscoverJobStatus(
+        job_id=job.id,
+        status=job.status.value,
+        result=job.result,
+        error=job.error,
     )
 
 

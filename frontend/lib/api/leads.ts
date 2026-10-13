@@ -135,6 +135,21 @@ export interface DiscoverResponse {
   leads: Lead[];
 }
 
+export interface DiscoverJobStarted {
+  job_id: string;
+}
+
+/** Runs in the background on the server (real site scans + AI calls can
+ * take well past a minute) -- poll this instead of waiting on one long
+ * request, which a proxy in front of the API can time out regardless of
+ * how the backend itself is tuned. */
+export interface DiscoverJobStatus {
+  job_id: string;
+  status: "queued" | "running" | "done" | "failed";
+  result: DiscoverResponse | null;
+  error: string | null;
+}
+
 export interface Outreach {
   lead_id: string;
   subject: string;
@@ -178,7 +193,8 @@ export const leadsApi = {
     http.patch<Lead>(`/leads/${id}`, body),
   remove: (id: string) => http.del<void>(`/leads/${id}`),
   generate: (body: GenerateRequest) => http.post<GenerateResponse>("/leads/generate", body),
-  discover: (body: DiscoverRequest) => http.post<DiscoverResponse>("/leads/discover", body),
+  discoverStart: (body: DiscoverRequest) => http.post<DiscoverJobStarted>("/leads/discover", body),
+  discoverStatus: (jobId: string) => http.get<DiscoverJobStatus>(`/leads/discover/${jobId}`),
   getOutreach: (id: string) => http.get<Outreach>(`/leads/${id}/outreach`),
   generateOutreach: (
     id: string,

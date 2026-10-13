@@ -35,10 +35,10 @@ export function GenerateLeadsDialog({
   const [fromWebsite, setFromWebsite] = useState("");
   const [maxResults, setMaxResults] = useState(12);
   const [areaIds, setAreaIds] = useState<string[]>([]);
-  const [result, setResult] = useState<DiscoverResponse | null>(null);
   const [step, setStep] = useState(0);
 
   const discover = useDiscoverLeads();
+  const result = discover.result;
   const { data: areasData } = useAreas();
   const areas = areasData?.items ?? [];
 
@@ -48,33 +48,28 @@ export function GenerateLeadsDialog({
   useEffect(() => {
     if (!discover.isPending) return;
     setStep(0);
-    const id = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 9000);
+    // Runs in the background on the server now and can legitimately take
+    // past a minute (real site scans + AI calls) -- paced slower than
+    // before so the steps don't all finish well ahead of the real result.
+    const id = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 15000);
     return () => clearInterval(id);
   }, [discover.isPending]);
 
   const close = (v: boolean) => {
     onOpenChange(v);
-    if (!v)
-      setTimeout(() => {
-        setResult(null);
-        discover.reset();
-      }, 200);
+    if (!v) setTimeout(() => discover.reset(), 200);
   };
 
   const run = () => {
     if (prompt.trim().length < 6) return;
-    setResult(null);
-    discover.mutate(
-      {
-        prompt: prompt.trim(),
-        offer: offer.trim(),
-        from_company: fromCompany.trim(),
-        from_website: fromWebsite.trim(),
-        max_results: maxResults,
-        target_area_ids: areaIds,
-      },
-      { onSuccess: (r) => setResult(r) },
-    );
+    discover.mutate({
+      prompt: prompt.trim(),
+      offer: offer.trim(),
+      from_company: fromCompany.trim(),
+      from_website: fromWebsite.trim(),
+      max_results: maxResults,
+      target_area_ids: areaIds,
+    });
   };
 
   return (
@@ -230,7 +225,7 @@ function RunningView({ step, prompt }: { step: number; prompt: string }) {
         ))}
       </div>
       <p className="mt-4 text-[11px] text-om-muted">
-        This can take up to a minute — Tolkyn visits each company site directly.
+        This can take a minute or two — Tolkyn visits each company site directly, in the background, so it's safe to leave this open.
       </p>
     </div>
   );

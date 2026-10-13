@@ -251,6 +251,20 @@ class LeadDiscoverResponse(BaseModel):
     leads: List[LeadResponse] = []
 
 
+class LeadDiscoverJobStarted(BaseModel):
+    """Returned immediately by POST /leads/discover -- the actual search
+    runs in the background (see lead_discovery_job.py); poll
+    GET /leads/discover/{job_id} for the result."""
+    job_id: str
+
+
+class LeadDiscoverJobStatus(BaseModel):
+    job_id: str
+    status: str  # "queued" | "running" | "done" | "failed"
+    result: Optional[LeadDiscoverResponse] = None
+    error: Optional[str] = None
+
+
 class LeadOutreachRequest(BaseModel):
     offer: Optional[str] = Field(None, description="Override: what your business offers")
     from_company: Optional[str] = Field(None, description="Override: your business name")
