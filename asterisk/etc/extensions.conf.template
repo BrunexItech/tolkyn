@@ -277,9 +277,20 @@ exten => h,1,Hangup()
 ; host by ami-bridge.py before the Originate was sent) only plays for a
 ; confirmed human. A machine/voicemail/uncertain result just hangs up —
 ; never leaves a message on an answering machine.
+;
+; Explicit params, not AMD()'s defaults: this is an OUTBOUND call, so the
+; person answering has no reason to say anything first -- they're waiting
+; to hear who's calling. AMD's own default initialSilence (2500ms) reads
+; that normal silence as proof of a machine and was confirmed, via real
+; test calls, hanging up on an actual human every single time
+; ("ANSWERING MACHINE: silenceDuration:2500 initialSilence:2500").
+; initialSilence raised to 8000ms to give a real person room to just stay
+; quiet; totalAnalysisTime raised to 11000ms to match (otherwise AMD times
+; out the other way instead -- also seen in testing: "Too long...").
+; Everything else is AMD()'s own unchanged default.
 [voice-broadcast]
 exten => s,1,Answer()
- same => n,AMD()
+ same => n,AMD(8000,1500,800,11000,100,50,2,256,5000)
  same => n,GotoIf($["${AMDSTATUS}" = "HUMAN"]?play:done)
  same => n(play),Playback(${AUDIO_FILE})
  same => n,Hangup()
