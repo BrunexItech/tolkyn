@@ -95,8 +95,16 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; used for the AI-agent transition elsewhere in this file -- a no-op if
  ; something later answers again, and no dead-air click since Playtones is
  ; still active under it.
+ ;
+ ; NO 'b' flag here, unlike every other MixMonitor in this file -- 'b' means
+ ; "only record while bridged", and this channel is NOT bridged to anything
+ ; during the greeting/menu AGI below (that's a plain AGI script, not a
+ ; Dial()). With 'b' set, this was *guaranteed* to produce an empty file
+ ; through that whole phase no matter what -- confirmed by a real test call
+ ; still coming back 44 bytes even after Answer() was added. Dropping 'b'
+ ; is the actual fix; this diagnostic must capture the unbridged phase.
  same => n,Answer()
- same => n,MixMonitor(/var/spool/asterisk/recordings/ivr-debug-${CHANNEL(linkedid)}.wav,b)
+ same => n,MixMonitor(/var/spool/asterisk/recordings/ivr-debug-${CHANNEL(linkedid)}.wav)
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR
  ; is even turned on — get_flow()/on_call_enter() decide that, not this
