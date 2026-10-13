@@ -59,14 +59,19 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
- ; Ringback before anything answers -- without this the AGI answers as soon
- ; as it has a prompt ready, which can sound like dead silence rather than a
- ; call connecting. Plain Ringing() just sends a bare 180 and trusts the
- ; caller's own carrier to generate a tone locally, which Cloud One doesn't
- ; reliably do on this path -- confirmed silent in testing. Progress() opens
- ; real early media first, then Playtones(ring) has Asterisk generate and
- ; send an actual audible ring tone itself, so it doesn't depend on the
- ; carrier at all.
+ ; Answer immediately, THEN generate ring tone -- not Progress()+Playtones()
+ ; before answering, which is what this used to do. That earlier early-media
+ ; phase (183 Session Progress with audio) followed by a LATER formal Answer
+ ; (200 OK) once the AGI had a prompt ready turned out to be exactly what was
+ ; clipping the opening words of every greeting: real transmitted audio was
+ ; confirmed complete from frame 1 via a direct MixMonitor capture, and
+ ; giving the AGI a longer pause after its own Answer() (0.3s -> 2s) made
+ ; the caller wait longer but still only ever hear the TAIL of the greeting
+ ; -- proving the lost time isn't a fixed startup delay a longer pause can
+ ; outlast, but the caller's phone re-syncing its audio path specifically
+ ; on the early-media -> answered transition. Removing that transition
+ ; entirely (one single, immediate Answer(), same pattern already proven
+ ; reliable in Voice Broadcast) is the actual fix.
  ;
  ; Playtones() is NOT blocking -- it starts a background tone generator on
  ; the channel and returns immediately. It must stay running for the WHOLE
@@ -80,7 +85,7 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; deliberately NOT stopped unconditionally after the AGI any more (see the
  ; ai_agent branch below for why) -- each destination that actually needs
  ; it stopped (voicemail, the human-agent dial) stops it itself.
- same => n,Progress()
+ same => n,Answer()
  same => n,Playtones(ring)
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR
