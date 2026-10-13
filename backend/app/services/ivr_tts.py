@@ -147,9 +147,16 @@ async def _mp3_to_wav8k(mp3_bytes: bytes, *, pad_ms: int = 3000) -> bytes:
         # with enough silence to outlast that fixed loss means it eats
         # silence, not real words -- a content-level fix for a transport-
         # level problem that no dialplan timing change could solve.
+        # afade right after adelay -- padding silence onto the front of a
+        # clip that doesn't itself start at zero amplitude creates a sudden
+        # jump the ear hears as a click/scratch exactly where the real
+        # words start. A short 20ms fade-in at that boundary is inaudible
+        # as "fading" but removes the discontinuity -- reported as
+        # "scratches" on the TTS start on a real call.
+        pad_s = pad_ms / 1000
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", src.name,
-            "-af", f"adelay={pad_ms}:all=1",
+            "-af", f"adelay={pad_ms}:all=1,afade=t=in:st={pad_s}:d=0.02",
             "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le", "-f", "wav", dst.name,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )

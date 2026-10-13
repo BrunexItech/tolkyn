@@ -156,13 +156,13 @@ def collect_one_digit(agi: AGISession, audio_key: Optional[str], timeout_seconds
     agi.answer()
     digit = ""
     if audio_key:
-        # 2s, confirmed necessary by direct test, not redundant with the
-        # file's own 3s padding as previously assumed -- dropping this back
-        # to 0.3s on that assumption brought the clipping straight back on
-        # a real call. Both delays are apparently needed together; this is
-        # staying at 2s until there's real evidence either one alone is
-        # enough.
-        agi.command("EXEC Wait 2")
+        # 0.5s -- that earlier "2s is necessary" test ran before the file's
+        # own padding had its click/scratch fixed (afade in ivr_tts.py):
+        # what read as clipped words may well have been that audible click
+        # masking the opening syllable, not missing content. The file's
+        # padding (now clean) is doing the actual resync protection; this
+        # is just a small safety margin on top, not a second full delay.
+        agi.command("EXEC Wait 0.5")
         digit = agi.stream_file(audio_key)
     if not digit:
         digit = agi.wait_for_digit(max(1, timeout_seconds) * 1000)
