@@ -112,8 +112,19 @@ async def _mp3_to_wav8k(mp3_bytes: bytes) -> bytes:
         # ffmpeg's own default for .wav can vary by build/version; leaving
         # it ambiguous risks a file that "converts successfully" but that
         # Asterisk can't actually play (silently, with no error either side).
+        #
+        # 200ms of silence padded onto the start (adelay) -- a voice whose
+        # raw render starts speaking at frame 1, with zero natural lead-in,
+        # has nothing protecting its first syllable from Asterisk's own
+        # playback-start overhead, regardless of the channel-settle pause
+        # ivr_agi.py already does before calling STREAM FILE at all. A
+        # voice with its own natural lead-in was never at risk; this one
+        # is a safety margin for one that isn't, confirmed by a real
+        # report of "hello, welcome to Tolkyn" losing its opening words
+        # specifically after switching to a new custom voice.
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", src.name,
+            "-af", "adelay=200:all=1",
             "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le", "-f", "wav", dst.name,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
