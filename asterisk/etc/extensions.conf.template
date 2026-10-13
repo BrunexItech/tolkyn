@@ -288,10 +288,26 @@ exten => h,1,Hangup()
 ; quiet; totalAnalysisTime raised to 11000ms to match (otherwise AMD times
 ; out the other way instead -- also seen in testing: "Too long...").
 ; Everything else is AMD()'s own unchanged default.
+;
+; AMDSTATUS=HUMAN isn't the only case that should play, though. AMDCAUSE
+; (Asterisk's own documented reason codes) separates a REAL detected
+; machine greeting (MAXWORDLENGTH-/MAXWORDS-, a genuinely long/repeated
+; recorded-sounding voice pattern) from AMD simply running out of patience
+; without ever hearing anything (INITIALSILENCE-) or without reaching any
+; confident verdict at all (TOOLONG-). The second group is weak evidence at
+; best -- a quiet human produces INITIALSILENCE every time, confirmed by
+; real test calls -- so only a genuinely-detected greeting pattern skips
+; the message; silence or an inconclusive analysis gets the benefit of the
+; doubt and plays it. Trade-off, made deliberately: this means the message
+; occasionally plays into a real answering machine when AMD truly can't
+; tell either way -- acceptable for a business broadcast message, unlike
+; hanging up on an actual person every time silence was mistaken for proof
+; of a machine.
 [voice-broadcast]
 exten => s,1,Answer()
  same => n,AMD(8000,1500,800,11000,100,50,2,256,5000)
- same => n,GotoIf($["${AMDSTATUS}" = "HUMAN"]?play:done)
+ same => n,GotoIf($["${AMDSTATUS}" = "HUMAN"]?play)
+ same => n,GotoIf($[${REGEX("^(INITIALSILENCE|TOOLONG)" ${AMDCAUSE})} = 1]?play:done)
  same => n(play),Playback(${AUDIO_FILE})
  same => n,Hangup()
  same => n(done),Hangup()
