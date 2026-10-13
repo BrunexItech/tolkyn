@@ -300,6 +300,6 @@ exten => h,1,Hangup()
 ; kept waiting in silence and never has the start of the message clipped.
 [voice-broadcast]
 exten => s,1,Answer()
- same => n,Wait(2)
+ same => n,Wait(1)
  same => n,Playback(${AUDIO_FILE})
  same => n,Hangup()
