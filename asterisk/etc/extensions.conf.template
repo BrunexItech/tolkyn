@@ -91,6 +91,11 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; through to the exact same ring-the-agent behaviour as before this existed.
  same => n,Set(WS_ID=${DB(tolkyn/ext_ws/${WS_EXT})})
  same => n,AGI(agi://127.0.0.1:4573/ivr,${WS_ID})
+ ; Temporary diagnostic -- real packet loss/jitter numbers for the caller's
+ ; own leg right after the IVR greeting/menu finished playing, to settle
+ ; whether audio quality complaints are a real network problem (this would
+ ; show it) versus something else entirely (this would come back clean).
+ same => n,NoOp(RTP stats after IVR: ${CHANNEL(rtcp,all)})
  same => n,GotoIf($["${IVR_NEXT}" = "voicemail"]?ivr-voicemail,1)
  same => n,GotoIf($["${IVR_NEXT}" = "ai_agent"]?ivr-ai-agent,1)
  same => n,GotoIf($["${IVR_NEXT}" = "transfer"]?ivr-transfer,1)
