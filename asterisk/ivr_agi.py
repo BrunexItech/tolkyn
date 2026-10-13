@@ -156,14 +156,13 @@ def collect_one_digit(agi: AGISession, audio_key: Optional[str], timeout_seconds
     agi.answer()
     digit = ""
     if audio_key:
-        # Back to a brief 0.3s -- the real fix for clipped opening words
-        # turned out to be padding the rendered FILE itself with 3s of
-        # silence (ivr_tts.py's adelay), not stacking a longer wait here on
-        # top of it. Keeping this at 2s as well just added a second,
-        # redundant silent gap on top of the file's own padding, producing
-        # the "very prolonged silence" a real test call reported. This is
-        # only a tiny safety margin for the STREAM FILE command itself now.
-        agi.command("EXEC Wait 0.3")
+        # 2s, confirmed necessary by direct test, not redundant with the
+        # file's own 3s padding as previously assumed -- dropping this back
+        # to 0.3s on that assumption brought the clipping straight back on
+        # a real call. Both delays are apparently needed together; this is
+        # staying at 2s until there's real evidence either one alone is
+        # enough.
+        agi.command("EXEC Wait 2")
         digit = agi.stream_file(audio_key)
     if not digit:
         digit = agi.wait_for_digit(max(1, timeout_seconds) * 1000)
