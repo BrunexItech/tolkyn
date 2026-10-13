@@ -59,6 +59,14 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  same => n,ExecIf($["${CNUM:0:1}" = "0"]?Set(CNUM=+254${CNUM:1}))
  same => n,ExecIf($[${LEN(${CNUM})} = 9]?Set(CNUM=+254${CNUM}))
  same => n,Set(CALLERID(num)=${CNUM})
+ ; JITTERBUFFER(adaptive) was only ever set on the OUTBOUND leg to
+ ; ElevenLabs (see add-workspace-header below) -- this, the caller's own
+ ; INBOUND leg from Cloud One, never had it. A real test call reported
+ ; audio cutting out for a few seconds mid-conversation then recovering
+ ; while staying connected -- classic RTP jitter, and this leg was the
+ ; one side of the bridge with no buffering protection at all. Same fix,
+ ; same reasoning, just applied to the other half of the bridge.
+ same => n,Set(JITTERBUFFER(adaptive)=default)
  ; Ringback before anything answers -- without this the AGI answers as soon
  ; as it has a prompt ready, which can sound like dead silence rather than a
  ; call connecting. Plain Ringing() just sends a bare 180 and trusts the
