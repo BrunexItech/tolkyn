@@ -156,10 +156,17 @@ def collect_one_digit(agi: AGISession, audio_key: Optional[str], timeout_seconds
     agi.answer()
     digit = ""
     if audio_key:
-        # A brief pause before playback starts -- streaming the file the
-        # instant the channel answers can clip the first syllable(s), since
-        # the media path isn't always fully settled yet on every trunk.
-        agi.command("EXEC Wait 0.3")
+        # 2s, not the 0.3s this used to be -- real test calls kept losing
+        # the opening words of the greeting even with 0.3s, because the
+        # delay isn't Asterisk-side at all: it's the caller's own phone
+        # re-syncing its audio path when the call flips from early-media
+        # (ringing) to answered. Real transmitted audio was confirmed
+        # complete from frame 1 via a direct MixMonitor capture -- the gap
+        # is purely how long the caller's handset takes to catch up, so the
+        # fix is giving it enough silence to do that before anything that
+        # actually matters starts playing. Same fixed-wait pattern already
+        # proven reliable for this exact problem in Voice Broadcast.
+        agi.command("EXEC Wait 2")
         digit = agi.stream_file(audio_key)
     if not digit:
         digit = agi.wait_for_digit(max(1, timeout_seconds) * 1000)
