@@ -298,17 +298,8 @@ exten => h,1,Hangup()
 ; reliable: a real answering machine occasionally gets the message too
 ; (acceptable for a business announcement), but a real person is never
 ; kept waiting in silence and never has the start of the message clipped.
-; No Wait() here any more -- ${AUDIO_FILE} is rendered through the same
-; ivr_tts.py render_and_cache() as IVR prompts, which now bakes 3s of
-; silence onto the START of the file itself (added later, for a
-; different problem). Stacking a dialplan Wait() on top of that meant
-; a real answered call sat in ~4s of total silence before anything
-; played -- confirmed as "the silence is too long" on a real test call.
-; This call leg also never goes through early-media/ringback before
-; Answer() (unlike the inbound IVR), so it doesn't need its own extra
-; settle time the way that flow did -- the file's own padding should
-; be enough protection against a clipped opening syllable on its own.
 [voice-broadcast]
 exten => s,1,Answer()
+ same => n,Wait(1)
  same => n,Playback(${AUDIO_FILE})
  same => n,Hangup()

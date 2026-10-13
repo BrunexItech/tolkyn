@@ -461,7 +461,14 @@ class MessagingService:
         voice_id = (
             await self.db.execute(select(User.tts_voice_id).where(User.id == self.workspace_id))
         ).scalar_one_or_none()
-        audio_rel_path = await render_and_cache(body, voice_id)
+        # 300ms, not the IVR greeting's 3000ms -- this leg is only entered
+        # after Asterisk confirms a real answer (no Progress()/ringback
+        # early-media phase first), so it doesn't need the same long
+        # padding that flow's SIP-transition resync problem required.
+        # Stacking the IVR's 3s onto every broadcast message produced way
+        # too much dead air before anything played, confirmed on a real
+        # test call.
+        audio_rel_path = await render_and_cache(body, voice_id, pad_ms=300)
         if not audio_rel_path:
             b.status = BroadcastStatus.FAILED
             b.results = [{"phone": r["phone"], "ok": False, "error": "Could not render voice message", "id": None, "simulated": False} for r in b.recipients]

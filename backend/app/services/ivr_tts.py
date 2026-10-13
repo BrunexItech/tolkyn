@@ -27,12 +27,14 @@ _MEDIA_DIR = Path(__file__).resolve().parents[2] / "media" / "ivr-audio"
 _TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
 
 
-def _cache_key(text: str, voice_id: str) -> str:
-    raw = f"{voice_id}|{settings.ELEVENLABS_TTS_MODEL}|{text}"
+def _cache_key(text: str, voice_id: str, pad_ms: int) -> str:
+    raw = f"{voice_id}|{settings.ELEVENLABS_TTS_MODEL}|{pad_ms}|{text}"
     return hashlib.sha256(raw.encode()).hexdigest()[:32]
 
 
-async def render_and_cache(text: str, voice_id: Optional[str] = None) -> Optional[str]:
+async def render_and_cache(
+    text: str, voice_id: Optional[str] = None, *, pad_ms: int = 3000
+) -> Optional[str]:
     """Returns the media-relative path (e.g. "ivr-audio/<hash>.wav") for this
     prompt's audio, rendering + caching it first if needed. None if TTS isn't
     configured or rendering fails — callers should fall back to silence
@@ -41,7 +43,17 @@ async def render_and_cache(text: str, voice_id: Optional[str] = None) -> Optiona
     `voice_id`: a workspace's own custom voice (User.tts_voice_id), when it
     has one set — falls back to the platform's shared default otherwise, so
     every existing caller (that doesn't pass this) behaves exactly as
-    before."""
+    before.
+
+    `pad_ms`: silence padded onto the start of the rendered file. Defaults
+    to 3000 -- the IVR greeting's own fix for a caller's phone re-syncing
+    its audio path on the early-media -> answered SIP transition that
+    flow goes through. Voice Broadcast's call leg never crosses that
+    transition (the channel is only entered after a real answer, no
+    Progress()/ringback phase first) and passes a much smaller value --
+    stacking the IVR's 3s padding on calls that don't need it produced a
+    much longer dead-air opening than intended, confirmed on a real test
+    call ("the silence is too long")."""
     text = (text or "").strip()
     if not text:
         return None
@@ -50,7 +62,7 @@ async def render_and_cache(text: str, voice_id: Optional[str] = None) -> Optiona
         return None
     resolved_voice_id = (voice_id or "").strip() or settings.ELEVENLABS_IVR_VOICE_ID
 
-    key = _cache_key(text, resolved_voice_id)
+    key = _cache_key(text, resolved_voice_id, pad_ms)
     _MEDIA_DIR.mkdir(parents=True, exist_ok=True)
     wav_path = _MEDIA_DIR / f"{key}.wav"
     rel_path = f"ivr-audio/{key}.wav"
@@ -59,7 +71,7 @@ async def render_and_cache(text: str, voice_id: Optional[str] = None) -> Optiona
 
     try:
         mp3_bytes = await _fetch_tts_mp3(text, resolved_voice_id)
-        wav_bytes = await _mp3_to_wav8k(mp3_bytes)
+        wav_bytes = await _mp3_to_wav8k(mp3_bytes, pad_ms=pad_ms)
     except Exception as e:  # noqa: BLE001 — a bad render shouldn't break the call
         logger.warning("IVR TTS render failed: %s", e)
         return None
@@ -99,7 +111,7 @@ async def _fetch_tts_mp3(text: str, voice_id: str) -> bytes:
         return resp.content
 
 
-async def _mp3_to_wav8k(mp3_bytes: bytes) -> bytes:
+async def _mp3_to_wav8k(mp3_bytes: bytes, *, pad_ms: int = 3000) -> bytes:
     if not shutil.which("ffmpeg"):
         raise RuntimeError("ffmpeg not found on PATH")
     import tempfile
@@ -132,7 +144,7 @@ async def _mp3_to_wav8k(mp3_bytes: bytes) -> bytes:
         # level problem that no dialplan timing change could solve.
         proc = await asyncio.create_subprocess_exec(
             "ffmpeg", "-y", "-i", src.name,
-            "-af", "adelay=3000:all=1",
+            "-af", f"adelay={pad_ms}:all=1",
             "-ar", "8000", "-ac", "1", "-acodec", "pcm_s16le", "-f", "wav", dst.name,
             stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
         )
