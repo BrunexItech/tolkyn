@@ -33,7 +33,7 @@ def _cache_key(text: str, voice_id: str, pad_ms: int) -> str:
 
 
 async def render_and_cache(
-    text: str, voice_id: Optional[str] = None, *, pad_ms: int = 3000
+    text: str, voice_id: Optional[str] = None, *, pad_ms: int = 1500
 ) -> Optional[str]:
     """Returns the media-relative path (e.g. "ivr-audio/<hash>.wav") for this
     prompt's audio, rendering + caching it first if needed. None if TTS isn't
@@ -46,14 +46,19 @@ async def render_and_cache(
     before.
 
     `pad_ms`: silence padded onto the start of the rendered file. Defaults
-    to 3000 -- the IVR greeting's own fix for a caller's phone re-syncing
+    to 1500 -- the IVR greeting's own fix for a caller's phone re-syncing
     its audio path on the early-media -> answered SIP transition that
-    flow goes through. Voice Broadcast's call leg never crosses that
-    transition (the channel is only entered after a real answer, no
-    Progress()/ringback phase first) and passes a much smaller value --
-    stacking the IVR's 3s padding on calls that don't need it produced a
-    much longer dead-air opening than intended, confirmed on a real test
-    call ("the silence is too long")."""
+    flow goes through (originally 3000, confirmed to fully protect the
+    opening words on a real call; trimmed down after 3s of true silence
+    right as the call connects read as a dropped call rather than a
+    greeting loading -- 0.3s was confirmed too short, this is the
+    untested middle value between those two real data points). Voice
+    Broadcast's call leg never crosses that transition (the channel is
+    only entered after a real answer, no Progress()/ringback phase
+    first) and passes a much smaller value -- stacking the IVR's padding
+    on calls that don't need it produced a much longer dead-air opening
+    than intended, confirmed on a real test call ("the silence is too
+    long")."""
     text = (text or "").strip()
     if not text:
         return None
