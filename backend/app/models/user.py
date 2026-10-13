@@ -102,6 +102,12 @@ class User(BaseModel):
     # workspace that hasn't set one. See services/messaging_service.py.
     sms_disclaimer = Column(String(300), nullable=True)
 
+    # Super-admin controlled: whether a finished AI-agent call's transcript
+    # gets emailed to this workspace's account address. True = current
+    # existing behaviour (every workspace that hasn't been touched keeps
+    # getting transcripts). See call_center_service.py's _email_transcript.
+    transcript_email_enabled = Column(Boolean, nullable=False, server_default="true")
+
     # Per-module access overrides on top of the package. {"crm": true} force-
     # grants a module the package doesn't include; {"video": false} removes one
     # it does. Everything else follows the package. See app.core.actor.

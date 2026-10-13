@@ -418,6 +418,22 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
           </div>
 
           <div>
+            <SectionLabel>AI call transcripts</SectionLabel>
+            <label className="flex items-center gap-2 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5">
+              <input
+                type="checkbox"
+                checked={user.transcript_email_enabled}
+                onChange={(e) => update.mutate({ id: user.id, transcript_email_enabled: e.target.checked })}
+                className="size-3.5 accent-om-violet"
+              />
+              <span className="flex-1 text-[11.5px] text-om-dim">Email finished AI-agent call transcripts to this account</span>
+            </label>
+            <p className="mt-1.5 text-[10px] text-om-faint">
+              Unchecked = transcripts are still saved and visible in the Call Centre, just not emailed.
+            </p>
+          </div>
+
+          <div>
             <SectionLabel>Usage on the platform</SectionLabel>
             {!usage ? (
               <div className="flex justify-center py-3">

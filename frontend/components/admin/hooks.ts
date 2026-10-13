@@ -157,6 +157,7 @@ export function useUpdateUser() {
         sms_sender_id?: string | null;
         sms_provider_token?: string | null;
         tts_voice_id?: string | null;
+        transcript_email_enabled?: boolean;
         module_overrides?: Record<string, boolean>;
         package_id?: string | null;
       },

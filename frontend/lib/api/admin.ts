@@ -151,6 +151,7 @@ export interface PlatformUser {
   sms_sender_id: string | null;
   sms_provider_token_set: boolean;
   tts_voice_id: string | null;
+  transcript_email_enabled: boolean;
   module_overrides: Record<string, boolean>;
   effective_image_limit: number | null;
   effective_video_limit: number | null;
@@ -404,6 +405,7 @@ export const adminApi = {
       sms_sender_id: string | null;
       sms_provider_token: string | null;
       tts_voice_id: string | null;
+      transcript_email_enabled: boolean;
       module_overrides: Record<string, boolean>;
       package_id: string | null;
     }>,

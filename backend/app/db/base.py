@@ -197,6 +197,7 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE email_replies ADD COLUMN IF NOT EXISTS bounced_email VARCHAR(255)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS acting_as_workspace_id VARCHAR(36)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_disclaimer VARCHAR(300)",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS transcript_email_enabled BOOLEAN NOT NULL DEFAULT true",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_conversation_id VARCHAR(64)",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_transcript JSONB",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_summary TEXT",

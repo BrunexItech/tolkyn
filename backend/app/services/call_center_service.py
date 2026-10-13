@@ -1029,13 +1029,15 @@ async def _email_transcript(db: AsyncSession, call: Call) -> None:
     see what was said (including anything personal a caller shared)."""
     from app.services.platform_mailer import send_branded
 
-    user = (
-        await db.execute(select(User.email).where(User.id == call.workspace_id))
-    ).scalar_one_or_none()
-    if not user:
+    row = (
+        await db.execute(
+            select(User.email, User.transcript_email_enabled).where(User.id == call.workspace_id)
+        )
+    ).first()
+    if not row or not row.email or not row.transcript_email_enabled:
         return
     await send_branded(
-        user,
+        row.email,
         f"AI call transcript — {call.contact_name or call.number}",
         heading="Call handled by your AI assistant",
         body_lines=_transcript_email_lines(call, call.ai_summary),
