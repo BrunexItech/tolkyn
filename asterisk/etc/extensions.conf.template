@@ -87,6 +87,15 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; distinct filename so it can't collide with the normal ivr-ai-agent
  ; MixMonitor below. Lets us hear the REAL transmitted audio during the
  ; greeting/menu, not just infer it from the source file.
+ ;
+ ; MixMonitor needs an answered channel to actually capture anything --
+ ; the first attempt at this (no explicit Answer() here) produced nothing
+ ; but empty 44-byte files, confirmed on 4 real test calls. Answer() while
+ ; the ring tone is still playing is the same safe, already-proven pattern
+ ; used for the AI-agent transition elsewhere in this file -- a no-op if
+ ; something later answers again, and no dead-air click since Playtones is
+ ; still active under it.
+ same => n,Answer()
  same => n,MixMonitor(/var/spool/asterisk/recordings/ivr-debug-${CHANNEL(linkedid)}.wav,b)
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR
