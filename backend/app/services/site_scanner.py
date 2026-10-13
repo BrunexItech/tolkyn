@@ -86,7 +86,7 @@ async def _scan_with_playwright(
 
 
 async def scan_site(
-    url: str, *, timeout: float = 12.0, region_hint: Optional[str] = None
+    url: str, *, timeout: float = 8.0, region_hint: Optional[str] = None
 ) -> Optional[Dict[str, Any]]:
     """Fetch a site's homepage + a couple of contact pages and extract a lead record."""
     root = _root(url)
@@ -183,7 +183,7 @@ def _clean_emails(emails: set[str]) -> List[str]:
 
 
 async def scan_many(
-    urls: List[str], *, concurrency: int = 6, region_hint: Optional[str] = None
+    urls: List[str], *, concurrency: int = 12, region_hint: Optional[str] = None
 ) -> List[Dict[str, Any]]:
     sem = asyncio.Semaphore(concurrency)
 

@@ -40,7 +40,7 @@ class LeadDiscovery:
         from_company: str = "",
         from_website: str = "",
         max_results: int = 12,
-        max_scan: int = 40,
+        max_scan: int = 20,
         area_labels: List[str] | None = None,
         region_hint: str | None = None,
     ) -> Dict[str, Any]:
@@ -94,8 +94,14 @@ class LeadDiscovery:
 
         # Scale the scan budget with how many leads were actually asked for
         # -- a fixed cap regardless of max_results meant asking for more
-        # leads didn't actually widen the search.
-        effective_max_scan = max(max_scan, max_results * 3)
+        # leads didn't actually widen the search. Hard-capped at 25 sites
+        # regardless: this whole request runs behind Cloudflare, which
+        # enforces its own ~100s proxy timeout that nginx's own timeout
+        # config can't touch -- scanning too many real external sites
+        # (each with its own network/SSL/DNS failures to wait out) was
+        # blowing past that and surfacing as a 504 to the caller, even
+        # though the backend itself was never erroring.
+        effective_max_scan = min(max(max_scan, max_results * 2), 25)
         roots = roots[:effective_max_scan]
 
         scanned = await scan_many(roots, region_hint=region_hint)
