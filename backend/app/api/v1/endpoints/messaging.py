@@ -100,7 +100,7 @@ async def import_contacts_csv(
 
 @router.get("/broadcasts", response_model=BroadcastList)
 async def list_broadcasts(
-    channel: str | None = Query(None, pattern="^(sms|whatsapp)$"),
+    channel: str | None = Query(None, pattern="^(sms|whatsapp|voice)$"),
     user_id: str = Depends(get_workspace_id),
     db: AsyncSession = Depends(get_db),
 ):
