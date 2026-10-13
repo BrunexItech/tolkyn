@@ -82,6 +82,12 @@ exten => handle,1,NoOp(Inbound from ${CALLERID(num)} -> ext ${WS_EXT})
  ; it stopped (voicemail, the human-agent dial) stops it itself.
  same => n,Progress()
  same => n,Playtones(ring)
+ ; Temporary diagnostic -- records from right here (before the greeting
+ ; even plays) regardless of the per-workspace recording setting, to a
+ ; distinct filename so it can't collide with the normal ivr-ai-agent
+ ; MixMonitor below. Lets us hear the REAL transmitted audio during the
+ ; greeting/menu, not just infer it from the source file.
+ same => n,MixMonitor(/var/spool/asterisk/recordings/ivr-debug-${CHANNEL(linkedid)}.wav,b)
  ; Real-call IVR: hand off to the host-side FastAGI bridge (asterisk/ivr_agi.py)
  ; before ever dialing the agent. It plays this workspace's menu (if the IVR
  ; is even turned on — get_flow()/on_call_enter() decide that, not this
