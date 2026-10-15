@@ -1,4 +1,6 @@
-from fastapi import APIRouter, Depends, Query
+from datetime import date
+
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
@@ -12,6 +14,7 @@ from app.schemas.analytics import (
     TopPostList,
 )
 from app.services.analytics_service import AnalyticsService
+from app.services.reports_service import build_metrics_report_pdf
 
 router = APIRouter()
 
@@ -52,3 +55,20 @@ async def top_posts(
 ):
     rows = await AnalyticsService(db, user_id).top_posts(limit)
     return TopPostList(items=[TopPost(**r) for r in rows])
+
+
+@router.get("/report")
+async def download_report(
+    start: date = Query(..., description="Start of the reporting period (inclusive)"),
+    end: date = Query(..., description="End of the reporting period (inclusive)"),
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """A downloadable, styled PDF covering social/content + messaging (SMS,
+    WhatsApp, Email) metrics for this workspace over the given date range."""
+    pdf_bytes = await build_metrics_report_pdf(db, user_id, start, end)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="tolkyn-report-{start}-to-{end}.pdf"'},
+    )

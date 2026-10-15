@@ -5,7 +5,7 @@ import {
   endSession,
 } from "@/lib/session";
 
-const API_URL =
+export const API_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
 
 export class ApiError extends Error {
@@ -186,6 +186,36 @@ export const http = {
   /** multipart / file upload — same auth + 401 handling as the JSON verbs */
   upload: <T>(path: string, form: FormData, method = "POST") =>
     request<T>(method, path, undefined, { form }),
+  /** Downloads a binary response (e.g. a generated PDF) straight to the
+   * browser's download folder. A plain fetch() can't carry the session's
+   * Authorization header the way `request()` above does, so this is its
+   * own small path rather than reusing `downloadFile()` in lib/om/download.ts
+   * (which is for already-public media URLs). */
+  downloadBlob: async (path: string, filename: string): Promise<void> => {
+    const t = getAccessToken();
+    const res = await fetch(`${API_URL}${path}`, {
+      headers: t ? { Authorization: `Bearer ${t}` } : {},
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      let data: unknown = null;
+      try {
+        data = text ? JSON.parse(text) : null;
+      } catch {
+        data = text;
+      }
+      throw new ApiError(detailFrom(data, res.status), res.status, data);
+    }
+    const blob = await res.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(blobUrl);
+  },
 };
 
 /** Call after a successful login/register so the refresh machinery re-arms

@@ -54,4 +54,7 @@ export const analyticsApi = {
   timeseries: (days = 30) => http.get<{ points: SeriesPoint[] }>(`/analytics/timeseries${qs({ days })}`),
   byPlatform: (days = 30) => http.get<{ items: PlatformRow[] }>(`/analytics/by-platform${qs({ days })}`),
   topPosts: (limit = 8) => http.get<{ items: TopPost[] }>(`/analytics/top-posts${qs({ limit })}`),
+  /** Styled PDF: social/content + SMS/WhatsApp/Email metrics for a date range. */
+  downloadReport: (start: string, end: string) =>
+    http.downloadBlob(`/analytics/report${qs({ start, end })}`, `tolkyn-report-${start}-to-${end}.pdf`),
 };

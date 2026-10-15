@@ -1,6 +1,7 @@
+from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin_security import get_current_super_admin_id
@@ -53,6 +54,7 @@ from app.schemas.video import VideoModelInfo
 from app.services.call_center_service import CallCenterService
 from app.services.ivr_service import IvrService
 from app.services.super_admin_service import SuperAdminService
+from app.services.reports_service import build_metrics_report_pdf
 
 router = APIRouter()
 
@@ -485,3 +487,21 @@ async def image_usage(
 ):
     rows = await SuperAdminService(db).image_usage_overview()
     return ImageUsageList(items=[ImageUsageRow(**r) for r in rows])
+
+
+# ---------------------------------------------------------- platform-wide report
+@router.get("/report")
+async def platform_report(
+    start: date = Query(..., description="Start of the reporting period (inclusive)"),
+    end: date = Query(..., description="End of the reporting period (inclusive)"),
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Same styled PDF as a workspace's own /analytics/report, but combined
+    across every workspace on the platform (workspace_id=None)."""
+    pdf_bytes = await build_metrics_report_pdf(db, None, start, end)
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="tolkyn-platform-report-{start}-to-{end}.pdf"'},
+    )

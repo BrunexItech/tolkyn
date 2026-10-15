@@ -27,3 +27,7 @@ slowapi==0.1.9
 redis==5.0.8
 # Brand-logo compositing onto generated images
 Pillow==10.4.0
+# Metrics report PDF export -- pure Python, no system-level deps (unlike
+# weasyprint, which needs cairo/pango installed via apt), so it drops
+# straight into the existing slim image with no Dockerfile changes.
+xhtml2pdf==0.2.16

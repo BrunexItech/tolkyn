@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChartNoAxesColumn, Eye, Heart, UserPlus, Send, Clock } from "lucide-react";
+import { ChartNoAxesColumn, Eye, Heart, UserPlus, Send, Clock, FileDown, Loader2 } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Grid } from "@/components/om/primitives/Grid";
 import { StatTile } from "@/components/om/primitives/StatTile";
@@ -12,10 +12,78 @@ import { EmptyState } from "@/components/om/primitives/EmptyState";
 import { Skeleton, SkeletonText } from "@/components/om/primitives/Skeleton";
 import { Pill } from "@/components/om/primitives/Pill";
 import { Delta } from "@/components/om/primitives/Delta";
+import { OmButton } from "@/components/om/primitives/OmButton";
 import { AreaTrend } from "@/components/om/charts";
 import { analyticsApi } from "@/lib/api/analytics";
 import { platform as findPlatform } from "@/lib/om/platforms";
 import { compact } from "@/lib/om/format";
+import { toast } from "@/lib/om/toast";
+
+function toDateInput(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+function ReportDownloadCard() {
+  const today = new Date();
+  const monthAgo = new Date(today);
+  monthAgo.setDate(monthAgo.getDate() - 30);
+
+  const [start, setStart] = useState(toDateInput(monthAgo));
+  const [end, setEnd] = useState(toDateInput(today));
+  const [downloading, setDownloading] = useState(false);
+
+  const download = async () => {
+    if (!start || !end || start > end) {
+      toast.err("Pick a valid date range");
+      return;
+    }
+    setDownloading(true);
+    try {
+      await analyticsApi.downloadReport(start, end);
+      toast.ok("Report downloaded");
+    } catch (e) {
+      toast.err(e instanceof Error ? e.message : "Couldn't generate the report");
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardTitle icon={<FileDown />}>Download report</CardTitle>
+      <p className="mb-2.5 text-[11.5px] text-om-muted">
+        A styled PDF covering content/social posts and messaging (SMS, WhatsApp, Email) for a date range you pick.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-om-faint">From</span>
+          <input
+            type="date"
+            value={start}
+            max={end}
+            onChange={(e) => setStart(e.target.value)}
+            className="rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-blue/60"
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-om-faint">To</span>
+          <input
+            type="date"
+            value={end}
+            min={start}
+            max={toDateInput(today)}
+            onChange={(e) => setEnd(e.target.value)}
+            className="rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-blue/60"
+          />
+        </label>
+        <OmButton variant="solid" size="sm" onClick={download} disabled={downloading}>
+          {downloading ? <Loader2 className="animate-spin" /> : <FileDown />}
+          {downloading ? "Generating…" : "Download PDF"}
+        </OmButton>
+      </div>
+    </Card>
+  );
+}
 
 export default function AnalyticsPage() {
   const [days, setDays] = useState(30);
@@ -56,6 +124,8 @@ export default function AnalyticsPage() {
         <StatTile label="Followers" value={ov ? compact(ov.followers) : "—"} icon={<UserPlus />} color="var(--om-violet)" delta={ov?.followers_delta} loading={!ov} />
         <StatTile label="Posts published" value={ov?.posts_published ?? "—"} icon={<Send />} color="var(--om-green)" loading={!ov} />
       </Grid>
+
+      <ReportDownloadCard />
 
       <Card>
         <CardTitle icon={<ChartNoAxesColumn />}>Reach &amp; engagement</CardTitle>

@@ -357,11 +357,34 @@ export interface PlatformOverview {
 }
 
 // -------------------------------------------------------------------- api
+/** Downloads a binary response (the platform report PDF) straight to the
+ * browser — plain fetch() can't carry the admin session's own token the
+ * way request() above does, so this is its own small path. */
+async function downloadBlob(path: string, filename: string): Promise<void> {
+  const t = adminToken();
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: t ? { Authorization: `Bearer ${t}` } : {},
+  });
+  if (!res.ok) throw new AdminApiError(`Couldn't generate the report (${res.status})`, res.status);
+  const blob = await res.blob();
+  const blobUrl = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = blobUrl;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(blobUrl);
+}
+
 export const adminApi = {
   login: (email: string, password: string) =>
     request<AdminTokenResponse>("POST", "/admin/auth/login", { email, password }),
   me: () => request<AdminInfo>("GET", "/admin/auth/me"),
   overview: () => request<PlatformOverview>("GET", "/admin/overview"),
+  /** Styled PDF: social/content + SMS/WhatsApp/Email metrics, combined across every workspace. */
+  downloadReport: (start: string, end: string) =>
+    downloadBlob(`/admin/report?start=${start}&end=${end}`, `tolkyn-platform-report-${start}-to-${end}.pdf`),
 
   listOrganizations: () => request<Organization[]>("GET", "/admin/organizations"),
   createOrganization: (body: { name: string; slug: string; notes?: string; owner_user_id?: string }) =>
