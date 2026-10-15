@@ -1,11 +1,14 @@
 from datetime import date
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.actor import get_workspace_id
 from app.db import get_db
+from app.models.user import User
 from app.schemas.analytics import (
+    EmailReportResponse,
     Overview,
     PlatformList,
     PlatformRow,
@@ -14,9 +17,17 @@ from app.schemas.analytics import (
     TopPostList,
 )
 from app.services.analytics_service import AnalyticsService
-from app.services.reports_service import build_metrics_report_pdf
+from app.services.reports_service import build_metrics_report_pdf, email_metrics_report
 
 router = APIRouter()
+
+
+async def _reach_engagement(db: AsyncSession, user_id: str, start: date, end: date) -> dict:
+    days = max(1, (end - start).days + 1)
+    svc = AnalyticsService(db, user_id)
+    ov = await svc.overview(days)
+    platforms = await svc.by_platform(days)
+    return {"provider": ov["provider"], "platforms": platforms}
 
 
 @router.get("/overview", response_model=Overview)
@@ -66,14 +77,31 @@ async def download_report(
 ):
     """A downloadable, styled PDF covering social/content + messaging (SMS,
     WhatsApp, Email) metrics for this workspace over the given date range."""
-    days = max(1, (end - start).days + 1)
-    svc = AnalyticsService(db, user_id)
-    ov = await svc.overview(days)
-    platforms = await svc.by_platform(days)
-    reach_engagement = {"provider": ov["provider"], "platforms": platforms}
+    reach_engagement = await _reach_engagement(db, user_id, start, end)
     pdf_bytes = await build_metrics_report_pdf(db, user_id, start, end, reach_engagement)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="tolkyn-report-{start}-to-{end}.pdf"'},
     )
+
+
+@router.post("/report/email", response_model=EmailReportResponse)
+async def email_report(
+    start: date = Query(..., description="Start of the reporting period (inclusive)"),
+    end: date = Query(..., description="End of the reporting period (inclusive)"),
+    user_id: str = Depends(get_workspace_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generates the same report and emails it to this account's own
+    registered address, rather than downloading it."""
+    to_email = (
+        await db.execute(select(User.email).where(User.id == user_id))
+    ).scalar_one_or_none()
+    if not to_email:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No registered email on this account")
+    reach_engagement = await _reach_engagement(db, user_id, start, end)
+    outcome = await email_metrics_report(db, user_id, start, end, to_email, reach_engagement)
+    if not outcome.ok:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, outcome.error or "Email send failed")
+    return EmailReportResponse(sent=True, to_email=to_email)

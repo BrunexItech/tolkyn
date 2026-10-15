@@ -385,6 +385,9 @@ export const adminApi = {
   /** Styled PDF: social/content + SMS/WhatsApp/Email metrics, combined across every workspace. */
   downloadReport: (start: string, end: string) =>
     downloadBlob(`/admin/report?start=${start}&end=${end}`, `tolkyn-platform-report-${start}-to-${end}.pdf`),
+  /** Same report, emailed to this super admin's own registered address instead of downloaded. */
+  emailReport: (start: string, end: string) =>
+    request<{ sent: boolean; to_email: string }>("POST", `/admin/report/email?start=${start}&end=${end}`),
 
   listOrganizations: () => request<Organization[]>("GET", "/admin/organizations"),
   createOrganization: (body: { name: string; slug: string; notes?: string; owner_user_id?: string }) =>

@@ -63,3 +63,8 @@ class TopPost(BaseModel):
 
 class TopPostList(BaseModel):
     items: List[TopPost]
+
+
+class EmailReportResponse(BaseModel):
+    sent: bool
+    to_email: str

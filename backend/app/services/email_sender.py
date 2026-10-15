@@ -107,13 +107,25 @@ class SendOutcome:
     error: Optional[str] = None
 
 
+@dataclass
+class BinaryAttachment:
+    """A real file attachment (e.g. a generated PDF report) -- distinct
+    from the old text-only `attachment` tuple below, which no caller ever
+    actually used."""
+    filename: str
+    data: bytes
+    maintype: str = "application"
+    subtype: str = "octet-stream"
+
+
 def _build_message(
     cfg: SmtpConfig,
     to_email: str,
     subject: str,
     body: str,
-    attachment: Optional[tuple[str, str]] = None,  # (filename, text)
+    attachment: Optional[tuple[str, str]] = None,  # (filename, text) -- legacy, unused by any caller
     html: Optional[str] = None,
+    binary_attachment: Optional[BinaryAttachment] = None,
 ) -> EmailMessage:
     msg = EmailMessage()
     msg["From"] = formataddr((cfg.from_name or cfg.from_email, cfg.from_email))
@@ -144,6 +156,13 @@ def _build_message(
             maintype="text",
             subtype="markdown",
             filename=fname,
+        )
+    if binary_attachment:
+        msg.add_attachment(
+            binary_attachment.data,
+            maintype=binary_attachment.maintype,
+            subtype=binary_attachment.subtype,
+            filename=binary_attachment.filename,
         )
     return msg
 
@@ -200,8 +219,9 @@ async def send_email(
     body: str,
     attachment: Optional[tuple[str, str]] = None,
     html: Optional[str] = None,
+    binary_attachment: Optional[BinaryAttachment] = None,
 ) -> SendOutcome:
-    msg = _build_message(cfg, to_email, subject, body, attachment, html)
+    msg = _build_message(cfg, to_email, subject, body, attachment, html, binary_attachment)
     return await asyncio.to_thread(_send_sync, cfg, msg)
 
 

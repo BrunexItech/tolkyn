@@ -14,7 +14,7 @@ from typing import Iterable, List, Optional, Sequence, Tuple
 
 from app.core.config import settings
 from app.core.email_templates import render_email
-from app.services.email_sender import SendOutcome, SmtpConfig, send_email
+from app.services.email_sender import BinaryAttachment, SendOutcome, SmtpConfig, send_email
 
 logger = logging.getLogger("tolkyn.mailer")
 
@@ -50,6 +50,7 @@ async def send_branded(
     button_url: Optional[str] = None,
     footnote: Optional[str] = None,
     preheader: Optional[str] = None,
+    attachment: Optional[BinaryAttachment] = None,
 ) -> SendOutcome:
     """Render + send one Tolkyn-branded email."""
     if not is_configured():
@@ -64,7 +65,7 @@ async def send_branded(
         footnote=footnote,
         preheader=preheader or subject,
     )
-    outcome = await send_email(_cfg(), to_email, subject, text, html=html)
+    outcome = await send_email(_cfg(), to_email, subject, text, html=html, binary_attachment=attachment)
     if not outcome.ok:
         logger.error("platform email to %s failed: %s", to_email, outcome.error)
     return outcome

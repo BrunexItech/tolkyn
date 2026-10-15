@@ -1,7 +1,8 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.admin_security import get_current_super_admin_id
@@ -54,7 +55,8 @@ from app.schemas.video import VideoModelInfo
 from app.services.call_center_service import CallCenterService
 from app.services.ivr_service import IvrService
 from app.services.super_admin_service import SuperAdminService
-from app.services.reports_service import build_metrics_report_pdf
+from app.services.reports_service import build_metrics_report_pdf, email_metrics_report
+from app.models.super_admin import SuperAdmin
 
 router = APIRouter()
 
@@ -505,3 +507,23 @@ async def platform_report(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="tolkyn-platform-report-{start}-to-{end}.pdf"'},
     )
+
+
+@router.post("/report/email")
+async def email_platform_report(
+    start: date = Query(..., description="Start of the reporting period (inclusive)"),
+    end: date = Query(..., description="End of the reporting period (inclusive)"),
+    admin_id: str = Depends(get_current_super_admin_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generates the platform-wide report and emails it to this super admin's
+    own registered address, rather than downloading it."""
+    to_email = (
+        await db.execute(select(SuperAdmin.email).where(SuperAdmin.id == admin_id))
+    ).scalar_one_or_none()
+    if not to_email:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No registered email on this admin account")
+    outcome = await email_metrics_report(db, None, start, end, to_email)
+    if not outcome.ok:
+        raise HTTPException(status.HTTP_502_BAD_GATEWAY, outcome.error or "Email send failed")
+    return {"sent": True, "to_email": to_email}

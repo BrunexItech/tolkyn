@@ -57,4 +57,7 @@ export const analyticsApi = {
   /** Styled PDF: social/content + SMS/WhatsApp/Email metrics for a date range. */
   downloadReport: (start: string, end: string) =>
     http.downloadBlob(`/analytics/report${qs({ start, end })}`, `tolkyn-report-${start}-to-${end}.pdf`),
+  /** Same report, emailed to this account's own registered address instead of downloaded. */
+  emailReport: (start: string, end: string) =>
+    http.post<{ sent: boolean; to_email: string }>(`/analytics/report/email${qs({ start, end })}`),
 };

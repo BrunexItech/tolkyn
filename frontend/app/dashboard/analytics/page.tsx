@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ChartNoAxesColumn, Eye, Heart, UserPlus, Send, Clock, FileDown, Loader2 } from "lucide-react";
+import { ChartNoAxesColumn, Eye, Heart, UserPlus, Send, Clock, FileDown, Mail, Loader2 } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Grid } from "@/components/om/primitives/Grid";
 import { StatTile } from "@/components/om/primitives/StatTile";
@@ -31,12 +31,18 @@ function ReportDownloadCard() {
   const [start, setStart] = useState(toDateInput(monthAgo));
   const [end, setEnd] = useState(toDateInput(today));
   const [downloading, setDownloading] = useState(false);
+  const [emailing, setEmailing] = useState(false);
 
-  const download = async () => {
+  const validRange = () => {
     if (!start || !end || start > end) {
       toast.err("Pick a valid date range");
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const download = async () => {
+    if (!validRange()) return;
     setDownloading(true);
     try {
       await analyticsApi.downloadReport(start, end);
@@ -48,11 +54,25 @@ function ReportDownloadCard() {
     }
   };
 
+  const emailIt = async () => {
+    if (!validRange()) return;
+    setEmailing(true);
+    try {
+      const res = await analyticsApi.emailReport(start, end);
+      toast.ok(`Report emailed to ${res.to_email}`);
+    } catch (e) {
+      toast.err(e instanceof Error ? e.message : "Couldn't email the report");
+    } finally {
+      setEmailing(false);
+    }
+  };
+
   return (
     <Card>
-      <CardTitle icon={<FileDown />}>Download report</CardTitle>
+      <CardTitle icon={<FileDown />}>Performance report</CardTitle>
       <p className="mb-2.5 text-[11.5px] text-om-muted">
-        A styled PDF covering content/social posts and messaging (SMS, WhatsApp, Email) for a date range you pick.
+        A styled PDF covering content/social posts, messaging (SMS, WhatsApp, Email) and reach &amp; engagement
+        for a date range you pick — with AI-written takeaways and recommendations grounded in your real numbers.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
@@ -76,9 +96,13 @@ function ReportDownloadCard() {
             className="rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-blue/60"
           />
         </label>
-        <OmButton variant="solid" size="sm" onClick={download} disabled={downloading}>
+        <OmButton variant="solid" size="sm" onClick={download} disabled={downloading || emailing}>
           {downloading ? <Loader2 className="animate-spin" /> : <FileDown />}
           {downloading ? "Generating…" : "Download PDF"}
+        </OmButton>
+        <OmButton variant="subtle" size="sm" onClick={emailIt} disabled={downloading || emailing}>
+          {emailing ? <Loader2 className="animate-spin" /> : <Mail />}
+          {emailing ? "Sending…" : "Email it to me"}
         </OmButton>
       </div>
     </Card>

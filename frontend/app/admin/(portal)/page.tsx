@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Building2, Users, Activity, TrendingUp, ArrowRight, Clapperboard, Sparkles, FileDown, Loader2 } from "lucide-react";
+import { Building2, Users, Activity, TrendingUp, ArrowRight, Clapperboard, Sparkles, FileDown, Mail, Loader2 } from "lucide-react";
 import { SectionHeading } from "@/components/om/primitives/SectionHeading";
 import { Grid } from "@/components/om/primitives/Grid";
 import { StatTile } from "@/components/om/primitives/StatTile";
@@ -24,12 +24,18 @@ function PlatformReportCard() {
   const [start, setStart] = useState(toDateInput(monthAgo));
   const [end, setEnd] = useState(toDateInput(today));
   const [downloading, setDownloading] = useState(false);
+  const [emailing, setEmailing] = useState(false);
 
-  const download = async () => {
+  const validRange = () => {
     if (!start || !end || start > end) {
       toast.err("Pick a valid date range");
-      return;
+      return false;
     }
+    return true;
+  };
+
+  const download = async () => {
+    if (!validRange()) return;
     setDownloading(true);
     try {
       await adminApi.downloadReport(start, end);
@@ -41,6 +47,19 @@ function PlatformReportCard() {
     }
   };
 
+  const emailIt = async () => {
+    if (!validRange()) return;
+    setEmailing(true);
+    try {
+      const res = await adminApi.emailReport(start, end);
+      toast.ok(`Report emailed to ${res.to_email}`);
+    } catch (e) {
+      toast.err(e instanceof Error ? e.message : "Couldn't email the report");
+    } finally {
+      setEmailing(false);
+    }
+  };
+
   return (
     <Card>
       <CardTitle icon={<FileDown />} color="var(--om-blue)">
@@ -48,7 +67,7 @@ function PlatformReportCard() {
       </CardTitle>
       <p className="mb-2.5 text-[12px] leading-relaxed text-om-dim">
         A styled PDF covering content/social posts and messaging (SMS, WhatsApp, Email) across every workspace, for
-        a date range you pick.
+        a date range you pick — with AI-written takeaways grounded in the real numbers.
       </p>
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
@@ -72,9 +91,13 @@ function PlatformReportCard() {
             className="rounded-lg border border-om-border bg-white/[0.03] px-2.5 py-1.5 text-[12px] text-om-text outline-none focus:border-om-blue/60"
           />
         </label>
-        <OmButton variant="solid" size="sm" onClick={download} disabled={downloading}>
+        <OmButton variant="solid" size="sm" onClick={download} disabled={downloading || emailing}>
           {downloading ? <Loader2 className="animate-spin" /> : <FileDown />}
           {downloading ? "Generating…" : "Download PDF"}
+        </OmButton>
+        <OmButton variant="subtle" size="sm" onClick={emailIt} disabled={downloading || emailing}>
+          {emailing ? <Loader2 className="animate-spin" /> : <Mail />}
+          {emailing ? "Sending…" : "Email it to me"}
         </OmButton>
       </div>
     </Card>
