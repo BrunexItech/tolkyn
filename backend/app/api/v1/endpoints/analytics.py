@@ -66,7 +66,12 @@ async def download_report(
 ):
     """A downloadable, styled PDF covering social/content + messaging (SMS,
     WhatsApp, Email) metrics for this workspace over the given date range."""
-    pdf_bytes = await build_metrics_report_pdf(db, user_id, start, end)
+    days = max(1, (end - start).days + 1)
+    svc = AnalyticsService(db, user_id)
+    ov = await svc.overview(days)
+    platforms = await svc.by_platform(days)
+    reach_engagement = {"provider": ov["provider"], "platforms": platforms}
+    pdf_bytes = await build_metrics_report_pdf(db, user_id, start, end, reach_engagement)
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

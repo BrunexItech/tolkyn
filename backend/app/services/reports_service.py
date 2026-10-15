@@ -118,9 +118,57 @@ def _section(title: str, cards_html: str, table_html: str = "") -> str:
     )
 
 
+def _reach_section(reach_engagement: Optional[dict]) -> str:
+    if reach_engagement is None:
+        return f"""
+        <h2 style="font-size:14px;color:{_TEXT};border-bottom:2px solid {_ACCENT};
+                   padding-bottom:6px;margin:26px 0 10px">Reach &amp; engagement</h2>
+        <p style="color:{_MUTED}">Per-channel (per workspace's own connected accounts) &mdash;
+        see that workspace's own report for this section.</p>
+        """
+    provider = reach_engagement.get("provider", "modelled")
+    rows = reach_engagement.get("platforms") or []
+    note = (
+        "Live data from each connected platform's own analytics API."
+        if provider == "live"
+        else "Modelled estimate &mdash; connect accounts via Upload-Post for live platform analytics."
+    )
+    body_rows = "".join(
+        f'<tr>'
+        f'<td style="padding:5px 8px;border-bottom:1px solid {_BORDER}">{_html.escape(str(r.get("platform", "")))}</td>'
+        f'<td style="padding:5px 8px;border-bottom:1px solid {_BORDER};text-align:right">{r.get("followers", 0):,}</td>'
+        f'<td style="padding:5px 8px;border-bottom:1px solid {_BORDER};text-align:right">{r.get("reach", 0):,}</td>'
+        f'<td style="padding:5px 8px;border-bottom:1px solid {_BORDER};text-align:right">{r.get("engagement_rate", 0)}%</td>'
+        f'<td style="padding:5px 8px;border-bottom:1px solid {_BORDER};text-align:right">{r.get("posts", 0)}</td>'
+        f"</tr>"
+        for r in rows
+    ) or f'<tr><td style="padding:5px 8px;color:{_MUTED}">No connected accounts</td></tr>'
+    head = (
+        f'<td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED}">Platform</td>'
+        f'<td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED};text-align:right">Followers</td>'
+        f'<td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED};text-align:right">Reach</td>'
+        f'<td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED};text-align:right">Engagement rate</td>'
+        f'<td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED};text-align:right">Posts</td>'
+    )
+    return f"""
+    <h2 style="font-size:14px;color:{_TEXT};border-bottom:2px solid {_ACCENT};
+               padding-bottom:6px;margin:26px 0 10px">Reach &amp; engagement</h2>
+    <p style="color:{_MUTED};font-size:10px;margin:0 0 8px">{note}</p>
+    <table style="width:100%;border-collapse:collapse"><tr>{head}</tr>{body_rows}</table>
+    """
+
+
 async def build_metrics_report_pdf(
-    db: AsyncSession, workspace_id: Optional[str], start: date, end: date
+    db: AsyncSession,
+    workspace_id: Optional[str],
+    start: date,
+    end: date,
+    reach_engagement: Optional[dict] = None,
 ) -> bytes:
+    """`reach_engagement`: {"provider": "live"|"modelled", "platforms": [...]},
+    from AnalyticsService.overview()/by_platform() -- per-workspace only
+    (tied to that workspace's own connected accounts), so the platform-wide
+    Super Admin report is built without it."""
     start_dt, end_dt = _day_bounds(start, end)
     label = await _workspace_label(db, workspace_id)
 
@@ -160,6 +208,8 @@ async def build_metrics_report_pdf(
             <td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED};text-align:right">Posts</td></tr>
         {platform_rows}
       </table>''')}
+
+      {_reach_section(reach_engagement)}
 
       {_section("Bulk SMS", (
           _stat_card("Campaigns", sms["campaigns"])
