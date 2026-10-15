@@ -150,11 +150,13 @@ def _delta_html(cur: float, prev: float) -> str:
     return f'<span style="font-size:9px;color:{color};font-weight:600">{arrow} {abs(pct):g}% vs prior period</span>'
 
 
-def _stat_card(label: str, value: object, cur: Optional[float] = None, prev: Optional[float] = None) -> str:
+def _stat_card(
+    label: str, value: object, cur: Optional[float] = None, prev: Optional[float] = None, width: str = "25%"
+) -> str:
     delta = _delta_html(cur, prev) if cur is not None and prev is not None else ""
     return (
         f'<td style="padding:10px 14px;border:1px solid {_BORDER};border-radius:6px;'
-        f'background:{_BG_SOFT};width:25%">'
+        f'background:{_BG_SOFT};width:{width}">'
         f'<div style="font-size:9px;letter-spacing:.06em;text-transform:uppercase;color:{_MUTED}">'
         f"{_html.escape(label)}</div>"
         f'<div style="font-size:20px;font-weight:700;color:{_TEXT};margin-top:2px">{value}</div>'
@@ -264,15 +266,15 @@ async def _ai_insights(
         return {"takeaways": [], "recommendations": []}
 
     system = (
-        "You are a precise marketing analyst writing a short performance report for one business's "
-        "own social and messaging channels. You will be given REAL computed metrics for a current "
-        "date range and the immediately preceding period of the same length. "
-        "CRITICAL RULES: only state numbers, percentages, platform names, and facts that are "
-        "directly present in or computable from the JSON data given to you. Never invent, estimate, "
-        "or guess a number, trend, or claim that isn't in that data. If a metric is zero or missing "
-        "for a channel, say so plainly (e.g. flag it as a possible connection/tracking issue) rather "
-        "than speculating about a cause you aren't given. If there isn't enough data to say something "
-        "meaningful, write fewer, shorter points rather than padding with vague filler. "
+        "You are writing a short, calm summary of real activity numbers for one business's own "
+        "social and messaging channels. You will be given REAL computed metrics for a current date "
+        "range and the immediately preceding period of the same length. "
+        "RULES: only state numbers, percentages, platform names, and facts directly present in or "
+        "computable from the JSON data given to you. Never invent, estimate, or guess a number, "
+        "trend, or claim that isn't in that data. This is a plain summary, not a diagnostic report -- "
+        "never suggest investigating, troubleshooting, or checking a connection/configuration issue, "
+        "even if a channel shows zero activity; just state the fact plainly if at all. Keep it tight: "
+        "at most 3 takeaways and 2 recommendations, each one short sentence, no padding or filler. "
         "Return ONLY JSON."
     )
     user = (
@@ -282,19 +284,19 @@ async def _ai_insights(
         f"{prev_start.isoformat()} to {prev_end.isoformat()}\n\n"
         f"CURRENT PERIOD:\n{json.dumps(current, indent=2, default=str)}\n\n"
         f"PREVIOUS PERIOD:\n{json.dumps(previous, indent=2, default=str)}\n\n"
-        'Return JSON: "takeaways" (3-5 short, specific sentences interpreting these exact numbers, '
-        'citing real percentages/counts from the data), "recommendations" (3-4 short, concrete, '
-        "actionable next steps based only on patterns actually visible in this data)."
+        'Return JSON: "takeaways" (at most 3 short sentences summarising these exact numbers), '
+        '"recommendations" (at most 2 short, concrete next steps based only on patterns actually '
+        "visible in this data)."
     )
     try:
-        data = await client.json(system, user, temperature=0.2, max_tokens=800)
+        data = await client.json(system, user, temperature=0.2, max_tokens=500)
     except Exception as exc:  # noqa: BLE001 -- the numeric sections of the report are never blocked by this
         logger.warning("report AI insights failed: %s", exc)
         return {"takeaways": [], "recommendations": []}
 
     return {
-        "takeaways": [str(t) for t in (data.get("takeaways") or [])][:5],
-        "recommendations": [str(r) for r in (data.get("recommendations") or [])][:4],
+        "takeaways": [str(t) for t in (data.get("takeaways") or [])][:3],
+        "recommendations": [str(r) for r in (data.get("recommendations") or [])][:2],
     }
 
 
@@ -347,14 +349,9 @@ async def build_metrics_report_pdf(
         </div>
       </div>
 
-      {_insights_card("Key takeaways", insights["takeaways"])}
-      {_insights_card("Recommendations", insights["recommendations"], accent="#f59e0b", bg="#fff7ed")}
-
       {_section("Social & content", (
-          _stat_card("Posts", posts["total"], posts["total"], posts_prev["total"])
-          + _stat_card("Published", posts["published"], posts["published"], posts_prev["published"])
-          + _stat_card("Scheduled", posts["scheduled"])
-          + _stat_card("Failed / partial", posts["failed"], posts["failed"], posts_prev["failed"])
+          _stat_card("Posts published", posts["published"], posts["published"], posts_prev["published"], width="50%")
+          + _stat_card("Failed / partial", posts["failed"], posts["failed"], posts_prev["failed"], width="50%")
       ), f'''
       <table style="width:100%;border-collapse:collapse;margin-top:10px">
         <tr><td style="padding:4px 8px;font-size:9px;text-transform:uppercase;color:{_MUTED}">Platform</td>
@@ -388,6 +385,9 @@ async def build_metrics_report_pdf(
           + _stat_card("Sent", email["sent"], email["sent"], email_prev["sent"])
           + _stat_card("Failed / skipped", email["failed"] + email["skipped"])
       ))}
+
+      {_insights_card("Key takeaways", insights["takeaways"])}
+      {_insights_card("Recommendations", insights["recommendations"], accent="#f59e0b", bg="#fff7ed")}
 
       <div style="margin-top:30px;padding-top:10px;border-top:1px solid {_BORDER};font-size:9px;color:{_MUTED}">
         Prior-period change (&#9650;/&#9660;) compares against {prev_start.isoformat()} &mdash; {prev_end.isoformat()},
