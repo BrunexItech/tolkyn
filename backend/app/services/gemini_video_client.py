@@ -111,12 +111,17 @@ async def generate_video(
             # download) is handled below.
             "delivery": "uri",
         },
-        # Google's own best practice for faster synchronous generation.
-        # store=false means no previous_interaction_id editing later, which
-        # we don't use (each segment is a standalone call).
         "background": False,
-        "store": False,
         "stream": False,
+        # store=true is required by the API whenever delivery="uri" --
+        # confirmed by a real 400: "store=true is required when response
+        # format has video delivery set to URI". Google's general best-
+        # practice note suggests store=false for faster generation, but
+        # that only applies to inline (non-URI) delivery; the two aren't
+        # independent choices. No real downside for us either way since we
+        # never use previous_interaction_id editing (each segment is a
+        # standalone call).
+        "store": True,
     }
 
     url = f"{settings.GEMINI_API_BASE}/interactions"
