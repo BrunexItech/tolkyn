@@ -1,7 +1,8 @@
-"""Tenant-facing Veo 3.1 video generation — request validation, governance
-(model access + budget, both set by the super admin), and job bookkeeping.
-Actual generation is asynchronous; see advance_pending_jobs() at the bottom,
-called by the background scheduler, for the part that talks to Gemini."""
+"""Tenant-facing video generation (Gemini Omni Flash, formerly Veo 3.1 —
+see video_models.py) — request validation, governance (model access +
+budget, both set by the super admin), and job bookkeeping. Generation
+itself runs via the background scheduler; see advance_pending_jobs() at
+the bottom for the part that talks to Gemini."""
 import logging
 from pathlib import Path
 from typing import List, Optional
@@ -56,7 +57,14 @@ class VideoService:
         catalog = catalog_payload()
         allowed = self.user.allowed_video_models or []
         if allowed:
-            catalog = [m for m in catalog if m["key"] in allowed]
+            filtered = [m for m in catalog if m["key"] in allowed]
+            # A workspace's allowed list can go stale after a catalog change
+            # (e.g. the Veo 3.1 -> Gemini Omni Flash migration renamed every
+            # model key) -- if every stored key is now unknown, that's not a
+            # real "0 models allowed" restriction, just an outdated list, so
+            # fall back to the full catalog instead of locking the workspace
+            # out of video generation entirely.
+            catalog = filtered or catalog
         public_models = [
             VideoModelInfoPublic(
                 key=m["key"],
@@ -218,7 +226,7 @@ async def advance_pending_jobs(db: AsyncSession) -> int:
             if job.status == VideoJobStatus.QUEUED:
                 changed += await _start_job(db, job)
             else:
-                changed += await _poll_job(db, job)
+                changed += await _resume_segment(db, job)
         except Exception as exc:  # noqa: BLE001 — one bad job must not block the rest
             logger.exception("video job %s failed", job.id)
             job.status = VideoJobStatus.FAILED
@@ -334,7 +342,16 @@ async def _build_hero_frame(job: VideoJob) -> Optional[str]:
 
 
 async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
-    """Kick off the Veo generation for job.segment_index."""
+    """Generates job.segment_index's video and advances the job.
+
+    Omni's Interactions API is synchronous (background=false) and returns
+    the finished video directly -- unlike Veo's predictLongRunning, there's
+    no separate operation to poll any more. This function does the whole
+    segment: generate, write the file, then either seed + recurse into the
+    next segment or hand off to _finish_job. If the process restarts mid-job,
+    the next scheduler tick just re-calls this for the same segment_index
+    (job.segment_index/segment_paths are committed incrementally, so a retry
+    regenerates at most the one in-flight segment, not the whole job)."""
     model = get_model(job.model_key)
     logo_path = _resolve_media_path(job.brand_logo_url)
     has_logo = bool(logo_path)
@@ -350,7 +367,10 @@ async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
     using_logo_asset = _segment_uses_logo_asset(model, seg_seconds, has_logo, ref_bytes is not None)
     asset_images = [{"bytes": logo_path.read_bytes(), "mime": _image_mime(logo_path)}] if using_logo_asset else None
 
-    job.operation_name = await gemini.start_generation(
+    job.status = VideoJobStatus.RUNNING
+    await db.commit()
+
+    video_bytes = await gemini.generate_video(
         model_id=model.model_id,
         prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo, using_logo_asset),
         aspect_ratio=job.aspect_ratio,
@@ -358,10 +378,27 @@ async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
         duration_seconds=seg_seconds,
         negative_prompt=_negative_with_brand(job.negative_prompt, has_logo, using_logo_asset),
         reference_image_bytes=ref_bytes,
+        reference_image_mime=_image_mime(ref_path) if ref_path else "image/png",
         asset_images=asset_images,
     )
-    job.status = VideoJobStatus.RUNNING
+
+    _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
+    seg_path = _VIDEO_DIR / f"{job.id}.seg{job.segment_index}.mp4"
+    seg_path.write_bytes(video_bytes)
+    job.segment_paths = list(job.segment_paths or []) + [f"/media/videos/{seg_path.name}"]
+
+    if job.segment_index + 1 < len(plan):
+        # more to go — seed the next segment with this one's last frame
+        cont_png = _VIDEO_DIR / f"{job.id}.cont{job.segment_index}.png"
+        if await extract_last_frame(seg_path, cont_png):
+            job.continuation_frame_url = f"/media/videos/{cont_png.name}"
+        job.segment_index += 1
+        await db.commit()
+        await _start_segment(db, job)
+        return
+
     await db.commit()
+    await _finish_job(db, job)
 
 
 async def _start_job(db: AsyncSession, job: VideoJob) -> int:
@@ -452,41 +489,11 @@ async def _finish_job(db: AsyncSession, job: VideoJob) -> None:
     await db.commit()
 
 
-async def _poll_job(db: AsyncSession, job: VideoJob) -> int:
-    if not job.operation_name:
-        job.status = VideoJobStatus.FAILED
-        job.error_message = "Lost track of the generation operation"
-        await db.commit()
-        return 1
-
-    operation = await gemini.poll_operation(job.operation_name)
-    if not operation.get("done"):
-        return 0  # still generating, nothing to do yet
-
-    result = gemini.extract_result(operation)
-    if result["error"] or not result["video_uri"]:
-        job.status = VideoJobStatus.FAILED
-        job.error_message = result["error"] or "No video returned"
-        await db.commit()
-        return 1
-
-    _VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    seg_path = _VIDEO_DIR / f"{job.id}.seg{job.segment_index}.mp4"
-    seg_path.write_bytes(await gemini.download_video(result["video_uri"]))
-    job.segment_paths = list(job.segment_paths or []) + [f"/media/videos/{seg_path.name}"]
-
-    plan = job.segment_plan or [job.duration_seconds]
-    if job.segment_index + 1 < len(plan):
-        # more to go — seed the next segment with this one's last frame
-        cont_png = _VIDEO_DIR / f"{job.id}.cont{job.segment_index}.png"
-        if await extract_last_frame(seg_path, cont_png):
-            job.continuation_frame_url = f"/media/videos/{cont_png.name}"
-        job.segment_index += 1
-        job.operation_name = None
-        await db.commit()
-        await _start_segment(db, job)
-        return 1
-
-    await _finish_job(db, job)
-    return 1
+async def _resume_segment(db: AsyncSession, job: VideoJob) -> int:
+    """Omni's generation is synchronous, so a job only stays RUNNING across
+    scheduler ticks if the process restarted mid-generation (no separate
+    operation to resume polling any more, unlike Veo). Just re-run the
+    current segment -- job.segment_index/segment_paths are committed
+    incrementally, so this regenerates at most the one in-flight segment."""
+    await _start_segment(db, job)
     return 1

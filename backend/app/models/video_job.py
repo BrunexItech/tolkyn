@@ -29,7 +29,7 @@ class VideoJob(BaseModel):
     negative_prompt = Column(Text, nullable=True)
     aspect_ratio = Column(String(10), nullable=False, default="16:9")
     resolution = Column(String(10), nullable=False, default="1080p")
-    duration_seconds = Column(Integer, nullable=False, default=8)
+    duration_seconds = Column(Integer, nullable=False, default=10)
     generate_audio = Column(Boolean, nullable=False, default=True)
     reference_image_url = Column(String(500), nullable=True)  # /media/... used as first-frame image-to-video
     brand_logo_url = Column(String(500), nullable=True)  # /media/... shown to the user, colors guide styling
@@ -47,7 +47,10 @@ class VideoJob(BaseModel):
     continuation_frame_url = Column(String(500), nullable=True)  # last frame of the previous segment
 
     status = Column(Enum(VideoJobStatus), nullable=False, default=VideoJobStatus.QUEUED)
-    operation_name = Column(String(300), nullable=True)  # Gemini operation, for polling
+    # Unused since the Veo 3.1 -> Gemini Omni Flash migration (Omni's
+    # Interactions API is synchronous, no operation to poll) -- left in
+    # place rather than dropped, since it's nullable and harmless.
+    operation_name = Column(String(300), nullable=True)
     video_url = Column(String(500), nullable=True)        # local /media/... once downloaded
     thumbnail_url = Column(String(500), nullable=True)
     error_message = Column(Text, nullable=True)

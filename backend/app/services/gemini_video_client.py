@@ -1,6 +1,16 @@
-"""Thin REST wrapper around the Gemini API's Veo 3.1 video generation.
-Generation is a long-running operation (~1-2 minutes) — start it, then poll
-it; see services/video_service.py for the job orchestration that uses this."""
+"""Thin REST wrapper around the Gemini API's Interactions endpoint for video
+generation (gemini-omni-1.1-flash) — the replacement for Veo 3.1, which
+Google shut down on 2026-10-22. Confirmed via Google's own docs
+(ai.google.dev/gemini-api/docs/omni) pasted directly by the user, not
+guessed.
+
+Unlike Veo's predictLongRunning (start, then poll an operation), this is a
+single synchronous call (background=false) that returns the finished result
+directly — Google's own best-practice recommendation for faster unary
+generation. The only polling left is for the Files API, and only when the
+video is delivered by URI (used here to avoid the 4MB inline-payload limit)."""
+import asyncio
+import base64
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -18,7 +28,35 @@ def _headers() -> Dict[str, str]:
     return {"x-goog-api-key": settings.GEMINI_API_KEY, "Content-Type": "application/json"}
 
 
-async def start_generation(
+def _build_prompt(
+    prompt: str,
+    duration_seconds: int,
+    negative_prompt: Optional[str],
+    has_first_frame: bool,
+    asset_count: int,
+) -> str:
+    """Omni has no structured duration/negative-prompt fields (confirmed:
+    not in the request schema) -- both are requested through the prompt
+    text instead, per Google's own prompting guide. Role tags for any
+    attached images are prepended using the "simple tags" pattern the guide
+    recommends for straightforward cases (one first-frame image, a handful
+    of reference images) over the more verbose [# Sources ...] syntax."""
+    tags = []
+    if has_first_frame:
+        tags.append("<FIRST_FRAME>")
+    tags.extend(f"<IMAGE_REF_{i}>" for i in range(asset_count))
+    tag_prefix = " ".join(tags) + " " if tags else ""
+
+    parts = [
+        f"{tag_prefix}{prompt}",
+        f"Duration: exactly {duration_seconds} seconds. In a single continuous shot, no scene cuts.",
+    ]
+    if negative_prompt:
+        parts.append(f"Avoid: {negative_prompt}.")
+    return " ".join(parts)
+
+
+async def generate_video(
     *,
     model_id: str,
     prompt: str,
@@ -29,98 +67,110 @@ async def start_generation(
     reference_image_bytes: Optional[bytes] = None,
     reference_image_mime: str = "image/png",
     asset_images: Optional[List[Dict[str, Any]]] = None,
-) -> str:
-    """Kicks off a Veo generation. Returns the operation name to poll.
+) -> bytes:
+    """Generates one video segment and returns its raw MP4 bytes.
 
-    `asset_images` — e.g. a brand logo/product shot — are passed as Veo's
-    "ingredients to video" reference images: [{"bytes": b"...", "mime": "image/png"}],
-    up to 3. Veo tries to preserve the asset's appearance throughout the
-    output, not just a first frame. Google's API requires durationSeconds=8
-    whenever reference images (or an interpolation image) are present, and
-    Veo 3.1 Lite doesn't support them at all — the caller (video_service.py)
-    is responsible for only passing this when both hold. This is a
-    best-effort visual cue, not a guaranteed pixel-accurate logo.
+    `reference_image_bytes` — the hero/continuation frame (this segment's
+    starting image), tagged <FIRST_FRAME>.
+    `asset_images` — e.g. a brand logo, up to 3: [{"bytes": b"...", "mime": "image/png"}],
+    tagged <IMAGE_REF_0>, <IMAGE_REF_1>, ... and referenced in the prompt so
+    the model features them, same intent as Veo's "asset" reference images.
     """
-    import base64
+    asset_images = asset_images[:3] if asset_images else []
 
-    instance: Dict[str, Any] = {"prompt": prompt}
+    input_parts: List[Dict[str, Any]] = []
     if reference_image_bytes:
-        instance["image"] = {
-            "bytesBase64Encoded": base64.b64encode(reference_image_bytes).decode(),
-            "mimeType": reference_image_mime,
-        }
-    if asset_images:
-        instance["referenceImages"] = [
-            {
-                "image": {
-                    "bytesBase64Encoded": base64.b64encode(a["bytes"]).decode(),
-                    "mimeType": a.get("mime", "image/png"),
-                },
-                "referenceType": "asset",
-            }
-            for a in asset_images[:3]
-        ]
+        input_parts.append({
+            "type": "image",
+            "data": base64.b64encode(reference_image_bytes).decode(),
+            "mime_type": reference_image_mime,
+        })
+    for a in asset_images:
+        input_parts.append({
+            "type": "image",
+            "data": base64.b64encode(a["bytes"]).decode(),
+            "mime_type": a.get("mime", "image/png"),
+        })
+    input_parts.append({
+        "type": "text",
+        "text": _build_prompt(
+            prompt, duration_seconds, negative_prompt,
+            has_first_frame=bool(reference_image_bytes), asset_count=len(asset_images),
+        ),
+    })
 
-    # Per Google's Veo 3.1 parameter table: plain text-to-video only accepts
-    # "allow_all"; the moment the request carries a starting/interpolation
-    # image OR reference images, only "allow_adult" is accepted. It's not an
-    # unstable value — it's keyed to which instance fields are present.
-    person_generation = "allow_adult" if (reference_image_bytes or asset_images) else "allow_all"
-    parameters: Dict[str, Any] = {
-        "aspectRatio": aspect_ratio,
-        "resolution": resolution,
-        "durationSeconds": duration_seconds,
-        "personGeneration": person_generation,
+    body = {
+        "model": model_id,
+        "input": input_parts,
+        "response_format": {
+            "type": "video",
+            "aspect_ratio": aspect_ratio,
+            "resolution": resolution,
+            # URI delivery avoids the inline-payload size limit for
+            # anything above 720p; the trade-off (a Files-API poll before
+            # download) is handled below.
+            "delivery": "uri",
+        },
+        # Google's own best practice for faster synchronous generation.
+        # store=false means no previous_interaction_id editing later, which
+        # we don't use (each segment is a standalone call).
+        "background": False,
+        "store": False,
+        "stream": False,
     }
-    # NOTE: `generateAudio` is not an accepted parameter on this API version —
-    # every model we tested (Standard, Fast, Lite) 400s if it's present at
-    # all, sound or silent. Whether a clip has sound is purely a property of
-    # the model (Standard/Fast: yes, Lite: no) — see video_models.supports_audio.
-    if negative_prompt:
-        parameters["negativePrompt"] = negative_prompt
 
-    url = f"{settings.GEMINI_API_BASE}/models/{model_id}:predictLongRunning"
-    async with httpx.AsyncClient(timeout=60) as client:
-        resp = await client.post(url, headers=_headers(), json={"instances": [instance], "parameters": parameters})
-    if resp.status_code >= 400:
-        raise GeminiVideoError(f"Veo generation failed to start ({resp.status_code}): {resp.text[:500]}")
-    data = resp.json()
-    name = data.get("name")
-    if not name:
-        raise GeminiVideoError(f"Veo did not return an operation name: {data}")
-    return name
+    url = f"{settings.GEMINI_API_BASE}/interactions"
+    async with httpx.AsyncClient(timeout=300) as client:
+        resp = await client.post(url, headers=_headers(), json=body)
+        if resp.status_code >= 400:
+            raise GeminiVideoError(f"Video generation failed ({resp.status_code}): {resp.text[:500]}")
+        data = resp.json()
+        if data.get("status") == "failed":
+            raise GeminiVideoError(f"Video generation failed: {data}")
 
-
-async def poll_operation(operation_name: str) -> Dict[str, Any]:
-    """Returns the raw operation JSON. Check `done` before reading `response`."""
-    url = f"{settings.GEMINI_API_BASE}/{operation_name}"
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.get(url, headers=_headers())
-    if resp.status_code >= 400:
-        raise GeminiVideoError(f"Failed to poll Veo operation ({resp.status_code}): {resp.text[:500]}")
-    return resp.json()
+        video = _extract_video_content(data)
+        if video.get("data"):
+            return base64.b64decode(video["data"])
+        uri = video.get("uri")
+        if not uri:
+            raise GeminiVideoError(f"No video returned in completed interaction: {data}")
+        return await _download_when_ready(client, uri)
 
 
-def extract_result(operation: Dict[str, Any]) -> Dict[str, Any]:
-    """Pulls {video_uri, error} out of a completed operation's JSON."""
-    if operation.get("error"):
-        return {"video_uri": None, "error": operation["error"].get("message", "Video generation failed")}
-    samples = (
-        operation.get("response", {})
-        .get("generateVideoResponse", {})
-        .get("generatedSamples", [])
-    )
-    if not samples:
-        return {"video_uri": None, "error": "Veo returned no video in the completed operation"}
-    uri = samples[0].get("video", {}).get("uri")
-    if not uri:
-        return {"video_uri": None, "error": "Veo response had no video URI"}
-    return {"video_uri": uri, "error": None}
+def _extract_video_content(interaction: Dict[str, Any]) -> Dict[str, Any]:
+    for step in interaction.get("steps", []):
+        if step.get("type") != "model_output":
+            continue
+        for item in step.get("content", []):
+            if item.get("type") == "video":
+                return item
+    raise GeminiVideoError(f"No video content in interaction response: {interaction}")
 
 
-async def download_video(uri: str) -> bytes:
-    async with httpx.AsyncClient(timeout=120, follow_redirects=True) as client:
-        resp = await client.get(uri, headers=_headers())
-    if resp.status_code >= 400:
-        raise GeminiVideoError(f"Failed to download generated video ({resp.status_code})")
-    return resp.content
+async def _download_when_ready(client: httpx.AsyncClient, uri: str, *, timeout_s: float = 240) -> bytes:
+    """Polls the Files API until the video's state is ACTIVE, then downloads
+    it. `uri` is the download URL Google returns
+    (".../files/<id>:download?alt=media"); the status-check URL is the same
+    path without the :download suffix."""
+    file_id = uri.split("/files/")[-1].split(":")[0]
+    status_url = f"{settings.GEMINI_API_BASE}/files/{file_id}"
+
+    waited = 0.0
+    while waited < timeout_s:
+        resp = await client.get(status_url, headers=_headers())
+        if resp.status_code >= 400:
+            raise GeminiVideoError(f"Failed to check video file status ({resp.status_code}): {resp.text[:300]}")
+        state = resp.json().get("state")
+        if state == "ACTIVE":
+            break
+        if state == "FAILED":
+            raise GeminiVideoError("Video file processing failed")
+        await asyncio.sleep(5)
+        waited += 5
+    else:
+        raise GeminiVideoError("Timed out waiting for the generated video file to become ready")
+
+    dl = await client.get(uri, headers=_headers())
+    if dl.status_code >= 400:
+        raise GeminiVideoError(f"Failed to download generated video ({dl.status_code})")
+    return dl.content

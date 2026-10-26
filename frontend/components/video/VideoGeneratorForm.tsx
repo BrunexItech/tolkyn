@@ -75,13 +75,13 @@ export function VideoGeneratorForm() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [aspectRatio, setAspectRatio] = useState("16:9");
   const [resolution, setResolution] = useState("1080p");
-  const [duration, setDuration] = useState(8);
+  const [duration, setDuration] = useState(10);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
   const [heroLogoWhere, setHeroLogoWhere] = useState("");
   const brandColors = models?.brand_colors ?? [];
   const hasBrandLogo = !!models?.brand_logo_url;
-  const durations = models?.allowed_durations?.length ? models.allowed_durations : [4, 8];
+  const durations = models?.allowed_durations?.length ? models.allowed_durations : [5, 10];
 
   // keep the picked duration within what this workspace is allowed
   useEffect(() => {
@@ -162,7 +162,7 @@ export function VideoGeneratorForm() {
         </span>
         <div>
           <div className="text-[13px] font-semibold text-om-text">Generate a video</div>
-          <div className="text-[10.5px] text-om-muted">Veo 3.1 — native sound, up to 8 seconds per clip</div>
+          <div className="text-[10.5px] text-om-muted">Gemini Omni Flash — native sound, up to 10 seconds per clip</div>
         </div>
       </div>
 
@@ -253,11 +253,11 @@ export function VideoGeneratorForm() {
           </Field>
         </div>
 
-        {duration > 8 && (
+        {duration > 10 && (
           <div className="flex items-start gap-1.5 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5 text-[10px] text-om-faint">
             <Volume2 className="mt-px size-3 shrink-0 text-om-muted" />
             <span>
-              {duration}s clips are produced as {Math.ceil(duration / 8)} back-to-back segments and
+              {duration}s clips are produced as {Math.ceil(duration / 10)} back-to-back segments and
               stitched — generation takes longer and cost scales with length.
             </span>
           </div>

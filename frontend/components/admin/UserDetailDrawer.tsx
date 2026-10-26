@@ -513,15 +513,15 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
             <div className="mt-3">
               <SectionLabel>Clip lengths this user can pick</SectionLabel>
               <div className="flex flex-wrap gap-1.5">
-                {[4, 8, 16, 30, 45, 60].map((d) => {
+                {[5, 10, 20, 30, 40, 60].map((d) => {
                   const set = user.allowed_video_durations ?? [];
-                  const on = set.length === 0 ? d <= 8 : set.includes(d);
+                  const on = set.length === 0 ? d <= 10 : set.includes(d);
                   return (
                     <button
                       key={d}
                       onClick={() => {
                         const cur = user.allowed_video_durations ?? [];
-                        const base = cur.length ? cur : [4, 8];
+                        const base = cur.length ? cur : [5, 10];
                         const next = base.includes(d)
                           ? base.filter((x) => x !== d)
                           : [...base, d].sort((a, b) => a - b);

@@ -12,7 +12,7 @@ export default function VideoPage() {
     <div className="om-anim-rise space-y-3">
       <SectionHeading
         title="AI Video"
-        subtitle="Generate realistic video with native sound, powered by Google Veo 3.1"
+        subtitle="Generate realistic video with native sound, powered by Google Gemini Omni Flash"
         icon={<Clapperboard />}
         actions={<DailyLimitPill kind="video" />}
       />

@@ -111,7 +111,7 @@ export const PAGE_TITLES: Record<string, { title: string; subtitle?: string }> =
   "/dashboard/published": { title: "Published", subtitle: "Live links and failed posts" },
   "/dashboard/calendar": { title: "Content Calendar", subtitle: "Scheduled & published posts" },
   "/dashboard/content-studio": { title: "Content Studio", subtitle: "AI copy and images" },
-  "/dashboard/video": { title: "AI Video", subtitle: "Generate realistic video with sound, powered by Veo 3.1" },
+  "/dashboard/video": { title: "AI Video", subtitle: "Generate realistic video with sound, powered by Gemini Omni Flash" },
   "/dashboard/campaigns": { title: "Campaigns", subtitle: "Multi-channel campaign planning" },
   "/dashboard/analytics": { title: "Analytics", subtitle: "Reach, engagement and growth" },
   "/dashboard/media-intelligence": {

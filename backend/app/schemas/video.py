@@ -38,7 +38,7 @@ class VideoModelsResponse(BaseModel):
     brand_logo_url: Optional[str] = None
     brand_colors: Optional[List[str]] = None
     allowed_durations: List[int] = Field(
-        default_factory=lambda: [4, 8],
+        default_factory=lambda: [5, 10],
         description="Clip lengths this workspace may pick from (set by the super admin)",
     )
 
@@ -51,7 +51,7 @@ class VideoGenerateRequest(BaseModel):
     negative_prompt: Optional[str] = Field(None, max_length=1000)
     aspect_ratio: str = Field(default="16:9")
     resolution: str = Field(default="1080p")
-    duration_seconds: int = Field(default=8)
+    duration_seconds: int = Field(default=10)
     reference_image_url: Optional[str] = None
     hero_logo_where: Optional[str] = Field(
         None,
