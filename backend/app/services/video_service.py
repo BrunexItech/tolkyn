@@ -389,6 +389,7 @@ async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
     # clips flow into each other.
     two_subject_mode = job.segment_index == 0 and bool(job.reference_image_url_2)
     subject_asset_images: list = []
+    ref_path = None
     if two_subject_mode:
         # Both photos are subject references, not a starting frame -- we
         # want Omni to generate a fresh scene with both people in it, not
