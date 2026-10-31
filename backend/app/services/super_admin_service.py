@@ -300,6 +300,8 @@ class SuperAdminService:
             user.tts_voice_id = v[:64] or None
         if "transcript_email_enabled" in patch and patch["transcript_email_enabled"] is not None:
             user.transcript_email_enabled = bool(patch["transcript_email_enabled"])
+        if "video_multi_subject_enabled" in patch and patch["video_multi_subject_enabled"] is not None:
+            user.video_multi_subject_enabled = bool(patch["video_multi_subject_enabled"])
         if "module_overrides" in patch:
             raw = patch["module_overrides"] or {}
             user.module_overrides = {

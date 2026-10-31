@@ -31,6 +31,9 @@ export interface VideoModelsResponse {
   brand_colors: string[] | null;
   /** clip lengths this workspace may pick from — set by the super admin */
   allowed_durations: number[];
+  /** Super-admin gated: can this workspace attach a second reference photo
+   * so two real people appear together in one scene? */
+  multi_subject_enabled: boolean;
 }
 
 export type VideoJobStatus = "queued" | "running" | "succeeded" | "failed";
@@ -45,6 +48,7 @@ export interface VideoJob {
   duration_seconds: number;
   generate_audio: boolean;
   reference_image_url: string | null;
+  reference_image_url_2: string | null;
   brand_logo_url: string | null;
   brand_colors: string[] | null;
   status: VideoJobStatus;
@@ -62,6 +66,11 @@ export interface VideoGenerateRequest {
   resolution: string;
   duration_seconds: number;
   reference_image_url?: string;
+  /** Second reference photo — when set along with reference_image_url, both
+   * are treated as subject references (two real people appearing together)
+   * instead of reference_image_url being a literal starting frame. Requires
+   * the workspace to have this enabled by the Super Admin. */
+  reference_image_url_2?: string;
   /** opt-in: where in the scene to place the real brand logo (a branded first
    * frame is generated and used as the video's starting image) */
   hero_logo_where?: string;

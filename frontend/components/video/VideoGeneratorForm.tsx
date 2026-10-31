@@ -78,9 +78,13 @@ export function VideoGeneratorForm() {
   const [duration, setDuration] = useState(10);
   const [referenceImage, setReferenceImage] = useState<string | null>(null);
   const [refUploading, setRefUploading] = useState(false);
+  const [twoPersonMode, setTwoPersonMode] = useState(false);
+  const [referenceImage2, setReferenceImage2] = useState<string | null>(null);
+  const [ref2Uploading, setRef2Uploading] = useState(false);
   const [heroLogoWhere, setHeroLogoWhere] = useState("");
   const brandColors = models?.brand_colors ?? [];
   const hasBrandLogo = !!models?.brand_logo_url;
+  const multiSubjectEnabled = models?.multi_subject_enabled ?? false;
   const durations = models?.allowed_durations?.length ? models.allowed_durations : [5, 10];
 
   // keep the picked duration within what this workspace is allowed
@@ -106,6 +110,19 @@ export function VideoGeneratorForm() {
     }
   };
 
+  const pickReferenceImage2 = async (file?: File) => {
+    if (!file) return;
+    setRef2Uploading(true);
+    try {
+      const u = await uploadFile(file);
+      setReferenceImage2(u.url);
+    } catch (e) {
+      toast.err((e as Error).message);
+    } finally {
+      setRef2Uploading(false);
+    }
+  };
+
   const runEnhance = () => {
     const idea = prompt.trim();
     if (idea.length < 3 || enhance.isPending) return;
@@ -115,8 +132,14 @@ export function VideoGeneratorForm() {
     );
   };
 
+  const usingTwoPerson = twoPersonMode && multiSubjectEnabled;
   const canSubmit =
-    !!models?.configured && !!effectiveModelKey && prompt.trim().length >= 3 && !overBudget && !generate.isPending;
+    !!models?.configured &&
+    !!effectiveModelKey &&
+    prompt.trim().length >= 3 &&
+    !overBudget &&
+    !generate.isPending &&
+    (!usingTwoPerson || (!!referenceImage && !!referenceImage2));
 
   const submit = () => {
     if (!canSubmit) return;
@@ -129,6 +152,7 @@ export function VideoGeneratorForm() {
         resolution,
         duration_seconds: duration,
         reference_image_url: referenceImage ?? undefined,
+        reference_image_url_2: usingTwoPerson ? referenceImage2 ?? undefined : undefined,
         hero_logo_where:
           hasBrandLogo && !referenceImage && heroLogoWhere.trim()
             ? heroLogoWhere.trim()
@@ -268,16 +292,56 @@ export function VideoGeneratorForm() {
           {activeModel?.supports_audio === false ? "This model is silent — no native audio" : "Includes native sound — dialogue, ambience and effects"}
         </div>
 
-        <ImageSlot
-          label="Starting frame (optional)"
-          hint="Used as the video's first frame"
-          url={referenceImage}
-          uploading={refUploading}
-          onPick={pickReferenceImage}
-          onClear={() => setReferenceImage(null)}
-        />
+        {multiSubjectEnabled && (
+          <label className="flex items-center gap-2 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5">
+            <input
+              type="checkbox"
+              checked={twoPersonMode}
+              onChange={(e) => {
+                setTwoPersonMode(e.target.checked);
+                if (!e.target.checked) setReferenceImage2(null);
+              }}
+              className="size-3.5 accent-om-violet"
+            />
+            <span className="flex-1 text-[11px] text-om-dim">Two-person scene — bring two real people into one video</span>
+          </label>
+        )}
 
-        {hasBrandLogo && !referenceImage && (
+        {usingTwoPerson ? (
+          <div className="flex gap-2.5">
+            <ImageSlot
+              label="Person 1"
+              hint="Their likeness appears in the scene"
+              url={referenceImage}
+              uploading={refUploading}
+              onPick={pickReferenceImage}
+              onClear={() => setReferenceImage(null)}
+            />
+            <ImageSlot
+              label="Person 2"
+              hint="Their likeness appears in the scene"
+              url={referenceImage2}
+              uploading={ref2Uploading}
+              onPick={pickReferenceImage2}
+              onClear={() => setReferenceImage2(null)}
+            />
+          </div>
+        ) : (
+          <ImageSlot
+            label="Starting frame (optional)"
+            hint="Used as the video's first frame"
+            url={referenceImage}
+            uploading={refUploading}
+            onPick={pickReferenceImage}
+            onClear={() => setReferenceImage(null)}
+          />
+        )}
+
+        {usingTwoPerson && (!referenceImage || !referenceImage2) && (
+          <p className="text-[10px] text-om-amber">Attach both people's photos to generate a two-person scene.</p>
+        )}
+
+        {hasBrandLogo && !referenceImage && !usingTwoPerson && (
           <div className="rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-2">
             <div className="mb-1 flex items-center gap-1.5 text-[10.5px] font-medium text-om-dim">
               <Palette className="size-3 text-om-violet" /> Put my logo on a surface in the scene

@@ -108,6 +108,14 @@ class User(BaseModel):
     # getting transcripts). See call_center_service.py's _email_transcript.
     transcript_email_enabled = Column(Boolean, nullable=False, server_default="true")
 
+    # Super-admin controlled, opt-in (default off): lets this workspace
+    # attach a SECOND reference photo to a video generation, so two real
+    # people (each from their own photo) appear together in one scene
+    # instead of just one. New, experimental capability of the Gemini Omni
+    # Flash model -- gated per-workspace rather than switched on for
+    # everyone at once. See video_service.py / gemini_video_client.py.
+    video_multi_subject_enabled = Column(Boolean, nullable=False, server_default="false")
+
     # Per-module access overrides on top of the package. {"crm": true} force-
     # grants a module the package doesn't include; {"video": false} removes one
     # it does. Everything else follows the package. See app.core.actor.

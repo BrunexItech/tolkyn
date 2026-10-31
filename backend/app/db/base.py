@@ -198,6 +198,8 @@ _SCHEMA_PATCHES = [
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS acting_as_workspace_id VARCHAR(36)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS sms_disclaimer VARCHAR(300)",
     "ALTER TABLE users ADD COLUMN IF NOT EXISTS transcript_email_enabled BOOLEAN NOT NULL DEFAULT true",
+    "ALTER TABLE users ADD COLUMN IF NOT EXISTS video_multi_subject_enabled BOOLEAN NOT NULL DEFAULT false",
+    "ALTER TABLE video_jobs ADD COLUMN IF NOT EXISTS reference_image_url_2 VARCHAR(500)",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_conversation_id VARCHAR(64)",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_transcript JSONB",
     "ALTER TABLE calls ADD COLUMN IF NOT EXISTS ai_summary TEXT",

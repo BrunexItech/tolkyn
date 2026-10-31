@@ -434,6 +434,23 @@ export function UserDetailDrawer({ user: listUser, onOpenChange }: { user: Platf
           </div>
 
           <div>
+            <SectionLabel>AI video generation</SectionLabel>
+            <label className="flex items-center gap-2 rounded-lg border border-om-border bg-white/[0.02] px-2.5 py-1.5">
+              <input
+                type="checkbox"
+                checked={user.video_multi_subject_enabled}
+                onChange={(e) => update.mutate({ id: user.id, video_multi_subject_enabled: e.target.checked })}
+                className="size-3.5 accent-om-violet"
+              />
+              <span className="flex-1 text-[11.5px] text-om-dim">Allow two-person scenes (second reference photo)</span>
+            </label>
+            <p className="mt-1.5 text-[10px] text-om-faint">
+              Lets this account attach a second reference photo so two real people — each from their own photo —
+              appear together in one generated scene, instead of just one.
+            </p>
+          </div>
+
+          <div>
             <SectionLabel>Usage on the platform</SectionLabel>
             {!usage ? (
               <div className="flex justify-center py-3">

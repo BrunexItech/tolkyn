@@ -41,6 +41,11 @@ class VideoModelsResponse(BaseModel):
         default_factory=lambda: [5, 10],
         description="Clip lengths this workspace may pick from (set by the super admin)",
     )
+    multi_subject_enabled: bool = Field(
+        default=False,
+        description="Super-admin gated: whether this workspace can attach a second reference photo "
+        "so two real people appear together in one scene.",
+    )
 
 
 class VideoGenerateRequest(BaseModel):
@@ -53,6 +58,13 @@ class VideoGenerateRequest(BaseModel):
     resolution: str = Field(default="1080p")
     duration_seconds: int = Field(default=10)
     reference_image_url: Optional[str] = None
+    reference_image_url_2: Optional[str] = Field(
+        None,
+        description="Second reference photo — when set along with reference_image_url, both are "
+        "treated as subject references (two real people appearing together) instead of "
+        "reference_image_url being a literal starting frame. Requires the workspace to have this "
+        "enabled by the Super Admin.",
+    )
     hero_logo_where: Optional[str] = Field(
         None,
         max_length=200,
@@ -80,6 +92,7 @@ class VideoJobResponse(BaseModel):
     duration_seconds: int
     generate_audio: bool
     reference_image_url: Optional[str] = None
+    reference_image_url_2: Optional[str] = None
     brand_logo_url: Optional[str] = None
     brand_colors: Optional[List[str]] = None
     status: str

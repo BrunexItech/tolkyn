@@ -32,6 +32,12 @@ class VideoJob(BaseModel):
     duration_seconds = Column(Integer, nullable=False, default=10)
     generate_audio = Column(Boolean, nullable=False, default=True)
     reference_image_url = Column(String(500), nullable=True)  # /media/... used as first-frame image-to-video
+    # Opt-in, super-admin gated (User.video_multi_subject_enabled): when set,
+    # reference_image_url AND this one are BOTH treated as subject-reference
+    # photos (two real people who should appear together in the scene)
+    # instead of reference_image_url being a literal starting frame. See
+    # _start_segment's two_subject_mode branch.
+    reference_image_url_2 = Column(String(500), nullable=True)
     brand_logo_url = Column(String(500), nullable=True)  # /media/... shown to the user, colors guide styling
     brand_colors = Column(JSON, nullable=True)  # hex strings extracted from the logo
     # opt-in: where in the scene to place the real logo — a branded first

@@ -80,6 +80,7 @@ class VideoService:
         if self.user.video_budget_usd is not None:
             spent = await self._spent_usd()
             budget_reached = spent >= self.user.video_budget_usd
+        multi_subject_enabled = bool(self.user.video_multi_subject_enabled)
         return VideoModelsResponse(
             models=public_models,
             budget_reached=budget_reached,
@@ -87,6 +88,7 @@ class VideoService:
             brand_logo_url=self.user.brand_logo_url,
             brand_colors=self.user.brand_colors,
             allowed_durations=self._allowed_durations(),
+            multi_subject_enabled=multi_subject_enabled,
         )
 
     # ------------------------------------------------------------- brand
@@ -138,6 +140,18 @@ class VideoService:
         if model.price_per_second.get(data.resolution) is None:
             raise HTTPException(status.HTTP_400_BAD_REQUEST, f"{model.label} doesn't support {data.resolution}")
 
+        if data.reference_image_url_2:
+            if not self.user.video_multi_subject_enabled:
+                raise HTTPException(
+                    status.HTTP_403_FORBIDDEN,
+                    "Two-person scenes aren't enabled for your workspace — ask the platform admin to turn it on.",
+                )
+            if not data.reference_image_url:
+                raise HTTPException(
+                    status.HTTP_400_BAD_REQUEST,
+                    "A second reference photo needs a first one too — attach both people's photos.",
+                )
+
         cost = estimate_cost_usd(data.model_key, data.resolution, data.duration_seconds)
         if self.user.video_budget_usd is not None:
             spent = await self._spent_usd()
@@ -161,6 +175,7 @@ class VideoService:
             # model itself (Standard/Fast: yes, Lite: no).
             generate_audio=model.supports_audio,
             reference_image_url=data.reference_image_url,
+            reference_image_url_2=data.reference_image_url_2,
             # Brand is a persistent per-account setting (see set_brand/clear_brand),
             # not something re-uploaded per generation — applied automatically.
             brand_logo_url=self.user.brand_logo_url,
@@ -253,6 +268,16 @@ _FEATURE_LOGO_ASSET = (
     "wherever it would really appear in this shot — a sign, screen, package, banner, "
     "garment or similar surface — matching that surface's lighting, angle and material. Do "
     "not invent any OTHER logo, wordmark or brand name anywhere in the shot."
+)
+
+# Appended (not swapped in) whenever _start_segment's two_subject_mode is
+# active -- two of the attached reference images are real people's photos,
+# tagged <IMAGE_REF_0>/<IMAGE_REF_1> by gemini_video_client.py.
+_FEATURE_TWO_SUBJECTS = (
+    "Two of the attached reference images each show a specific real person's likeness. Both "
+    "people must appear together in this scene and interact as described (e.g. talking to "
+    "each other), preserving each person's actual face and appearance accurately. Do not "
+    "merge, alter or swap their identities."
 )
 
 
@@ -358,21 +383,50 @@ async def _start_segment(db: AsyncSession, job: VideoJob) -> None:
     plan = job.segment_plan or [job.duration_seconds]
     seg_seconds = plan[job.segment_index]
 
-    # segment 0 → the user's/hero starting frame; later segments → the last
-    # frame of the previous segment, so the clips flow into each other.
-    ref_url = job.reference_image_url if job.segment_index == 0 else job.continuation_frame_url
-    ref_path = _resolve_media_path(ref_url)
-    ref_bytes = ref_path.read_bytes() if ref_path else None
+    # segment 0 → the user's/hero starting frame (or, in two-subject mode,
+    # two subject-reference photos instead of a literal starting frame);
+    # later segments → the last frame of the previous segment, so the
+    # clips flow into each other.
+    two_subject_mode = job.segment_index == 0 and bool(job.reference_image_url_2)
+    subject_asset_images: list = []
+    if two_subject_mode:
+        # Both photos are subject references, not a starting frame -- we
+        # want Omni to generate a fresh scene with both people in it, not
+        # animate from one of their photos as frame 1.
+        ref_bytes = None
+        for url in (job.reference_image_url, job.reference_image_url_2):
+            p = _resolve_media_path(url)
+            if p:
+                subject_asset_images.append({"bytes": p.read_bytes(), "mime": _image_mime(p)})
+    else:
+        ref_url = job.reference_image_url if job.segment_index == 0 else job.continuation_frame_url
+        ref_path = _resolve_media_path(ref_url)
+        ref_bytes = ref_path.read_bytes() if ref_path else None
 
-    using_logo_asset = _segment_uses_logo_asset(model, seg_seconds, has_logo, ref_bytes is not None)
-    asset_images = [{"bytes": logo_path.read_bytes(), "mime": _image_mime(logo_path)}] if using_logo_asset else None
+    # Two-subject mode always skips the logo-as-reference-image treatment
+    # for this segment (falls back to the flat corner watermark if a logo
+    # is set) -- combining "two real people" + "also feature this logo" as
+    # reference images together is untested and not worth the risk.
+    # _finish_job's watermark decision mirrors this exact rule so the two
+    # can't drift apart.
+    using_logo_asset = (
+        not two_subject_mode
+        and _segment_uses_logo_asset(model, seg_seconds, has_logo, ref_bytes is not None)
+    )
+    asset_images = subject_asset_images or (
+        [{"bytes": logo_path.read_bytes(), "mime": _image_mime(logo_path)}] if using_logo_asset else None
+    )
+
+    prompt_text = _prompt_with_brand(job.prompt, job.brand_colors, has_logo, using_logo_asset)
+    if two_subject_mode:
+        prompt_text = f"{prompt_text} {_FEATURE_TWO_SUBJECTS}"
 
     job.status = VideoJobStatus.RUNNING
     await db.commit()
 
     video_bytes = await gemini.generate_video(
         model_id=model.model_id,
-        prompt=_prompt_with_brand(job.prompt, job.brand_colors, has_logo, using_logo_asset),
+        prompt=prompt_text,
         aspect_ratio=job.aspect_ratio,
         resolution=job.resolution,
         duration_seconds=seg_seconds,
@@ -454,12 +508,14 @@ async def _finish_job(db: AsyncSession, job: VideoJob) -> None:
         cursor = 0.0
         for i, seg_seconds in enumerate(plan):
             # Segment 0 only carries a starting image if the hero-frame
-            # feature was used; every later segment always gets seeded with
-            # the previous one's last frame (see _poll_job) -- same
-            # has_ref_image rule _start_segment used when actually sending
-            # this segment to Veo, so the watermark fallback can't drift
-            # from what Veo really did with the logo reference image.
-            has_ref_image = bool(job.reference_image_url) if i == 0 else True
+            # feature (or two-subject mode) was used; every later segment
+            # always gets seeded with the previous one's last frame (see
+            # _start_segment) -- same has_ref_image rule _start_segment used
+            # when actually sending this segment to Gemini (two_subject_mode
+            # forces using_logo_asset False there too), so the watermark
+            # fallback can't drift from what was really sent.
+            two_subject_segment_0 = i == 0 and bool(job.reference_image_url_2)
+            has_ref_image = (bool(job.reference_image_url) or two_subject_segment_0) if i == 0 else True
             if not _segment_uses_logo_asset(model, seg_seconds, True, has_ref_image):
                 unbranded_windows.append((cursor, cursor + seg_seconds))
             cursor += seg_seconds
